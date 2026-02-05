@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.hilt.android)
 }
 
+// Hilt aggregating task 비활성화 (JavaPoet canonicalName() 호환성 이슈 회피)
+// AGP 8.12 + Hilt 2.51 조합에서 AggregateDepsTask가 JavaPoet 신규 API와 충돌함
+hilt {
+    enableAggregatingTask = false
+}
+
 android {
     namespace = "com.kmu_focus.focusandroid"
     compileSdk = 36
@@ -69,6 +75,7 @@ dependencies {
 
     // DI (Hilt)
     implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
     // Media
@@ -77,6 +84,8 @@ dependencies {
 
     // Test
     testImplementation(libs.junit)
+    testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.mockk)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
