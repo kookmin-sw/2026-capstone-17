@@ -32,3 +32,24 @@ google-services.json
 
 # Android Profiling
 *.hprof
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# 서명 키 파일
+*.jks
+*.keystore
+
+# API 키 등을 담는 비밀 파일
+secrets.properties
+
+# Cursor settings and history
+.cursor/
+.vscode/
+
+# Claude Code / Anthropic related
+.claude/
+claude_logs
+*.claude-session
