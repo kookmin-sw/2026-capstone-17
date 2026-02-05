@@ -53,3 +53,4 @@ secrets.properties
 .claude/
 claude_logs
 *.claude-session
+*CLAUDE.md

@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.ui.theme
+package com.kmu_focus.focusandroid.presentation.theme
 
 import android.app.Activity
 import android.os.Build

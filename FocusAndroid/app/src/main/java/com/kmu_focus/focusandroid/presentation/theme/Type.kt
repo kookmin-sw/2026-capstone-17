@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.ui.theme
+package com.kmu_focus.focusandroid.presentation.theme
 
 import androidx.compose.material3.Typography
 import androidx.compose.ui.text.TextStyle
