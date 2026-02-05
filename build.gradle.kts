@@ -39,12 +39,12 @@ dependencies {
 	implementation("io.grpc:grpc-services")
 	implementation("org.jetbrains.kotlin:kotlin-reflect")
 	implementation("tools.jackson.module:jackson-module-kotlin")
-	compileOnly("org.projectlombok:lombok")
 	runtimeOnly("org.postgresql:postgresql")
-	annotationProcessor("org.projectlombok:lombok")
 	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
 	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    implementation("com.github.f4b6a3:ulid-creator:5.2.3")
 	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1")
 	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
