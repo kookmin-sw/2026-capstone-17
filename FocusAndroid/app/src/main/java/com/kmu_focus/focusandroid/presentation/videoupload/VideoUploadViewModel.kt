@@ -9,6 +9,7 @@ import javax.inject.Inject
 
 data class VideoUploadUiState(
     val selectedVideoUri: String? = null,
+    val isPlaying: Boolean = false,
     val isLoading: Boolean = false,
     val error: String? = null
 )
@@ -22,8 +23,15 @@ class VideoUploadViewModel @Inject constructor() : ViewModel() {
     fun selectVideo(uri: String) {
         _uiState.value = _uiState.value.copy(
             selectedVideoUri = uri,
+            isPlaying = false,
             isLoading = false,
             error = null
+        )
+    }
+
+    fun togglePlayback() {
+        _uiState.value = _uiState.value.copy(
+            isPlaying = !_uiState.value.isPlaying
         )
     }
 
