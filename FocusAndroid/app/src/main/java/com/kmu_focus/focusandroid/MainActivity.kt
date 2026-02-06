@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.Modifier
-import com.kmu_focus.focusandroid.presentation.main.MainScreen
+import com.kmu_focus.focusandroid.feature.video.presentation.main.MainScreen
 import com.kmu_focus.focusandroid.presentation.theme.FocusAndroidTheme
 import dagger.hilt.android.AndroidEntryPoint
 
