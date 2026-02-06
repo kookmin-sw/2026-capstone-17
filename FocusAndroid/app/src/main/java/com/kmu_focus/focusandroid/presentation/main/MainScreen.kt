@@ -9,6 +9,7 @@ import androidx.compose.ui.Modifier
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kmu_focus.focusandroid.presentation.videoplayer.VideoPlayerScreen
+import com.kmu_focus.focusandroid.presentation.videosave.VideoSaveScreen
 import com.kmu_focus.focusandroid.presentation.videoupload.VideoUploadScreen
 
 @Composable
@@ -24,6 +25,11 @@ fun MainScreen(
         )
 
         uiState.selectedVideoUri?.let { uri ->
+            VideoSaveScreen(
+                videoUri = uri,
+                modifier = Modifier.fillMaxWidth()
+            )
+
             VideoPlayerScreen(
                 videoUri = uri,
                 onClearSelection = { viewModel.onClearSelection() },

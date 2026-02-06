@@ -1,0 +1,49 @@
+package com.kmu_focus.focusandroid.presentation.videosave
+
+import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
+import com.kmu_focus.focusandroid.domain.usecase.SaveVideoUseCase
+import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+import javax.inject.Inject
+
+data class VideoSaveUiState(
+    val isSaving: Boolean = false,
+    val savedFilePath: String? = null,
+    val error: String? = null
+)
+
+@HiltViewModel
+class VideoSaveViewModel @Inject constructor(
+    private val saveVideoUseCase: SaveVideoUseCase
+) : ViewModel() {
+
+    private val _uiState = MutableStateFlow(VideoSaveUiState())
+    val uiState: StateFlow<VideoSaveUiState> = _uiState.asStateFlow()
+
+    fun saveVideo(sourceUri: String) {
+        _uiState.value = VideoSaveUiState(isSaving = true)
+        viewModelScope.launch {
+            saveVideoUseCase(sourceUri)
+                .onSuccess { path ->
+                    _uiState.value = _uiState.value.copy(
+                        isSaving = false,
+                        savedFilePath = path
+                    )
+                }
+                .onFailure { e ->
+                    _uiState.value = _uiState.value.copy(
+                        isSaving = false,
+                        error = e.message ?: "동영상 저장 실패"
+                    )
+                }
+        }
+    }
+
+    fun reset() {
+        _uiState.value = VideoSaveUiState()
+    }
+}

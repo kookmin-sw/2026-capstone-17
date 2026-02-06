@@ -37,9 +37,6 @@ class VideoUploadViewModelTest {
 
         viewModel.clearSelection()
         assertEquals(VideoUploadUiState(), viewModel.uiState.value)
-        assertNull(viewModel.uiState.value.selectedVideoUri)
-        assertFalse(viewModel.uiState.value.isLoading)
-        assertNull(viewModel.uiState.value.error)
     }
 
     @Test
