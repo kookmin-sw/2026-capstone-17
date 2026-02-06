@@ -6,6 +6,12 @@ plugins {
     alias(libs.plugins.hilt.android)
 }
 
+// Hilt aggregating task 비활성화 (JavaPoet canonicalName() 호환성 이슈 회피)
+// AGP 8.12 + Hilt 2.51 조합에서 AggregateDepsTask가 JavaPoet 신규 API와 충돌함
+hilt {
+    enableAggregatingTask = false
+}
+
 android {
     namespace = "com.kmu_focus.focusandroid"
     compileSdk = 36
@@ -48,10 +54,12 @@ android {
 }
 
 dependencies {
+    // Feature Modules
+    implementation(project(":feature:video"))
+
     // Core & UI
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
-    implementation(libs.androidx.lifecycle.viewmodel.compose) // ViewModel Compose 추가
     implementation(libs.androidx.activity.compose)
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
@@ -69,11 +77,8 @@ dependencies {
 
     // DI (Hilt)
     implementation(libs.hilt.android)
+    implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
-
-    // Media
-    implementation(libs.androidx.media3.exoplayer)
-    implementation(libs.androidx.media3.common)
 
     // Test
     testImplementation(libs.junit)
