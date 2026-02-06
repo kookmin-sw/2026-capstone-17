@@ -7,6 +7,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import javax.inject.Inject
 
+data class VideoPlayerUiState(
+    val videoUri: String = "",
+    val isPlaying: Boolean = false
+)
+
 @HiltViewModel
 class VideoPlayerViewModel @Inject constructor() : ViewModel() {
 
