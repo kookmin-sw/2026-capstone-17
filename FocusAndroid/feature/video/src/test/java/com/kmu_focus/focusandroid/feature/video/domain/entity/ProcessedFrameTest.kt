@@ -1,6 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.domain.entity
 
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import org.junit.Assert.*
 import org.junit.Test
 

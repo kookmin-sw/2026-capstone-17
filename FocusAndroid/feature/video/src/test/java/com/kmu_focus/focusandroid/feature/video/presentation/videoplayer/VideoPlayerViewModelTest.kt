@@ -1,6 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import io.mockk.every

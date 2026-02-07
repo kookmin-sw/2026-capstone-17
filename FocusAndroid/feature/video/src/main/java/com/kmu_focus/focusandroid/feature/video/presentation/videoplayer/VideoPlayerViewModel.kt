@@ -1,7 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import androidx.lifecycle.ViewModel
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import dagger.hilt.android.lifecycle.HiltViewModel

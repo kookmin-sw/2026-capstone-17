@@ -2,11 +2,11 @@ package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.FaceTracker
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig
+import com.kmu_focus.focusandroid.core.ai.domain.detector.FaceDetector
+import com.kmu_focus.focusandroid.core.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.FaceTracker
+import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.domain.entity.FaceExport
 import com.kmu_focus.focusandroid.feature.video.domain.entity.FrameExport
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame

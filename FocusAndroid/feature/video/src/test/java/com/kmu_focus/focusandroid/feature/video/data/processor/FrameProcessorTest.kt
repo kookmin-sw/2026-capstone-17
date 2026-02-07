@@ -1,14 +1,14 @@
 package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
-import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
-import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.FaceTracker
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMCoeffs
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMResult
-import com.kmu_focus.focusandroid.feature.ai.domain.entity.FaceRect
+import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig
+import com.kmu_focus.focusandroid.core.ai.domain.detector.FaceDetector
+import com.kmu_focus.focusandroid.core.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.FaceTracker
+import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.core.ai.domain.entity.Face3DMMCoeffs
+import com.kmu_focus.focusandroid.core.ai.domain.entity.Face3DMMResult
+import com.kmu_focus.focusandroid.core.ai.domain.entity.FaceRect
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic

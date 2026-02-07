@@ -22,4 +22,4 @@ dependencyResolutionManagement {
 rootProject.name = "FocusAndroid"
 include(":app")
 include(":feature:video")
-include(":feature:ai")
+include(":core:ai")

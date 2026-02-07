@@ -50,7 +50,7 @@ dependencies {
     ksp(libs.hilt.compiler)
 
     // Feature Module
-    implementation(project(":feature:ai"))
+    implementation(project(":core:ai"))
 
     // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)
     implementation(libs.opencv.android)
