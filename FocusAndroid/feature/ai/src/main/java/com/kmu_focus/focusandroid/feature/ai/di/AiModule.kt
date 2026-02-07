@@ -5,6 +5,9 @@ import com.kmu_focus.focusandroid.feature.ai.data.yunet.YuNetOpenCVDetector
 import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.FaceTracker
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.TrackingMethod
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.createFaceTracker
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
@@ -26,5 +29,9 @@ abstract class AiModule {
         @Provides
         @Singleton
         fun provideDetectionConfig(): DetectionConfig = DetectionConfig()
+
+        @Provides
+        @Singleton
+        fun provideFaceTracker(): FaceTracker = createFaceTracker(TrackingMethod.IoU_3DMM)
     }
 }

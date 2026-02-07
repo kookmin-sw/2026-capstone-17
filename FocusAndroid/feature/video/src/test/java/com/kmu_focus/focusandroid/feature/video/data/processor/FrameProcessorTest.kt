@@ -5,6 +5,7 @@ import android.graphics.Rect
 import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.tracking.FaceTracker
 import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMCoeffs
 import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMResult
@@ -23,8 +24,11 @@ class FrameProcessorTest {
 
     private val faceDetector: FaceDetector = mockk()
     private val facial3DMMExtractor: Facial3DMMExtractor = mockk(relaxed = true)
+    private val faceTracker: FaceTracker = mockk(relaxed = true) {
+        every { update(any(), any()) } answers { firstArg<List<IntArray>>().indices.toList() }
+    }
     private val config = DetectionConfig()
-    private val frameProcessor = FrameProcessor(faceDetector, config, facial3DMMExtractor)
+    private val frameProcessor = FrameProcessor(faceDetector, config, facial3DMMExtractor, faceTracker)
 
     @Test
     fun `process 호출 시 FaceDetector detectFaces를 호출함`() {
@@ -146,6 +150,23 @@ class FrameProcessorTest {
     }
 
     @Test
+    fun `frameIndex가 있고 얼굴이 있으면 faceTracker update 호출`() {
+        val bitmap = mockk<Bitmap> { every { width } returns 640; every { height } returns 480 }
+        val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
+        every { faceDetector.detectFaces(bitmap) } returns faces
+        every { facial3DMMExtractor.extract3DMM(bitmap, any()) } returns Face3DMMResult(
+            vertices = emptyList(),
+            faceRect = FaceRect(10, 20, 110, 120),
+            coeffs = Face3DMMCoeffs(floatArrayOf(1f), floatArrayOf(2f), floatArrayOf(3f))
+        )
+        every { faceTracker.update(any(), any()) } returns listOf(0)
+
+        frameProcessor.process(bitmap, 1000L, frameIndex = 7)
+
+        io.mockk.verify(exactly = 1) { faceTracker.update(any(), any()) }
+    }
+
+    @Test
     fun `frameIndex가 null이면 frameExport는 null`() {
         val bitmap = mockk<Bitmap> {
             every { width } returns 640
@@ -161,7 +182,7 @@ class FrameProcessorTest {
     @Test
     fun `커스텀 config의 confidenceThreshold가 적용됨`() {
         val customConfig = DetectionConfig(confidenceThreshold = 0.9f)
-        val customProcessor = FrameProcessor(faceDetector, customConfig, facial3DMMExtractor)
+        val customProcessor = FrameProcessor(faceDetector, customConfig, facial3DMMExtractor, faceTracker)
         val bitmap = mockk<Bitmap> {
             every { width } returns 640
             every { height } returns 480

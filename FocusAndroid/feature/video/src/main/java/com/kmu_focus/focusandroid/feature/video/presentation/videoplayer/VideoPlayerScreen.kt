@@ -51,6 +51,7 @@ fun VideoPlayerScreen(
                     faces = uiState.detectedFaces,
                     frameWidth = uiState.frameWidth,
                     frameHeight = uiState.frameHeight,
+                    trackingIds = uiState.faceTrackingIds,
                     modifier = Modifier.matchParentSize()
                 )
             }

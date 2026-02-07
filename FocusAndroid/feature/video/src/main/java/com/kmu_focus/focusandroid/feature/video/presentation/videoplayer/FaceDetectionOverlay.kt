@@ -16,6 +16,7 @@ fun FaceDetectionOverlay(
     faces: List<DetectedFace>,
     frameWidth: Int,
     frameHeight: Int,
+    trackingIds: List<Int> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -24,7 +25,7 @@ fun FaceDetectionOverlay(
         val scaleX = size.width / frameWidth
         val scaleY = size.height / frameHeight
 
-        faces.forEach { face ->
+        faces.forEachIndexed { index, face ->
             val left = face.x * scaleX
             val top = face.y * scaleY
             val w = face.width * scaleX
@@ -43,8 +44,10 @@ fun FaceDetectionOverlay(
                     textSize = 32f
                     isAntiAlias = true
                 }
+                val text = trackingIds.getOrNull(index)?.let { "ID:$it" }.orEmpty()
+                if (text.isEmpty()) return@forEachIndexed
                 canvas.nativeCanvas.drawText(
-                    String.format("%.0f%%", face.confidence * 100),
+                    text,
                     left,
                     (top - 8f).coerceAtLeast(paint.textSize),
                     paint
