@@ -52,6 +52,9 @@ dependencies {
     // Feature Module
     implementation(project(":feature:detection"))
 
+    // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)
+    implementation(libs.opencv.android)
+
     // Media (ExoPlayer)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)

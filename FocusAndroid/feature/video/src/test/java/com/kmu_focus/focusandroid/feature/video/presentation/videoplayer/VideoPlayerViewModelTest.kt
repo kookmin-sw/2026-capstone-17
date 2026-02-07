@@ -7,6 +7,8 @@ import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -198,5 +200,69 @@ class VideoPlayerViewModelTest {
 
         // 얼굴이 사라지면 박스도 제거
         assertTrue(viewModel.uiState.value.detectedFaces.isEmpty())
+    }
+
+    // --- ByteBuffer processFrame 테스트 ---
+
+    private fun createTestBuffer(width: Int = 640, height: Int = 480): ByteBuffer {
+        return ByteBuffer.allocateDirect(width * height * 4).apply {
+            order(ByteOrder.nativeOrder())
+        }
+    }
+
+    @Test
+    fun `ByteBuffer processFrame 호출 시 FrameProcessor가 실행되고 detectedFaces가 업데이트됨`() = runTest {
+        val buffer = createTestBuffer()
+        val faces = listOf(DetectedFace(10, 20, 100, 100, 0.95f))
+        val frame = ProcessedFrame(faces, 640, 480, 1000L)
+        every { frameProcessor.process(buffer, 640, 480, any()) } returns frame
+
+        viewModel.loadVideo("content://video/1")
+        viewModel.startDetection()
+        viewModel.processFrame(buffer, 640, 480)
+        advanceUntilIdle()
+
+        assertEquals(1, viewModel.uiState.value.detectedFaces.size)
+        assertEquals(0.95f, viewModel.uiState.value.detectedFaces[0].confidence, 0.001f)
+        assertEquals(640, viewModel.uiState.value.frameWidth)
+        assertEquals(480, viewModel.uiState.value.frameHeight)
+    }
+
+    @Test
+    fun `isDetecting이 false이면 ByteBuffer processFrame이 FrameProcessor를 호출하지 않음`() = runTest {
+        val buffer = createTestBuffer()
+
+        viewModel.loadVideo("content://video/1")
+        viewModel.processFrame(buffer, 640, 480)
+        advanceUntilIdle()
+
+        verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any()) }
+    }
+
+    // --- processFrameSync 테스트 ---
+
+    @Test
+    fun `processFrameSync 호출 시 동기적으로 detectedFaces가 업데이트됨`() = runTest {
+        val buffer = createTestBuffer()
+        val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
+        val frame = ProcessedFrame(faces, 640, 480, 1000L)
+        every { frameProcessor.process(buffer, 640, 480, any()) } returns frame
+
+        viewModel.loadVideo("content://video/1")
+        viewModel.startDetection()
+        viewModel.processFrameSync(buffer, 640, 480)
+
+        assertEquals(1, viewModel.uiState.value.detectedFaces.size)
+        assertEquals(0.9f, viewModel.uiState.value.detectedFaces[0].confidence, 0.001f)
+    }
+
+    @Test
+    fun `isDetecting이 false이면 processFrameSync가 FrameProcessor를 호출하지 않음`() = runTest {
+        val buffer = createTestBuffer()
+
+        viewModel.loadVideo("content://video/1")
+        viewModel.processFrameSync(buffer, 640, 480)
+
+        verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any()) }
     }
 }

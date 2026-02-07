@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.kmu_focus.focusandroid.feature.detection.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import java.nio.ByteBuffer
 import javax.inject.Inject
 
 class FrameProcessor @Inject constructor(
@@ -19,5 +20,18 @@ class FrameProcessor @Inject constructor(
             frameHeight = bitmap.height,
             timestampMs = timestampMs
         )
+    }
+
+    // GL PBO에서 읽은 RGBA ByteBuffer를 Bitmap으로 변환 후 검출
+    fun process(rgbaBuffer: ByteBuffer, width: Int, height: Int, timestampMs: Long): ProcessedFrame {
+        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        rgbaBuffer.rewind()
+        bitmap.copyPixelsFromBuffer(rgbaBuffer)
+
+        return try {
+            process(bitmap, timestampMs)
+        } finally {
+            bitmap.recycle()
+        }
     }
 }

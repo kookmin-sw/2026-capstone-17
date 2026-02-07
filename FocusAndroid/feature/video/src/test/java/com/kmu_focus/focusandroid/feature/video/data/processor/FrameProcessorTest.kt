@@ -6,9 +6,13 @@ import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
+import io.mockk.unmockkStatic
 import io.mockk.verify
 import org.junit.Assert.*
 import org.junit.Test
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 
 class FrameProcessorTest {
 
@@ -123,5 +127,84 @@ class FrameProcessorTest {
 
         assertEquals(1, result.faces.size)
         assertEquals(0.95f, result.faces[0].confidence, 0.001f)
+    }
+
+    // --- ByteBuffer 오버로드 테스트 ---
+
+    private fun createRGBABuffer(width: Int, height: Int): ByteBuffer {
+        val size = width * height * 4
+        return ByteBuffer.allocateDirect(size).apply {
+            order(ByteOrder.nativeOrder())
+            for (i in 0 until size) put(128.toByte())
+            flip()
+        }
+    }
+
+    private fun <T> withMockedBitmapFactory(width: Int, height: Int, block: () -> T): T {
+        val mockBitmap = mockk<Bitmap>(relaxed = true) {
+            every { this@mockk.width } returns width
+            every { this@mockk.height } returns height
+        }
+        mockkStatic(Bitmap::class)
+        every { Bitmap.createBitmap(width, height, any()) } returns mockBitmap
+        return try {
+            block()
+        } finally {
+            unmockkStatic(Bitmap::class)
+        }
+    }
+
+    @Test
+    fun `ByteBuffer process 호출 시 FaceDetector detectFaces를 호출함`() {
+        val buffer = createRGBABuffer(640, 480)
+        every { faceDetector.detectFaces(any<Bitmap>()) } returns emptyList()
+
+        withMockedBitmapFactory(640, 480) {
+            frameProcessor.process(buffer, 640, 480, 1000L)
+        }
+
+        verify(exactly = 1) { faceDetector.detectFaces(any<Bitmap>()) }
+    }
+
+    @Test
+    fun `ByteBuffer process 결과의 frameWidth와 frameHeight가 파라미터와 일치함`() {
+        val buffer = createRGBABuffer(1280, 720)
+        every { faceDetector.detectFaces(any<Bitmap>()) } returns emptyList()
+
+        val result = withMockedBitmapFactory(1280, 720) {
+            frameProcessor.process(buffer, 1280, 720, 500L)
+        }
+
+        assertEquals(1280, result.frameWidth)
+        assertEquals(720, result.frameHeight)
+    }
+
+    @Test
+    fun `ByteBuffer process에서도 confidence 필터링이 적용됨`() {
+        val buffer = createRGBABuffer(640, 480)
+        val faces = listOf(
+            DetectedFace(10, 20, 100, 100, 0.8f),
+            DetectedFace(200, 300, 80, 80, 0.3f)
+        )
+        every { faceDetector.detectFaces(any<Bitmap>()) } returns faces
+
+        val result = withMockedBitmapFactory(640, 480) {
+            frameProcessor.process(buffer, 640, 480, 0L)
+        }
+
+        assertEquals(1, result.faces.size)
+        assertEquals(0.8f, result.faces[0].confidence, 0.001f)
+    }
+
+    @Test
+    fun `ByteBuffer process에서 timestampMs가 정확히 전달됨`() {
+        val buffer = createRGBABuffer(640, 480)
+        every { faceDetector.detectFaces(any<Bitmap>()) } returns emptyList()
+
+        val result = withMockedBitmapFactory(640, 480) {
+            frameProcessor.process(buffer, 640, 480, 99999L)
+        }
+
+        assertEquals(99999L, result.timestampMs)
     }
 }

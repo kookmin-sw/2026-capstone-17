@@ -1,9 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
-import android.graphics.SurfaceTexture
 import android.net.Uri
 import android.view.Surface
-import android.view.TextureView
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,6 +13,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.common.MediaItem
 import androidx.media3.exoplayer.ExoPlayer
+import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
 
 @Composable
 fun VideoPlayerScreen(
@@ -38,11 +37,11 @@ fun VideoPlayerScreen(
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
         ) {
-            ExoPlayerView(
+            ExoPlayerGLView(
                 uriString = videoUri,
                 isPlaying = uiState.isPlaying,
-                onFrameCaptured = { bitmap ->
-                    viewModel.processFrame(bitmap)
+                onFrameCaptured = { buffer, width, height ->
+                    viewModel.processFrameSync(buffer, width, height)
                 },
                 modifier = Modifier.matchParentSize()
             )
@@ -82,10 +81,10 @@ fun VideoPlayerScreen(
 }
 
 @Composable
-private fun ExoPlayerView(
+private fun ExoPlayerGLView(
     uriString: String,
     isPlaying: Boolean,
-    onFrameCaptured: (android.graphics.Bitmap) -> Unit,
+    onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -109,35 +108,18 @@ private fun ExoPlayerView(
 
     AndroidView(
         factory = { ctx ->
-            TextureView(ctx).apply {
-                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
-                    override fun onSurfaceTextureAvailable(
-                        surfaceTexture: SurfaceTexture,
-                        width: Int,
-                        height: Int
-                    ) {
-                        // ExoPlayer에 Surface 연결
-                        exoPlayer.setVideoSurface(Surface(surfaceTexture))
-                    }
-
-                    override fun onSurfaceTextureSizeChanged(
-                        surfaceTexture: SurfaceTexture,
-                        width: Int,
-                        height: Int
-                    ) {}
-
-                    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
-                        exoPlayer.setVideoSurface(null)
-                        return true
-                    }
-
-                    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
-                        // ExoPlayer가 새 프레임을 렌더링할 때마다 호출
-                        val bitmap = this@apply.bitmap ?: return
-                        onFrameCaptured(bitmap)
-                    }
-                }
-            }
+            VideoGLSurfaceView(
+                context = ctx,
+                onSurfaceReady = { surface: Surface ->
+                    exoPlayer.setVideoSurface(surface)
+                },
+                onFrameCaptured = onFrameCaptured
+            )
+        },
+        update = { /* ExoPlayer 상태는 LaunchedEffect에서 관리 */ },
+        onRelease = { glView ->
+            exoPlayer.setVideoSurface(null)
+            glView.release()
         },
         modifier = modifier
     )
