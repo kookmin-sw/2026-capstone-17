@@ -1,7 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
-import android.graphics.Rect
 import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
@@ -54,6 +53,7 @@ class FrameProcessorTest {
             DetectedFace(200, 300, 80, 80, 0.85f)
         )
         every { faceDetector.detectFaces(bitmap) } returns faces
+        every { facial3DMMExtractor.extract3DMM(any(), any()) } returns null
 
         val result = frameProcessor.process(bitmap, 2000L)
 
@@ -112,6 +112,7 @@ class FrameProcessorTest {
             DetectedFace(200, 300, 80, 80, 0.3f)
         )
         every { faceDetector.detectFaces(bitmap) } returns faces
+        every { facial3DMMExtractor.extract3DMM(any(), any()) } returns null
 
         val result = frameProcessor.process(bitmap, 0L)
 
@@ -173,6 +174,7 @@ class FrameProcessorTest {
             every { height } returns 480
         }
         every { faceDetector.detectFaces(bitmap) } returns listOf(DetectedFace(0, 0, 50, 50, 0.9f))
+        every { facial3DMMExtractor.extract3DMM(any(), any()) } returns null
 
         val result = frameProcessor.process(bitmap, 1000L, frameIndex = null)
 
@@ -192,6 +194,7 @@ class FrameProcessorTest {
             DetectedFace(200, 300, 80, 80, 0.85f)
         )
         every { faceDetector.detectFaces(bitmap) } returns faces
+        every { facial3DMMExtractor.extract3DMM(any(), any()) } returns null
 
         val result = customProcessor.process(bitmap, 0L)
 
@@ -257,6 +260,7 @@ class FrameProcessorTest {
             DetectedFace(200, 300, 80, 80, 0.3f)
         )
         every { faceDetector.detectFaces(any<Bitmap>()) } returns faces
+        every { facial3DMMExtractor.extract3DMM(any(), any()) } returns null
 
         val result = withMockedBitmapFactory(640, 480) {
             frameProcessor.process(buffer, 640, 480, 0L)

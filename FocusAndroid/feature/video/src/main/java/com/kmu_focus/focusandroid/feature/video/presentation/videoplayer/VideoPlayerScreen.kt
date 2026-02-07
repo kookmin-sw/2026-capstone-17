@@ -1,18 +1,14 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
-import android.net.Uri
 import android.view.Surface
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.media3.common.MediaItem
-import androidx.media3.exoplayer.ExoPlayer
 import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
 
 @Composable
@@ -88,24 +84,7 @@ private fun ExoPlayerGLView(
     onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val context = LocalContext.current
-
-    val exoPlayer = remember {
-        ExoPlayer.Builder(context).build()
-    }
-
-    LaunchedEffect(uriString) {
-        exoPlayer.setMediaItem(MediaItem.fromUri(Uri.parse(uriString)))
-        exoPlayer.prepare()
-    }
-
-    LaunchedEffect(isPlaying) {
-        if (isPlaying) exoPlayer.play() else exoPlayer.pause()
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { exoPlayer.release() }
-    }
+    val exoPlayer = rememberExoPlayer(uriString = uriString, isPlaying = isPlaying)
 
     AndroidView(
         factory = { ctx ->
@@ -117,7 +96,7 @@ private fun ExoPlayerGLView(
                 onFrameCaptured = onFrameCaptured
             )
         },
-        update = { /* ExoPlayer 상태는 LaunchedEffect에서 관리 */ },
+        update = { },
         onRelease = { glView ->
             exoPlayer.setVideoSurface(null)
             glView.release()
