@@ -2,6 +2,7 @@ package com.kmu_focus.focusandroid.feature.detection.data.detector
 
 import android.graphics.Bitmap
 import android.util.Log
+import com.kmu_focus.focusandroid.feature.detection.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
 import org.opencv.android.Utils
@@ -11,20 +12,14 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.FaceDetectorYN
 import javax.inject.Inject
-import javax.inject.Singleton
 
-@Singleton
 class YuNetOpenCVDetector @Inject constructor(
-    private val modelFileProvider: ModelFileProvider
+    private val modelFileProvider: ModelFileProvider,
+    private val config: DetectionConfig
 ) : FaceDetector {
 
     companion object {
         private const val TAG = "YuNetDetector"
-        private const val MODEL_NAME = "yunet_face.onnx"
-        private const val DEFAULT_INPUT_SIZE = 320
-        private const val SCORE_THRESHOLD = 0.5f
-        private const val NMS_THRESHOLD = 0.3f
-        private const val TOP_K = 5000
     }
 
     private var detector: FaceDetectorYN? = null
@@ -38,14 +33,14 @@ class YuNetOpenCVDetector @Inject constructor(
     private fun ensureInitialized() {
         if (detector != null) return
 
-        val modelPath = modelFileProvider.getModelPath(MODEL_NAME)
+        val modelPath = modelFileProvider.getModelPath(config.modelName)
         detector = FaceDetectorYN.create(
             modelPath,
             "",
-            Size(DEFAULT_INPUT_SIZE.toDouble(), DEFAULT_INPUT_SIZE.toDouble()),
-            SCORE_THRESHOLD,
-            NMS_THRESHOLD,
-            TOP_K
+            Size(config.inputSize.toDouble(), config.inputSize.toDouble()),
+            config.scoreThreshold,
+            config.nmsThreshold,
+            config.topK
         ) ?: throw IllegalStateException("YuNet 검출기 초기화 실패")
     }
 
@@ -69,8 +64,8 @@ class YuNetOpenCVDetector @Inject constructor(
             // 비율 유지 리사이즈 — 가로를 inputSize로 고정, 세로는 비율에 맞춤
             val origWidth = bgr.cols()
             val origHeight = bgr.rows()
-            val scale = DEFAULT_INPUT_SIZE.toFloat() / origWidth
-            val smallWidth = DEFAULT_INPUT_SIZE
+            val scale = config.inputSize.toFloat() / origWidth
+            val smallWidth = config.inputSize
             val smallHeight = (origHeight * scale).toInt()
 
             val small = smallMat ?: Mat().also { smallMat = it }
