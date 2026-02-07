@@ -39,6 +39,22 @@ class VideoExportDataTest {
     }
 
     @Test
+    fun `isOwner가 true인 얼굴은 toJsonObject faces에서 제외됨`() {
+        val frame = FrameExport(
+            frameNumber = 0,
+            timestamp = 0.0,
+            faces = listOf(
+                FaceExport(trackingId = 0, bbox = intArrayOf(0, 0, 50, 50), isOwner = true),
+                FaceExport(trackingId = 1, bbox = intArrayOf(100, 0, 50, 50), isOwner = false)
+            )
+        )
+        val json = frame.toJsonObject()
+        val faces = json.getJSONArray("faces")
+        assertEquals(1, faces.length())
+        assertEquals(1, faces.getJSONObject(0).getInt("tracking_id"))
+    }
+
+    @Test
     fun `VideoExportData toJsonObject에 video_info와 frames 포함`() {
         val data = VideoExportData(
             videoInfo = VideoInfo(640, 480, 30f),

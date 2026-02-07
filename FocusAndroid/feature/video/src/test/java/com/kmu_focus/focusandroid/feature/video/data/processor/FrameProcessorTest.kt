@@ -4,6 +4,7 @@ import android.graphics.Bitmap
 import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.core.ai.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.core.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.TrackLabelState
 import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.FaceTracker
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.core.ai.domain.entity.Face3DMMCoeffs
@@ -27,7 +28,13 @@ class FrameProcessorTest {
         every { update(any(), any()) } answers { firstArg<List<IntArray>>().indices.toList() }
     }
     private val config = DetectionConfig()
-    private val frameProcessor = FrameProcessor(faceDetector, config, facial3DMMExtractor, faceTracker)
+    private val trackLabelState = mockk<TrackLabelState>(relaxed = true)
+    private val embeddingExtractor = mockk<com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtractor>(relaxed = true)
+
+    private val frameProcessor = FrameProcessor(
+        faceDetector, config, facial3DMMExtractor, faceTracker,
+        trackLabelState, embeddingExtractor
+    )
 
     @Test
     fun `process 호출 시 FaceDetector detectFaces를 호출함`() {
@@ -184,7 +191,10 @@ class FrameProcessorTest {
     @Test
     fun `커스텀 config의 confidenceThreshold가 적용됨`() {
         val customConfig = DetectionConfig(confidenceThreshold = 0.9f)
-        val customProcessor = FrameProcessor(faceDetector, customConfig, facial3DMMExtractor, faceTracker)
+        val customProcessor = FrameProcessor(
+            faceDetector, customConfig, facial3DMMExtractor, faceTracker,
+            trackLabelState, embeddingExtractor
+        )
         val bitmap = mockk<Bitmap> {
             every { width } returns 640
             every { height } returns 480

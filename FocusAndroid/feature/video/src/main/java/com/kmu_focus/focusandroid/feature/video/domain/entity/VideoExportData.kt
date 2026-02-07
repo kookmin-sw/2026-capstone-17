@@ -14,17 +14,20 @@ data class FaceExport(
     val bbox: IntArray,
     val idCoeffs: FloatArray? = null,
     val expCoeffs: FloatArray? = null,
-    val pose: FloatArray? = null
+    val pose: FloatArray? = null,
+    /** null = PENDING, true = OWNER(전송 제외), false = OTHER */
+    val isOwner: Boolean? = null
 ) {
     override fun equals(other: Any?) = (other is FaceExport) &&
         trackingId == other.trackingId &&
         bbox.contentEquals(other.bbox) &&
         (idCoeffs == null && other.idCoeffs == null || idCoeffs != null && other.idCoeffs != null && idCoeffs.contentEquals(other.idCoeffs)) &&
         (expCoeffs == null && other.expCoeffs == null || expCoeffs != null && other.expCoeffs != null && expCoeffs.contentEquals(other.expCoeffs)) &&
-        (pose == null && other.pose == null || pose != null && other.pose != null && pose.contentEquals(other.pose))
+        (pose == null && other.pose == null || pose != null && other.pose != null && pose.contentEquals(other.pose)) &&
+        isOwner == other.isOwner
 
     override fun hashCode() = 31 * trackingId + bbox.contentHashCode() +
-        (idCoeffs?.contentHashCode() ?: 0) + 31 * (expCoeffs?.contentHashCode() ?: 0) + 31 * 31 * (pose?.contentHashCode() ?: 0)
+        (idCoeffs?.contentHashCode() ?: 0) + 31 * (expCoeffs?.contentHashCode() ?: 0) + 31 * 31 * (pose?.contentHashCode() ?: 0) + 31 * 31 * 31 * (isOwner?.hashCode() ?: 0)
 }
 
 data class FrameExport(
@@ -32,11 +35,12 @@ data class FrameExport(
     val timestamp: Double,
     val faces: List<FaceExport>
 ) {
+    /** isOwner == true 인 얼굴은 제외 (Owner 전송 금지). */
     fun toJsonObject(): JSONObject = JSONObject().apply {
         put("frame_number", frameNumber)
         put("timestamp", timestamp)
         put("faces", JSONArray().apply {
-            faces.forEach { face ->
+            faces.filter { it.isOwner != true }.forEach { face ->
                 put(JSONObject().apply {
                     put("tracking_id", face.trackingId)
                     put("bbox", JSONArray().apply { face.bbox.forEach { put(it) } })

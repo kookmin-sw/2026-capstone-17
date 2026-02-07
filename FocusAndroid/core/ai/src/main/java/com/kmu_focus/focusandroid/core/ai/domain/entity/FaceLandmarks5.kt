@@ -25,13 +25,22 @@ data class FaceLandmarks5(
         (rightMouth.y + leftMouth.y) / 2f
     )
 
+    /** 얼굴 기울기 각도 (라디안). 테스트 프로젝트와 동일. */
     fun getFaceAngle(): Float {
         val dx = leftEye.x - rightEye.x
         val dy = leftEye.y - rightEye.y
-        return Math.toDegrees(kotlin.math.atan2(dy.toDouble(), dx.toDouble())).toFloat()
+        return kotlin.math.atan2(dy, dx)
     }
 
-    fun isFrontal(threshold: Float = 15f): Boolean {
-        return kotlin.math.abs(getFaceAngle()) < threshold
+    /**
+     * 정면 응시 여부 (YuNet 5점 기준, 테스트와 동일).
+     * 코가 두 눈 중심에서 벗어난 정도로 대칭 판단. symmetryThreshold 미만이면 정면.
+     */
+    fun isFrontal(symmetryThreshold: Float = 0.2f): Boolean {
+        val eyeCenterX = (leftEye.x + rightEye.x) / 2f
+        val eyeDist = getEyeDistance()
+        if (eyeDist < 1e-6f) return false
+        val noseOffset = kotlin.math.abs(nose.x - eyeCenterX) / eyeDist
+        return noseOffset < symmetryThreshold
     }
 }

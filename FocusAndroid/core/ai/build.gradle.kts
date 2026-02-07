@@ -33,6 +33,7 @@ dependencies {
     implementation(libs.opencv.android)
     implementation(libs.tensorflow.lite)
     implementation(libs.tensorflow.lite.gpu)
+    implementation(libs.onnxruntime.android)
 
     // DI (Hilt)
     implementation(libs.hilt.android)

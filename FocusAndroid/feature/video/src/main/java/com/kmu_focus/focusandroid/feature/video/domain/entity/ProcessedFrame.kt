@@ -8,6 +8,7 @@ data class ProcessedFrame(
     val frameHeight: Int,
     val timestampMs: Long,
     val frameExport: FrameExport? = null,
-    /** faces와 동일 순서의 tracking ID (화면/연동용) */
-    val trackingIds: List<Int> = emptyList()
+    val trackingIds: List<Int> = emptyList(),
+    /** faces와 동일 순서. null=대기, true=OWNER, false=OTHER */
+    val faceLabels: List<Boolean?> = emptyList()
 )

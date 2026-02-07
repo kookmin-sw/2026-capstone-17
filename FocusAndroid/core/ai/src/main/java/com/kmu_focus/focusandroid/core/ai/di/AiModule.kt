@@ -5,6 +5,10 @@ import com.kmu_focus.focusandroid.core.ai.data.yunet.YuNetOpenCVDetector
 import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.core.ai.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.core.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.core.ai.data.recognition.OwnerEmbeddingStore
+import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerEmbeddingProvider
+import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerOtherClassifier
+import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.TrackLabelState
 import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.FaceTracker
 import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.TrackingMethod
 import com.kmu_focus.focusandroid.core.ai.domain.detector.tracking.createFaceTracker
@@ -25,6 +29,12 @@ abstract class AiModule {
     @Binds
     abstract fun bindFacial3DMMExtractor(impl: TFLiteFacial3DMMDetector): Facial3DMMExtractor
 
+    @Binds
+    abstract fun bindOwnerEmbeddingProvider(impl: OwnerEmbeddingStore): OwnerEmbeddingProvider
+
+    @Binds
+    abstract fun bindOwnerAdder(impl: OwnerEmbeddingStore): com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerAdder
+
     companion object {
         @Provides
         @Singleton
@@ -33,5 +43,15 @@ abstract class AiModule {
         @Provides
         @Singleton
         fun provideFaceTracker(): FaceTracker = createFaceTracker(TrackingMethod.IoU_3DMM)
+
+        @Provides
+        @Singleton
+        fun provideOwnerOtherClassifier(store: OwnerEmbeddingProvider): OwnerOtherClassifier =
+            OwnerOtherClassifier(store)
+
+        @Provides
+        @Singleton
+        fun provideTrackLabelState(classifier: OwnerOtherClassifier): TrackLabelState =
+            TrackLabelState(classifier)
     }
 }

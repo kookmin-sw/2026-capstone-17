@@ -16,7 +16,7 @@ fun FaceDetectionOverlay(
     faces: List<DetectedFace>,
     frameWidth: Int,
     frameHeight: Int,
-    trackingIds: List<Int> = emptyList(),
+    faceLabels: List<Boolean?> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -31,8 +31,14 @@ fun FaceDetectionOverlay(
             val w = face.width * scaleX
             val h = face.height * scaleY
 
+            val (boxColor, label) = when (faceLabels.getOrNull(index)) {
+                true -> Color.Green to "OWNER"
+                false -> Color.Red to "OTHER"
+                null -> Color(0xFFFFC107) to "대기"
+            }
+
             drawRect(
-                color = Color.Green,
+                color = boxColor,
                 topLeft = Offset(left, top),
                 size = Size(w, h),
                 style = Stroke(width = 3f)
@@ -40,14 +46,13 @@ fun FaceDetectionOverlay(
 
             drawIntoCanvas { canvas ->
                 val paint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.GREEN
+                    color = android.graphics.Color.WHITE
                     textSize = 32f
                     isAntiAlias = true
+                    setShadowLayer(2f, 0f, 0f, android.graphics.Color.BLACK)
                 }
-                val text = trackingIds.getOrNull(index)?.let { "ID:$it" }.orEmpty()
-                if (text.isEmpty()) return@forEachIndexed
                 canvas.nativeCanvas.drawText(
-                    text,
+                    label,
                     left,
                     (top - 8f).coerceAtLeast(paint.textSize),
                     paint

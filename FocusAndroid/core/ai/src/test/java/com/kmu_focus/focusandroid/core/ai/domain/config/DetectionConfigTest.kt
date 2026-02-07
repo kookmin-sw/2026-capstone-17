@@ -10,7 +10,7 @@ class DetectionConfigTest {
         val config = DetectionConfig()
 
         assertEquals("yunet_face.onnx", config.modelName)
-        assertEquals(320, config.inputSize)
+        assertEquals(480, config.inputSize)
         assertEquals(0.6f, config.scoreThreshold, 0.001f)
         assertEquals(0.3f, config.nmsThreshold, 0.001f)
         assertEquals(5000, config.topK)

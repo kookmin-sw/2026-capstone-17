@@ -68,7 +68,7 @@ object FaceEllipseMask {
         val eyeCenter = landmarks.getEyeCenter()
         val mouthCenter = landmarks.getMouthCenter()
         val eyeDistance = landmarks.getEyeDistance()
-        val angleDeg = landmarks.getFaceAngle()
+        val angleDeg = Math.toDegrees(landmarks.getFaceAngle().toDouble()).toFloat()
 
         val eyeMouthDist = sqrt(
             (mouthCenter.x - eyeCenter.x) * (mouthCenter.x - eyeCenter.x) +

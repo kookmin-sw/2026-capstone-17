@@ -16,7 +16,7 @@ data class VideoPlayerUiState(
     val isPlaying: Boolean = false,
     val isDetecting: Boolean = false,
     val detectedFaces: List<DetectedFace> = emptyList(),
-    val faceTrackingIds: List<Int> = emptyList(),
+    val faceLabels: List<Boolean?> = emptyList(),
     val frameWidth: Int = 0,
     val frameHeight: Int = 0
 )
@@ -62,7 +62,7 @@ class VideoPlayerViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(
             isDetecting = false,
             detectedFaces = emptyList(),
-            faceTrackingIds = emptyList()
+            faceLabels = emptyList()
         )
     }
 
@@ -77,7 +77,7 @@ class VideoPlayerViewModel @Inject constructor(
     private fun updateUiState(result: ProcessedFrame) {
         _uiState.value = _uiState.value.copy(
             detectedFaces = result.faces,
-            faceTrackingIds = result.trackingIds,
+            faceLabels = result.faceLabels,
             frameWidth = result.frameWidth,
             frameHeight = result.frameHeight
         )
