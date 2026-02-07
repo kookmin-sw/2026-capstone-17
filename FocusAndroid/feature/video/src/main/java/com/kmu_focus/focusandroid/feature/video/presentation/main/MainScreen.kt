@@ -1,5 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.main
 
+import android.app.Activity
+import android.content.pm.ActivityInfo
 import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
@@ -88,58 +90,76 @@ fun MainScreen(
         }
     }
 
+    var isVideoFullScreen by remember { mutableStateOf(false) }
+    val activity = context as? Activity
+
+    LaunchedEffect(isVideoFullScreen) {
+        activity?.requestedOrientation = if (isVideoFullScreen) {
+            ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+        } else {
+            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+        }
+    }
+
     Column(modifier = modifier.fillMaxSize()) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Button(
-                onClick = {
-                    multiPickerLauncher.launch(
-                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
-                    )
-                }
-            ) {
-                Text("소유자 추가 (여러 명 선택)")
-            }
-            if (uiState.addedOwnerUris.isNotEmpty()) {
-                OutlinedButton(onClick = { viewModel.clearOwners() }) {
-                    Text("전체 삭제")
-                }
-            }
-        }
-
-        if (uiState.addedOwnerUris.isNotEmpty()) {
-            Text(
-                text = "등록된 소유자 (${uiState.addedOwnerUris.size}명)",
-                style = MaterialTheme.typography.titleSmall,
-                modifier = Modifier.fillMaxWidth()
-            )
-            LazyRow(
+        if (!isVideoFullScreen) {
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                items(uiState.addedOwnerUris) { uri ->
-                    OwnerThumbnail(uri = uri)
+                Button(
+                    onClick = {
+                        multiPickerLauncher.launch(
+                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                        )
+                    }
+                ) {
+                    Text("소유자 추가 (여러 명 선택)")
+                }
+                if (uiState.addedOwnerUris.isNotEmpty()) {
+                    OutlinedButton(onClick = { viewModel.clearOwners() }) {
+                        Text("전체 삭제")
+                    }
                 }
             }
-        }
 
-        VideoUploadScreen(
-            onVideoSelected = { uri -> viewModel.onVideoSelected(uri) }
-        )
+            if (uiState.addedOwnerUris.isNotEmpty()) {
+                Text(
+                    text = "등록된 소유자 (${uiState.addedOwnerUris.size}명)",
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(uiState.addedOwnerUris) { uri ->
+                        OwnerThumbnail(uri = uri)
+                    }
+                }
+            }
+
+            VideoUploadScreen(
+                onVideoSelected = { uri -> viewModel.onVideoSelected(uri) }
+            )
+        }
 
         uiState.selectedVideoUri?.let { uri ->
-            VideoSaveScreen(
-                videoUri = uri,
-                modifier = Modifier.fillMaxWidth()
-            )
+            if (!isVideoFullScreen) {
+                VideoSaveScreen(
+                    videoUri = uri,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             VideoPlayerScreen(
                 videoUri = uri,
                 onClearSelection = { viewModel.onClearSelection() },
-                modifier = Modifier.fillMaxWidth()
+                modifier = if (isVideoFullScreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
+                isFullScreen = isVideoFullScreen,
+                onEnterFullScreen = { isVideoFullScreen = true },
+                onExitFullScreen = { isVideoFullScreen = false }
             )
         }
     }

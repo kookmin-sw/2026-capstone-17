@@ -1,6 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.data.gl
 
 import android.graphics.SurfaceTexture
+import android.util.Log
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.os.Handler
@@ -39,6 +40,20 @@ class VideoRenderer(
 
     @Volatile
     private var frameAvailable = false
+
+    @Volatile
+    private var videoWidth = 0
+
+    @Volatile
+    private var videoHeight = 0
+
+    private var drawCount = 0
+
+    /** 영상 해상도 설정 시 FBO에 fit(letter-box)로 렌더하여 종횡비 왜곡 제거. 0이면 보정 없음. */
+    fun setVideoSize(width: Int, height: Int) {
+        videoWidth = width
+        videoHeight = height
+    }
 
     // ExoPlayer.setVideoSurface()는 메인 스레드에서만 호출 가능
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -117,12 +132,25 @@ class VideoRenderer(
             // 1. SurfaceTexture 업데이트
             surfaceTexture?.updateTexImage()
             surfaceTexture?.getTransformMatrix(texMatrix)
+            if (drawCount++ % 60 == 0) {
+                Log.i("VideoRenderer", "texMatrix (4x4 col-major): " +
+                    "[${texMatrix[0]}, ${texMatrix[1]}, ${texMatrix[2]}, ${texMatrix[3]}], " +
+                    "[${texMatrix[4]}, ${texMatrix[5]}, ${texMatrix[6]}, ${texMatrix[7]}], " +
+                    "[${texMatrix[8]}, ${texMatrix[9]}, ${texMatrix[10]}, ${texMatrix[11]}], " +
+                    "[${texMatrix[12]}, ${texMatrix[13]}, ${texMatrix[14]}, ${texMatrix[15]}]")
+            }
 
-            // 2. OES → FBO 렌더링
+            // 2. OES → FBO 렌더링 (종횡비 보정: 영상이 view에 fit되도록 content scale 적용 → letter-box, 원본 비율 유지)
+            val (scaleX, scaleY) = if (videoWidth > 0 && videoHeight > 0) {
+                val scale = minOf(viewWidth / videoWidth.toFloat(), viewHeight / videoHeight.toFloat())
+                val contentW = videoWidth * scale
+                val contentH = videoHeight * scale
+                Pair(contentW / viewWidth, contentH / viewHeight)
+            } else Pair(1f, 1f)
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-            program.drawOES(oesTextureId, texMatrix)
+            program.drawOES(oesTextureId, texMatrix, scaleX, scaleY)
 
             // 3. glReadPixels 동기 읽기 (재사용 버퍼, GC 없음)
             readBuffer?.let { buf ->

@@ -1,6 +1,9 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
+import com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtractor
+import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerOtherClassifier
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import io.mockk.every
@@ -25,6 +28,9 @@ class VideoPlayerViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
     private val frameProcessor: FrameProcessor = mockk(relaxed = true)
+    private val videoFrameDecoder: VideoFrameDecoder = mockk(relaxed = true)
+    private val embeddingExtractor: ArcFaceEmbeddingExtractor = mockk(relaxed = true)
+    private val ownerClassifier: OwnerOtherClassifier = mockk(relaxed = true)
     private lateinit var viewModel: VideoPlayerViewModel
 
     private fun createTestBuffer(width: Int = 640, height: Int = 480): ByteBuffer {
@@ -36,7 +42,14 @@ class VideoPlayerViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        viewModel = VideoPlayerViewModel(frameProcessor)
+        every { videoFrameDecoder.getVideoDimensions(any()) } returns null
+        viewModel = VideoPlayerViewModel(
+            frameProcessor,
+            videoFrameDecoder,
+            embeddingExtractor,
+            ownerClassifier,
+            testDispatcher
+        )
     }
 
     @After
@@ -67,27 +80,31 @@ class VideoPlayerViewModelTest {
     @Test
     fun `loadVideo 호출 시 videoUri가 업데이트됨`() = runTest {
         viewModel.loadVideo("content://media/video/123")
+        advanceUntilIdle()
         assertEquals("content://media/video/123", viewModel.uiState.value.videoUri)
     }
 
     @Test
     fun `loadVideo 호출 시 isPlaying이 false로 초기화됨`() = runTest {
         viewModel.loadVideo("content://media/video/123")
+        advanceUntilIdle()
         viewModel.togglePlayback()
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isPlaying)
 
         viewModel.loadVideo("content://media/video/456")
+        advanceUntilIdle()
         assertFalse(viewModel.uiState.value.isPlaying)
     }
 
     @Test
     fun `loadVideo 호출 시 진행 중인 검출이 중지됨`() = runTest {
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         advanceUntilIdle()
         viewModel.loadVideo("content://video/2")
-
+        advanceUntilIdle()
         assertFalse(viewModel.uiState.value.isDetecting)
     }
 
@@ -96,6 +113,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `togglePlayback 호출 시 isPlaying이 토글됨`() = runTest {
         viewModel.loadVideo("content://media/video/123")
+        advanceUntilIdle()
         assertFalse(viewModel.uiState.value.isPlaying)
 
         viewModel.togglePlayback()
@@ -106,6 +124,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `togglePlayback 두 번 호출 시 isPlaying이 false로 돌아감`() = runTest {
         viewModel.loadVideo("content://media/video/123")
+        advanceUntilIdle()
 
         viewModel.togglePlayback()
         advanceUntilIdle()
@@ -117,6 +136,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `stopPlayback 호출 시 isPlaying이 false로 설정됨`() = runTest {
         viewModel.loadVideo("content://media/video/123")
+        advanceUntilIdle()
         viewModel.togglePlayback()
         advanceUntilIdle()
         assertTrue(viewModel.uiState.value.isPlaying)
@@ -128,6 +148,7 @@ class VideoPlayerViewModelTest {
     @Test
     fun `stopPlayback 호출 시 검출도 중지됨`() = runTest {
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         advanceUntilIdle()
         viewModel.stopPlayback()
@@ -141,17 +162,17 @@ class VideoPlayerViewModelTest {
     @Test
     fun `startDetection 호출 시 isDetecting이 true로 변경됨`() = runTest {
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
-
         assertTrue(viewModel.uiState.value.isDetecting)
     }
 
     @Test
     fun `stopDetection 호출 시 isDetecting이 false가 되고 faces가 비워짐`() = runTest {
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.stopDetection()
-
         assertFalse(viewModel.uiState.value.isDetecting)
         assertTrue(viewModel.uiState.value.detectedFaces.isEmpty())
     }
@@ -159,46 +180,45 @@ class VideoPlayerViewModelTest {
     // --- processFrameSync 테스트 ---
 
     @Test
-    fun `processFrameSync 호출 시 동기적으로 detectedFaces가 업데이트됨`() {
+    fun `processFrameSync 호출 시 동기적으로 detectedFaces가 업데이트됨`() = runTest {
         val buffer = createTestBuffer()
         val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
         val frame = ProcessedFrame(faces, 640, 480, 1000L)
         every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 640, 480)
-
         assertEquals(1, viewModel.uiState.value.detectedFaces.size)
         assertEquals(0.9f, viewModel.uiState.value.detectedFaces[0].confidence, 0.001f)
     }
 
     @Test
-    fun `processFrameSync 호출 시 frameWidth와 frameHeight가 업데이트됨`() {
+    fun `processFrameSync 호출 시 frameWidth와 frameHeight가 업데이트됨`() = runTest {
         val buffer = createTestBuffer(1280, 720)
         val frame = ProcessedFrame(emptyList(), 1280, 720, 1000L)
         every { frameProcessor.process(buffer, 1280, 720, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 1280, 720)
-
         assertEquals(1280, viewModel.uiState.value.frameWidth)
         assertEquals(720, viewModel.uiState.value.frameHeight)
     }
 
     @Test
-    fun `isDetecting이 false이면 processFrameSync가 FrameProcessor를 호출하지 않음`() {
+    fun `isDetecting이 false이면 processFrameSync가 FrameProcessor를 호출하지 않음`() = runTest {
         val buffer = createTestBuffer()
-
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.processFrameSync(buffer, 640, 480)
-
         verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any(), any()) }
     }
 
     @Test
-    fun `processFrameSync에서 얼굴 미검출 시 detectedFaces가 비워짐`() {
+    fun `processFrameSync에서 얼굴 미검출 시 detectedFaces가 비워짐`() = runTest {
         val buffer = createTestBuffer()
         val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
         val frameWithFaces = ProcessedFrame(faces, 640, 480, 0L)
@@ -206,17 +226,16 @@ class VideoPlayerViewModelTest {
         every { frameProcessor.process(buffer, 640, 480, any(), any()) } returnsMany listOf(frameWithFaces, frameEmpty)
 
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
-
         viewModel.processFrameSync(buffer, 640, 480)
         assertEquals(1, viewModel.uiState.value.detectedFaces.size)
-
         viewModel.processFrameSync(buffer, 640, 480)
         assertTrue(viewModel.uiState.value.detectedFaces.isEmpty())
     }
 
     @Test
-    fun `processFrameSync에서 여러 얼굴이 검출되면 모두 반영됨`() {
+    fun `processFrameSync에서 여러 얼굴이 검출되면 모두 반영됨`() = runTest {
         val buffer = createTestBuffer()
         val faces = listOf(
             DetectedFace(10, 20, 100, 100, 0.95f),
@@ -227,9 +246,9 @@ class VideoPlayerViewModelTest {
         every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 640, 480)
-
         assertEquals(3, viewModel.uiState.value.detectedFaces.size)
         assertEquals(0.95f, viewModel.uiState.value.detectedFaces[0].confidence, 0.001f)
         assertEquals(0.85f, viewModel.uiState.value.detectedFaces[1].confidence, 0.001f)
@@ -237,29 +256,28 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `stopDetection 후 processFrameSync가 FrameProcessor를 호출하지 않음`() {
+    fun `stopDetection 후 processFrameSync가 FrameProcessor를 호출하지 않음`() = runTest {
         val buffer = createTestBuffer()
-
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.stopDetection()
         viewModel.processFrameSync(buffer, 640, 480)
-
         verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any(), any()) }
     }
 
     @Test
-    fun `processFrameSync 연속 호출 시 매번 FrameProcessor가 호출됨`() {
+    fun `processFrameSync 연속 호출 시 매번 FrameProcessor가 호출됨`() = runTest {
         val buffer = createTestBuffer()
         val frame = ProcessedFrame(emptyList(), 640, 480, 0L)
         every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
+        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 640, 480)
         viewModel.processFrameSync(buffer, 640, 480)
         viewModel.processFrameSync(buffer, 640, 480)
-
         verify(exactly = 3) { frameProcessor.process(buffer, 640, 480, any(), any()) }
     }
 }

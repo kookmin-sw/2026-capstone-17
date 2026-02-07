@@ -13,16 +13,19 @@ class OESTextureProgram {
 
         // glReadPixels는 GL 좌표계(좌하단 원점)로 읽으므로 FBO 이미지가 상하 반전됨.
         // uFlipY=1.0이면 Y 반전하여 FBO에 저장 → glReadPixels 결과가 정방향.
+        // uContentScaleX/Y: 영상 종횡비 보정. fit 시 content 영역만 그리면 letter-box, FBO에 원본 비율 유지.
         private const val VERTEX_SHADER = """
             #version 300 es
             layout(location = 0) in vec4 aPosition;
             layout(location = 1) in vec2 aTexCoord;
             uniform mat4 uTexMatrix;
             uniform float uFlipY;
+            uniform float uContentScaleX;
+            uniform float uContentScaleY;
             out vec2 vTexCoord;
             void main() {
                 float y = mix(aPosition.y, -aPosition.y, uFlipY);
-                gl_Position = vec4(aPosition.x, y, 0.0, 1.0);
+                gl_Position = vec4(aPosition.x * uContentScaleX, y * uContentScaleY, 0.0, 1.0);
                 vTexCoord = (uTexMatrix * vec4(aTexCoord, 0.0, 1.0)).xy;
             }
         """
@@ -69,45 +72,57 @@ class OESTextureProgram {
     private var oesTexMatrixLoc = 0
     private var oesTextureLoc = 0
     private var oesFlipYLoc = 0
+    private var oesContentScaleXLoc = 0
+    private var oesContentScaleYLoc = 0
     private var twoDTexMatrixLoc = 0
     private var twoDTextureLoc = 0
     private var twoDFlipYLoc = 0
+    private var twoDContentScaleXLoc = 0
+    private var twoDContentScaleYLoc = 0
 
     fun init() {
         oesProgramId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER_OES)
         oesTexMatrixLoc = GLES30.glGetUniformLocation(oesProgramId, "uTexMatrix")
         oesTextureLoc = GLES30.glGetUniformLocation(oesProgramId, "uTexture")
         oesFlipYLoc = GLES30.glGetUniformLocation(oesProgramId, "uFlipY")
+        oesContentScaleXLoc = GLES30.glGetUniformLocation(oesProgramId, "uContentScaleX")
+        oesContentScaleYLoc = GLES30.glGetUniformLocation(oesProgramId, "uContentScaleY")
 
         twoDProgramId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER_2D)
         twoDTexMatrixLoc = GLES30.glGetUniformLocation(twoDProgramId, "uTexMatrix")
         twoDTextureLoc = GLES30.glGetUniformLocation(twoDProgramId, "uTexture")
         twoDFlipYLoc = GLES30.glGetUniformLocation(twoDProgramId, "uFlipY")
+        twoDContentScaleXLoc = GLES30.glGetUniformLocation(twoDProgramId, "uContentScaleX")
+        twoDContentScaleYLoc = GLES30.glGetUniformLocation(twoDProgramId, "uContentScaleY")
 
         setupVAO()
     }
 
-    // OES 텍스처를 FBO에 그리기 (Y 반전: glReadPixels 정방향 보장)
-    fun drawOES(oesTextureId: Int, texMatrix: FloatArray) {
+    // OES 텍스처를 FBO에 그리기 (Y 반전 + 종횡비 보정). contentScaleX/Y=1이면 보정 없음.
+    fun drawOES(oesTextureId: Int, texMatrix: FloatArray, contentScaleX: Float = 1f, contentScaleY: Float = 1f) {
         GLES30.glUseProgram(oesProgramId)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES11Ext.GL_TEXTURE_EXTERNAL_OES, oesTextureId)
         GLES30.glUniform1i(oesTextureLoc, 0)
         GLES30.glUniformMatrix4fv(oesTexMatrixLoc, 1, false, texMatrix, 0)
         GLES30.glUniform1f(oesFlipYLoc, 1.0f)
+        GLES30.glUniform1f(oesContentScaleXLoc, contentScaleX)
+        GLES30.glUniform1f(oesContentScaleYLoc, contentScaleY)
 
         GLES30.glBindVertexArray(vaoId)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         GLES30.glBindVertexArray(0)
     }
 
-    // 2D 텍스처(FBO)를 화면에 그리기 (Y 재반전: FBO가 뒤집혀 있으므로 다시 뒤집어서 정상 출력)
+    // 2D 텍스처(FBO)를 화면에 그리기 (Y 재반전, 풀스크린이므로 content scale=1)
     fun draw2D(textureId: Int) {
         GLES30.glUseProgram(twoDProgramId)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
         GLES30.glUniform1i(twoDTextureLoc, 0)
         GLES30.glUniform1f(twoDFlipYLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
 
         val identity = FloatArray(16).apply {
             this[0] = 1f; this[5] = 1f; this[10] = 1f; this[15] = 1f

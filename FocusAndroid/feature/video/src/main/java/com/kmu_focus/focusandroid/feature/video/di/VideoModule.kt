@@ -1,13 +1,18 @@
 package com.kmu_focus.focusandroid.feature.video.di
 
+import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
+import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoderImpl
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
 import dagger.Binds
 import dagger.Module
+import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Singleton
 
 @Module
@@ -21,4 +26,16 @@ abstract class VideoModule {
     @Binds
     @Singleton
     abstract fun bindVideoLocalDataSource(impl: VideoLocalDataSourceImpl): VideoLocalDataSource
+
+    @Binds
+    @Singleton
+    abstract fun bindVideoFrameDecoder(impl: VideoFrameDecoderImpl): VideoFrameDecoder
+
+    companion object {
+        @Provides
+        @Singleton
+        @IoDispatcher
+        @JvmStatic
+        fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+    }
 }

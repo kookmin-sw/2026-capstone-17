@@ -24,6 +24,11 @@ class VideoGLSurfaceView(
         renderer.setGLSurfaceView(this)
     }
 
+    /** 영상 해상도 설정 시 FBO에 fit 렌더하여 종횡비 왜곡 제거. 메인 스레드에서 호출. */
+    fun setVideoSize(width: Int, height: Int) {
+        renderer.setVideoSize(width, height)
+    }
+
     fun release() {
         queueEvent { renderer.release() }
     }

@@ -14,7 +14,7 @@ class DetectionConfigTest {
         assertEquals(0.6f, config.scoreThreshold, 0.001f)
         assertEquals(0.3f, config.nmsThreshold, 0.001f)
         assertEquals(5000, config.topK)
-        assertEquals(0.6f, config.confidenceThreshold, 0.001f)
+        assertEquals(0.5f, config.confidenceThreshold, 0.001f)
     }
 
     @Test

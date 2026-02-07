@@ -17,6 +17,7 @@ fun FaceDetectionOverlay(
     frameWidth: Int,
     frameHeight: Int,
     faceLabels: List<Boolean?> = emptyList(),
+    trackingIds: List<Int> = emptyList(),
     modifier: Modifier = Modifier
 ) {
     Canvas(modifier = modifier) {
@@ -31,11 +32,13 @@ fun FaceDetectionOverlay(
             val w = face.width * scaleX
             val h = face.height * scaleY
 
-            val (boxColor, label) = when (faceLabels.getOrNull(index)) {
+            val trackId = trackingIds.getOrNull(index) ?: index
+            val (boxColor, roleLabel) = when (faceLabels.getOrNull(index)) {
                 true -> Color.Green to "OWNER"
                 false -> Color.Red to "OTHER"
                 null -> Color(0xFFFFC107) to "대기"
             }
+            val label = "ID:$trackId $roleLabel"
 
             drawRect(
                 color = boxColor,
