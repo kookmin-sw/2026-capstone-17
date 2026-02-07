@@ -2,13 +2,13 @@ package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import com.kmu_focus.focusandroid.feature.detection.domain.config.DetectionConfig
-import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
-import com.kmu_focus.focusandroid.feature.detection.domain.detector.FacialLandmarkDetector
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.Face3DMMCoeffs
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.Face3DMMResult
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.FaceRect
+import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMCoeffs
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.Face3DMMResult
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.FaceRect
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -22,9 +22,9 @@ import java.nio.ByteOrder
 class FrameProcessorTest {
 
     private val faceDetector: FaceDetector = mockk()
-    private val landmarkDetector: FacialLandmarkDetector = mockk(relaxed = true)
+    private val facial3DMMExtractor: Facial3DMMExtractor = mockk(relaxed = true)
     private val config = DetectionConfig()
-    private val frameProcessor = FrameProcessor(faceDetector, config, landmarkDetector)
+    private val frameProcessor = FrameProcessor(faceDetector, config, facial3DMMExtractor)
 
     @Test
     fun `process 호출 시 FaceDetector detectFaces를 호출함`() {
@@ -127,7 +127,7 @@ class FrameProcessorTest {
         )
         every { faceDetector.detectFaces(bitmap) } returns faces
         every {
-            landmarkDetector.detectLandmarks(bitmap, any())
+            facial3DMMExtractor.extract3DMM(bitmap, any())
         } returns Face3DMMResult(
             vertices = emptyList(),
             faceRect = FaceRect(10, 20, 110, 120),
@@ -161,7 +161,7 @@ class FrameProcessorTest {
     @Test
     fun `커스텀 config의 confidenceThreshold가 적용됨`() {
         val customConfig = DetectionConfig(confidenceThreshold = 0.9f)
-        val customProcessor = FrameProcessor(faceDetector, customConfig, landmarkDetector)
+        val customProcessor = FrameProcessor(faceDetector, customConfig, facial3DMMExtractor)
         val bitmap = mockk<Bitmap> {
             every { width } returns 640
             every { height } returns 480

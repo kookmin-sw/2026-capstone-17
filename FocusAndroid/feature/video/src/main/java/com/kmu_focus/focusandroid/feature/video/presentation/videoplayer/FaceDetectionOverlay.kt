@@ -9,7 +9,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
 
 @Composable
 fun FaceDetectionOverlay(

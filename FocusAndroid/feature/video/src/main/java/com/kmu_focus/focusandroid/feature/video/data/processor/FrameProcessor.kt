@@ -2,10 +2,10 @@ package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import com.kmu_focus.focusandroid.feature.detection.domain.config.DetectionConfig
-import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
-import com.kmu_focus.focusandroid.feature.detection.domain.detector.FacialLandmarkDetector
-import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.feature.ai.domain.config.DetectionConfig
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.FaceDetector
+import com.kmu_focus.focusandroid.feature.ai.domain.detector.Facial3DMMExtractor
+import com.kmu_focus.focusandroid.feature.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.domain.entity.FaceExport
 import com.kmu_focus.focusandroid.feature.video.domain.entity.FrameExport
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
@@ -15,7 +15,7 @@ import javax.inject.Inject
 class FrameProcessor @Inject constructor(
     private val faceDetector: FaceDetector,
     private val config: DetectionConfig,
-    private val landmarkDetector: FacialLandmarkDetector
+    private val facial3DMMExtractor: Facial3DMMExtractor
 ) {
     fun process(bitmap: Bitmap, timestampMs: Long, frameIndex: Int? = null): ProcessedFrame {
         val faces = faceDetector.detectFaces(bitmap)
@@ -24,7 +24,7 @@ class FrameProcessor @Inject constructor(
         val frameExport = if (frameIndex != null && faces.isNotEmpty()) {
             val raw3dmmList = faces.map { face ->
                 val rect = Rect(face.x, face.y, face.x + face.width, face.y + face.height)
-                landmarkDetector.detectLandmarks(bitmap, rect)?.coeffs
+                facial3DMMExtractor.extract3DMM(bitmap, rect)?.coeffs
             }
             val facesExport = faces.mapIndexed { idx, face ->
                 val raw3dmm = raw3dmmList.getOrNull(idx)

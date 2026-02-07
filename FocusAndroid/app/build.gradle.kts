@@ -56,7 +56,7 @@ android {
 dependencies {
     // Feature Modules
     implementation(project(":feature:video"))
-    implementation(project(":feature:detection"))
+    implementation(project(":feature:ai"))
 
     // Core & UI
     implementation(libs.androidx.core.ktx)
