@@ -6,5 +6,6 @@ data class ProcessedFrame(
     val faces: List<DetectedFace>,
     val frameWidth: Int,
     val frameHeight: Int,
-    val timestampMs: Long
+    val timestampMs: Long,
+    val frameExport: FrameExport? = null
 )

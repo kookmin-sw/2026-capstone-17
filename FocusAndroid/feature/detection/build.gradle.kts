@@ -31,6 +31,8 @@ android {
 dependencies {
     // AI & Computer Vision
     implementation(libs.opencv.android)
+    implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.gpu)
 
     // DI (Hilt)
     implementation(libs.hilt.android)

@@ -1,9 +1,14 @@
 package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
+import android.graphics.Rect
 import com.kmu_focus.focusandroid.feature.detection.domain.config.DetectionConfig
 import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
+import com.kmu_focus.focusandroid.feature.detection.domain.detector.FacialLandmarkDetector
 import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
+import com.kmu_focus.focusandroid.feature.detection.domain.entity.Face3DMMCoeffs
+import com.kmu_focus.focusandroid.feature.detection.domain.entity.Face3DMMResult
+import com.kmu_focus.focusandroid.feature.detection.domain.entity.FaceRect
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
@@ -17,8 +22,9 @@ import java.nio.ByteOrder
 class FrameProcessorTest {
 
     private val faceDetector: FaceDetector = mockk()
+    private val landmarkDetector: FacialLandmarkDetector = mockk(relaxed = true)
     private val config = DetectionConfig()
-    private val frameProcessor = FrameProcessor(faceDetector, config)
+    private val frameProcessor = FrameProcessor(faceDetector, config, landmarkDetector)
 
     @Test
     fun `process 호출 시 FaceDetector detectFaces를 호출함`() {
@@ -110,9 +116,52 @@ class FrameProcessorTest {
     }
 
     @Test
+    fun `frameIndex가 있고 얼굴이 있으면 frameExport에 3dmm 포함`() {
+        val bitmap = mockk<Bitmap> {
+            every { width } returns 640
+            every { height } returns 480
+        }
+        val faces = listOf(
+            DetectedFace(10, 20, 100, 100, 0.9f),
+            DetectedFace(200, 100, 80, 80, 0.85f)
+        )
+        every { faceDetector.detectFaces(bitmap) } returns faces
+        every {
+            landmarkDetector.detectLandmarks(bitmap, any())
+        } returns Face3DMMResult(
+            vertices = emptyList(),
+            faceRect = FaceRect(10, 20, 110, 120),
+            coeffs = Face3DMMCoeffs(floatArrayOf(1f, 2f), floatArrayOf(3f), floatArrayOf(4f))
+        )
+
+        val result = frameProcessor.process(bitmap, 2000L, frameIndex = 5)
+
+        assertNotNull(result.frameExport)
+        assertEquals(5, result.frameExport!!.frameNumber)
+        assertEquals(2.0, result.frameExport!!.timestamp, 0.001)
+        assertEquals(2, result.frameExport!!.faces.size)
+        assertEquals(2, result.frameExport!!.faces[0].idCoeffs!!.size)
+        assertEquals(1, result.frameExport!!.faces[0].expCoeffs!!.size)
+        assertEquals(1, result.frameExport!!.faces[0].pose!!.size)
+    }
+
+    @Test
+    fun `frameIndex가 null이면 frameExport는 null`() {
+        val bitmap = mockk<Bitmap> {
+            every { width } returns 640
+            every { height } returns 480
+        }
+        every { faceDetector.detectFaces(bitmap) } returns listOf(DetectedFace(0, 0, 50, 50, 0.9f))
+
+        val result = frameProcessor.process(bitmap, 1000L, frameIndex = null)
+
+        assertNull(result.frameExport)
+    }
+
+    @Test
     fun `커스텀 config의 confidenceThreshold가 적용됨`() {
         val customConfig = DetectionConfig(confidenceThreshold = 0.9f)
-        val customProcessor = FrameProcessor(faceDetector, customConfig)
+        val customProcessor = FrameProcessor(faceDetector, customConfig, landmarkDetector)
         val bitmap = mockk<Bitmap> {
             every { width } returns 640
             every { height } returns 480
