@@ -1,6 +1,9 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
+import android.graphics.SurfaceTexture
 import android.net.Uri
+import android.view.Surface
+import android.view.TextureView
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -30,13 +33,29 @@ fun VideoPlayerScreen(
         modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        ExoPlayerView(
-            uriString = videoUri,
-            isPlaying = uiState.isPlaying,
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .aspectRatio(16f / 9f)
-        )
+        ) {
+            ExoPlayerView(
+                uriString = videoUri,
+                isPlaying = uiState.isPlaying,
+                onFrameCaptured = { bitmap ->
+                    viewModel.processFrame(bitmap)
+                },
+                modifier = Modifier.matchParentSize()
+            )
+
+            if (uiState.isDetecting && uiState.detectedFaces.isNotEmpty()) {
+                FaceDetectionOverlay(
+                    faces = uiState.detectedFaces,
+                    frameWidth = uiState.frameWidth,
+                    frameHeight = uiState.frameHeight,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -66,11 +85,11 @@ fun VideoPlayerScreen(
 private fun ExoPlayerView(
     uriString: String,
     isPlaying: Boolean,
+    onFrameCaptured: (android.graphics.Bitmap) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
 
-    // ExoPlayer는 무거운 네이티브 리소스를 사용하므로 remember로 인스턴스 재생성 방지
     val exoPlayer = remember {
         ExoPlayer.Builder(context).build()
     }
@@ -90,9 +109,34 @@ private fun ExoPlayerView(
 
     AndroidView(
         factory = { ctx ->
-            androidx.media3.ui.PlayerView(ctx).apply {
-                player = exoPlayer
-                useController = false
+            TextureView(ctx).apply {
+                surfaceTextureListener = object : TextureView.SurfaceTextureListener {
+                    override fun onSurfaceTextureAvailable(
+                        surfaceTexture: SurfaceTexture,
+                        width: Int,
+                        height: Int
+                    ) {
+                        // ExoPlayer에 Surface 연결
+                        exoPlayer.setVideoSurface(Surface(surfaceTexture))
+                    }
+
+                    override fun onSurfaceTextureSizeChanged(
+                        surfaceTexture: SurfaceTexture,
+                        width: Int,
+                        height: Int
+                    ) {}
+
+                    override fun onSurfaceTextureDestroyed(surfaceTexture: SurfaceTexture): Boolean {
+                        exoPlayer.setVideoSurface(null)
+                        return true
+                    }
+
+                    override fun onSurfaceTextureUpdated(surfaceTexture: SurfaceTexture) {
+                        // ExoPlayer가 새 프레임을 렌더링할 때마다 호출
+                        val bitmap = this@apply.bitmap ?: return
+                        onFrameCaptured(bitmap)
+                    }
+                }
             }
         },
         modifier = modifier

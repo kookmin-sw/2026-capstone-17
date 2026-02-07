@@ -1,6 +1,7 @@
 package com.kmu_focus.focusandroid.feature.detection.data.detector
 
 import android.graphics.Bitmap
+import android.util.Log
 import com.kmu_focus.focusandroid.feature.detection.domain.detector.FaceDetector
 import com.kmu_focus.focusandroid.feature.detection.domain.entity.DetectedFace
 import org.opencv.android.Utils
@@ -18,6 +19,7 @@ class YuNetOpenCVDetector @Inject constructor(
 ) : FaceDetector {
 
     companion object {
+        private const val TAG = "YuNetDetector"
         private const val MODEL_NAME = "yunet_face.onnx"
         private const val DEFAULT_INPUT_SIZE = 320
         private const val SCORE_THRESHOLD = 0.5f
@@ -86,11 +88,22 @@ class YuNetOpenCVDetector @Inject constructor(
                     FloatArray(15).also { data -> faces.row(i).get(0, 0, data) }
                 }
                 val scaleBack = 1f / scale
-                parseFaceOutput(rows, scaleBack, scaleBack)
+                parseFaceOutput(rows, scaleBack, scaleBack).map { face ->
+                    // 좌표 클리핑 — 원본 프레임 범위 내로 제한 (테스트 프로젝트와 동일)
+                    val cx = face.x.coerceIn(0, frame.width - 1)
+                    val cy = face.y.coerceIn(0, frame.height - 1)
+                    face.copy(
+                        x = cx,
+                        y = cy,
+                        width = face.width.coerceIn(1, frame.width - cx),
+                        height = face.height.coerceIn(1, frame.height - cy)
+                    )
+                }
             } else {
                 emptyList()
             }
         } catch (e: Exception) {
+            Log.e(TAG, "얼굴 검출 실패", e)
             emptyList()
         }
     }
