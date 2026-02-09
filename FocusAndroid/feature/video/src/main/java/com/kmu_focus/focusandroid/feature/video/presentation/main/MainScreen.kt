@@ -41,10 +41,9 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kmu_focus.focusandroid.feature.video.presentation.videoplayer.VideoPlayerScreen
 import com.kmu_focus.focusandroid.feature.video.presentation.videosave.VideoSaveScreen
 import com.kmu_focus.focusandroid.feature.video.presentation.videoupload.VideoUploadScreen
+import com.kmu_focus.focusandroid.feature.video.domain.config.VideoConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-
-private const val MAX_OWNER_PICK = 20
 
 @Composable
 fun MainScreen(
@@ -55,7 +54,7 @@ fun MainScreen(
     val context = LocalContext.current
 
     val multiPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickMultipleVisualMedia(MAX_OWNER_PICK)
+        contract = ActivityResultContracts.PickMultipleVisualMedia(VideoConfig.MAX_OWNER_PICK)
     ) { uris: List<Uri> ->
         if (uris.isEmpty()) return@rememberLauncherForActivityResult
         val list = uris.mapNotNull { uri ->
