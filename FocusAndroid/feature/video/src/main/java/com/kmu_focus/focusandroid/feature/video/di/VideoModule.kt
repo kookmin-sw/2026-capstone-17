@@ -4,7 +4,9 @@ import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoderImpl
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceImpl
+import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
 import dagger.Binds
 import dagger.Module
@@ -22,6 +24,10 @@ abstract class VideoModule {
     @Binds
     @Singleton
     abstract fun bindVideoRepository(impl: VideoRepositoryImpl): VideoRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindImageRepository(impl: ImageRepositoryImpl): ImageRepository
 
     @Binds
     @Singleton

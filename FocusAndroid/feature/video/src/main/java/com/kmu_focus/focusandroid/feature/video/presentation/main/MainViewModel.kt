@@ -1,19 +1,16 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.main
 
-import android.content.Context
-import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromBitmapUseCase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.ClearOwnersUseCase
 import javax.inject.Inject
 
@@ -33,8 +30,7 @@ sealed class AddOwnerResult {
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    @ApplicationContext private val context: Context,
-    private val addOwnerFromBitmapUseCase: AddOwnerFromBitmapUseCase,
+    private val addOwnerFromUriUseCase: AddOwnerFromUriUseCase,
     private val clearOwnersUseCase: ClearOwnersUseCase
 ) : ViewModel() {
 
@@ -49,49 +45,37 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedVideoUri = null, addOwnerResult = null)
     }
 
-    /** 단일 추가 (기존 호환). */
-    fun addOwnerFromBitmap(bitmap: android.graphics.Bitmap) {
-        val result = if (addOwnerFromBitmapUseCase(bitmap)) AddOwnerResult.Success else AddOwnerResult.NoFace
-        _uiState.value = _uiState.value.copy(addOwnerResult = result)
-    }
-
-    /** URI 목록을 IO에서 디코딩 후 다중 추가. Activity Result 콜백에서 호출. */
     fun addOwnersFromUris(uris: List<Uri>) {
         if (uris.isEmpty()) {
             setAddOwnerResult(AddOwnerResult.Fail)
             return
         }
         viewModelScope.launch {
-            val list = withContext(Dispatchers.IO) {
-                uris.mapNotNull { uri ->
-                    context.contentResolver.openInputStream(uri)?.use { stream ->
-                        BitmapFactory.decodeStream(stream)?.let { it to uri.toString() }
-                    }
+            val results = withContext(Dispatchers.IO) {
+                uris.map { uri ->
+                    val success = addOwnerFromUriUseCase(uri.toString())
+                    success to uri.toString()
                 }
             }
-            if (list.isNotEmpty()) addOwnersFromBitmaps(list)
-            else setAddOwnerResult(AddOwnerResult.Fail)
+            var successCount = 0
+            var failCount = 0
+            val newUris = _uiState.value.addedOwnerUris.toMutableList()
+            for ((success, uriStr) in results) {
+                if (success) {
+                    successCount++
+                    newUris.add(uriStr)
+                } else {
+                    failCount++
+                }
+            }
+            _uiState.value = _uiState.value.copy(
+                addOwnerResult = when {
+                    successCount > 0 || failCount > 0 -> AddOwnerResult.Multi(successCount, failCount)
+                    else -> null
+                },
+                addedOwnerUris = newUris
+            )
         }
-    }
-
-    /** 다중 추가. uriForDisplay는 성공 시 목록에 표시할 URI 문자열. */
-    fun addOwnersFromBitmaps(bitmapsWithUris: List<Pair<android.graphics.Bitmap, String?>>) {
-        var successCount = 0
-        var failCount = 0
-        val newUris = _uiState.value.addedOwnerUris.toMutableList()
-        for ((bitmap, uri) in bitmapsWithUris) {
-            if (addOwnerFromBitmapUseCase(bitmap)) {
-                successCount++
-                if (uri != null) newUris.add(uri)
-            } else failCount++
-        }
-        _uiState.value = _uiState.value.copy(
-            addOwnerResult = when {
-                successCount > 0 || failCount > 0 -> AddOwnerResult.Multi(successCount, failCount)
-                else -> null
-            },
-            addedOwnerUris = newUris
-        )
     }
 
     fun clearOwners() {
