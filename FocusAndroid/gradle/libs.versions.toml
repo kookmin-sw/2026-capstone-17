@@ -29,6 +29,7 @@ coroutines = "1.9.0"
 
 # --- Media (From Test Project) ---
 media3 = "1.4.1"
+coil = "2.5.0"
 
 [libraries]
 # --- Android Core ---
@@ -63,6 +64,7 @@ hilt-navigation-compose = { group = "androidx.hilt", name = "hilt-navigation-com
 
 # --- Media ---
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
+coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
 

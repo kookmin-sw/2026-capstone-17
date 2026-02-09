@@ -1,5 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.main
 
+import android.content.Context
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromBitmapUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.ClearOwnersUseCase
 import io.mockk.mockk
@@ -9,10 +10,11 @@ import org.junit.Test
 
 class MainViewModelTest {
 
+    private val context = mockk<Context>(relaxed = true)
     private val addOwnerFromBitmapUseCase = mockk<AddOwnerFromBitmapUseCase>(relaxed = true)
     private val clearOwnersUseCase = mockk<ClearOwnersUseCase>(relaxed = true)
 
-    private fun createViewModel() = MainViewModel(addOwnerFromBitmapUseCase, clearOwnersUseCase)
+    private fun createViewModel() = MainViewModel(context, addOwnerFromBitmapUseCase, clearOwnersUseCase)
 
     @Test
     fun `초기 상태에서 selectedVideoUri가 null임`() = runTest {

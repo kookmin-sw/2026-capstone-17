@@ -2,14 +2,12 @@ package com.kmu_focus.focusandroid.feature.video.presentation.main
 
 import android.app.Activity
 import android.content.pm.ActivityInfo
-import android.graphics.BitmapFactory
 import android.net.Uri
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -31,19 +29,16 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.Image
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kmu_focus.focusandroid.feature.video.presentation.videoplayer.VideoPlayerScreen
 import com.kmu_focus.focusandroid.feature.video.presentation.videosave.VideoSaveScreen
 import com.kmu_focus.focusandroid.feature.video.presentation.videoupload.VideoUploadScreen
+import coil.compose.AsyncImage
 import com.kmu_focus.focusandroid.feature.video.domain.config.VideoConfig
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 @Composable
 fun MainScreen(
@@ -56,14 +51,7 @@ fun MainScreen(
     val multiPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickMultipleVisualMedia(VideoConfig.MAX_OWNER_PICK)
     ) { uris: List<Uri> ->
-        if (uris.isEmpty()) return@rememberLauncherForActivityResult
-        val list = uris.mapNotNull { uri ->
-            context.contentResolver.openInputStream(uri)?.use { stream ->
-                BitmapFactory.decodeStream(stream)?.let { it to uri.toString() }
-            }
-        }
-        if (list.isNotEmpty()) viewModel.addOwnersFromBitmaps(list)
-        else viewModel.setAddOwnerResult(AddOwnerResult.Fail)
+        viewModel.addOwnersFromUris(uris)
     }
 
     LaunchedEffect(uiState.addOwnerResult) {
@@ -169,30 +157,15 @@ private fun OwnerThumbnail(
     uri: String,
     modifier: Modifier = Modifier
 ) {
-    var bitmap by remember(uri) { mutableStateOf<android.graphics.Bitmap?>(null) }
-    val context = LocalContext.current
-    LaunchedEffect(uri) {
-        bitmap = withContext(Dispatchers.IO) {
-            runCatching {
-                context.contentResolver.openInputStream(Uri.parse(uri))?.use {
-                    BitmapFactory.decodeStream(it)
-                }
-            }.getOrNull()
-        }
-    }
     Card(
         modifier = modifier.size(56.dp),
         shape = RoundedCornerShape(8.dp)
     ) {
-        Box(modifier = Modifier.fillMaxSize()) {
-            if (bitmap != null) {
-                Image(
-                    bitmap = bitmap!!.asImageBitmap(),
-                    contentDescription = null,
-                    modifier = Modifier.fillMaxSize(),
-                    contentScale = ContentScale.Crop
-                )
-            }
-        }
+        AsyncImage(
+            model = Uri.parse(uri),
+            contentDescription = null,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
     }
 }

@@ -1,8 +1,16 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.main
 
+import android.content.Context
+import android.graphics.BitmapFactory
+import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromBitmapUseCase
@@ -25,6 +33,7 @@ sealed class AddOwnerResult {
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val addOwnerFromBitmapUseCase: AddOwnerFromBitmapUseCase,
     private val clearOwnersUseCase: ClearOwnersUseCase
 ) : ViewModel() {
@@ -44,6 +53,25 @@ class MainViewModel @Inject constructor(
     fun addOwnerFromBitmap(bitmap: android.graphics.Bitmap) {
         val result = if (addOwnerFromBitmapUseCase(bitmap)) AddOwnerResult.Success else AddOwnerResult.NoFace
         _uiState.value = _uiState.value.copy(addOwnerResult = result)
+    }
+
+    /** URI 목록을 IO에서 디코딩 후 다중 추가. Activity Result 콜백에서 호출. */
+    fun addOwnersFromUris(uris: List<Uri>) {
+        if (uris.isEmpty()) {
+            setAddOwnerResult(AddOwnerResult.Fail)
+            return
+        }
+        viewModelScope.launch {
+            val list = withContext(Dispatchers.IO) {
+                uris.mapNotNull { uri ->
+                    context.contentResolver.openInputStream(uri)?.use { stream ->
+                        BitmapFactory.decodeStream(stream)?.let { it to uri.toString() }
+                    }
+                }
+            }
+            if (list.isNotEmpty()) addOwnersFromBitmaps(list)
+            else setAddOwnerResult(AddOwnerResult.Fail)
+        }
     }
 
     /** 다중 추가. uriForDisplay는 성공 시 목록에 표시할 URI 문자열. */
