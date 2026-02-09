@@ -49,6 +49,12 @@ dependencies {
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
 
+    // Feature Module
+    implementation(project(":core:ai"))
+
+    // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)
+    implementation(libs.opencv.android)
+
     // Media (ExoPlayer)
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.ui)
@@ -58,5 +64,6 @@ dependencies {
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
+    testImplementation(libs.org.json)
     debugImplementation(libs.androidx.ui.tooling)
 }
