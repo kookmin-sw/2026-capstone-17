@@ -134,6 +134,31 @@ class OESTextureProgram {
         GLES30.glBindVertexArray(0)
     }
 
+    // Canvas로 그린 오버레이 텍스처를 알파 블렌딩으로 위에 합성 (Y 반전 없음)
+    fun draw2DBlend(textureId: Int) {
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+
+        GLES30.glUseProgram(twoDProgramId)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
+        GLES30.glUniform1i(twoDTextureLoc, 0)
+        GLES30.glUniform1f(twoDFlipYLoc, 0.0f)
+        GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
+
+        val identity = FloatArray(16).apply {
+            this[0] = 1f; this[5] = 1f; this[10] = 1f; this[15] = 1f
+        }
+        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identity, 0)
+
+        GLES30.glBindVertexArray(vaoId)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glBindVertexArray(0)
+
+        GLES30.glDisable(GLES30.GL_BLEND)
+    }
+
     fun release() {
         GLES30.glDeleteProgram(oesProgramId)
         GLES30.glDeleteProgram(twoDProgramId)

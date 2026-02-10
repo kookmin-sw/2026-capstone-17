@@ -24,10 +24,18 @@ fun VideoPlayerScreen(
     viewModel: VideoPlayerViewModel = hiltViewModel(),
     isFullScreen: Boolean = false,
     onEnterFullScreen: () -> Unit = {},
-    onExitFullScreen: () -> Unit = {}
+    onExitFullScreen: () -> Unit = {},
+    onPlaybackEnded: () -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-    val exoPlayer = rememberExoPlayer(uriString = videoUri, isPlaying = uiState.isPlaying)
+    val exoPlayer = rememberExoPlayer(
+        uriString = videoUri,
+        isPlaying = uiState.isPlaying,
+        onPlaybackEnded = {
+            viewModel.stopPlayback()
+            onPlaybackEnded()
+        }
+    )
 
     LaunchedEffect(videoUri) {
         viewModel.loadVideo(videoUri)

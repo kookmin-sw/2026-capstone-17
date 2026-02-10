@@ -56,4 +56,33 @@ class VideoLocalDataSourceImpl @Inject constructor(
 
             insertUri.toString()
         }
+
+    override fun createTempOutputFile(): File {
+        val cacheDir = File(context.cacheDir, "transcode").apply {
+            if (!exists()) mkdirs()
+        }
+        return File(cacheDir, "transcode_${UUID.randomUUID()}.mp4")
+    }
+
+    override suspend fun moveToGallery(file: File): String =
+        withContext(Dispatchers.IO) {
+            val fileName = "focus_${UUID.randomUUID()}.mp4"
+            val values = ContentValues().apply {
+                put(MediaStore.Video.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Video.Media.MIME_TYPE, "video/mp4")
+                put(MediaStore.Video.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MOVIES}/Focus")
+            }
+            val insertUri = context.contentResolver.insert(
+                MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
+                values
+            ) ?: throw IllegalStateException("갤러리 저장 실패: insert 실패")
+
+            file.inputStream().use { input ->
+                context.contentResolver.openOutputStream(insertUri)?.use { output ->
+                    input.copyTo(output)
+                }
+            }
+            file.delete()
+            insertUri.toString()
+        }
 }

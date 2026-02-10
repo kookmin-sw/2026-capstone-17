@@ -1,5 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videosave
 
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -16,6 +17,10 @@ fun VideoSaveScreen(
     viewModel: VideoSaveViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val animatedProgress by animateFloatAsState(
+        targetValue = uiState.transcodeProgress,
+        label = "transcodeProgress"
+    )
 
     Column(
         modifier = modifier
@@ -24,25 +29,16 @@ fun VideoSaveScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Button(
-            onClick = { viewModel.saveVideoToGallery(videoUri) },
-            enabled = !uiState.isSaving,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text(if (uiState.isSaving) "저장 중..." else "갤러리에 저장")
-        }
-
-        OutlinedButton(
-            onClick = { viewModel.saveVideo(videoUri) },
-            enabled = !uiState.isSaving,
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Text("내부 저장소에 저장")
-        }
-
         when {
             uiState.isSaving -> {
-                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                Text(
+                    text = "트랜스코딩 중... ${(uiState.transcodeProgress * 100).toInt()}%",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                LinearProgressIndicator(
+                    progress = { animatedProgress },
+                    modifier = Modifier.fillMaxWidth()
+                )
             }
             uiState.error != null -> {
                 Text(
@@ -52,9 +48,16 @@ fun VideoSaveScreen(
             }
             uiState.savedFilePath != null -> {
                 Text(
-                    text = "저장 완료: ${uiState.savedFilePath}",
-                    style = MaterialTheme.typography.bodySmall,
+                    text = "저장 완료",
+                    style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.primary
+                )
+            }
+            else -> {
+                Text(
+                    text = "동영상 재생이 끝나면 자동으로 저장됩니다",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

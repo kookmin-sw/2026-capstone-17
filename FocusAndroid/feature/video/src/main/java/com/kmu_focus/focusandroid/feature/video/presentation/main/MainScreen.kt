@@ -36,6 +36,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.kmu_focus.focusandroid.feature.video.presentation.videoplayer.VideoPlayerScreen
 import com.kmu_focus.focusandroid.feature.video.presentation.videosave.VideoSaveScreen
+import com.kmu_focus.focusandroid.feature.video.presentation.videosave.VideoSaveViewModel
 import com.kmu_focus.focusandroid.feature.video.presentation.videoupload.VideoUploadScreen
 import coil.compose.AsyncImage
 import com.kmu_focus.focusandroid.feature.video.domain.config.VideoConfig
@@ -133,9 +134,12 @@ fun MainScreen(
         }
 
         uiState.selectedVideoUri?.let { uri ->
+            val saveViewModel: VideoSaveViewModel = hiltViewModel()
+
             if (!isVideoFullScreen) {
                 VideoSaveScreen(
                     videoUri = uri,
+                    viewModel = saveViewModel,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
@@ -146,7 +150,11 @@ fun MainScreen(
                 modifier = if (isVideoFullScreen) Modifier.fillMaxSize() else Modifier.fillMaxWidth(),
                 isFullScreen = isVideoFullScreen,
                 onEnterFullScreen = { isVideoFullScreen = true },
-                onExitFullScreen = { isVideoFullScreen = false }
+                onExitFullScreen = { isVideoFullScreen = false },
+                onPlaybackEnded = {
+                    isVideoFullScreen = false
+                    saveViewModel.transcodeAndSave(uri)
+                }
             )
         }
     }
