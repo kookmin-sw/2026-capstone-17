@@ -13,4 +13,10 @@ class VideoRepositoryImpl @Inject constructor(
             localDataSource.copyVideoToInternalStorage(sourceUri)
         }
     }
+
+    override suspend fun saveVideoToGallery(sourceUri: String): Result<String> {
+        return runCatching {
+            localDataSource.saveVideoToGallery(sourceUri)
+        }
+    }
 }

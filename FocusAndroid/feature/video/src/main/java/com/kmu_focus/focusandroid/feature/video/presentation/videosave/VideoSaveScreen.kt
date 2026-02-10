@@ -25,11 +25,19 @@ fun VideoSaveScreen(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Button(
+            onClick = { viewModel.saveVideoToGallery(videoUri) },
+            enabled = !uiState.isSaving,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (uiState.isSaving) "저장 중..." else "갤러리에 저장")
+        }
+
+        OutlinedButton(
             onClick = { viewModel.saveVideo(videoUri) },
             enabled = !uiState.isSaving,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text(if (uiState.isSaving) "저장 중..." else "동영상 저장")
+            Text("내부 저장소에 저장")
         }
 
         when {

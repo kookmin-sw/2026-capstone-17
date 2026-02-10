@@ -25,9 +25,20 @@ class VideoSaveViewModel @Inject constructor(
     val uiState: StateFlow<VideoSaveUiState> = _uiState.asStateFlow()
 
     fun saveVideo(sourceUri: String) {
+        saveVideoInternal(sourceUri) { saveVideoUseCase(sourceUri) }
+    }
+
+    fun saveVideoToGallery(sourceUri: String) {
+        saveVideoInternal(sourceUri) { saveVideoUseCase.invokeToGallery(sourceUri) }
+    }
+
+    private fun saveVideoInternal(
+        sourceUri: String,
+        save: suspend () -> Result<String>
+    ) {
         _uiState.value = VideoSaveUiState(isSaving = true)
         viewModelScope.launch {
-            saveVideoUseCase(sourceUri)
+            save()
                 .onSuccess { path ->
                     _uiState.value = _uiState.value.copy(
                         isSaving = false,
