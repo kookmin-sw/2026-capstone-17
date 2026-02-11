@@ -31,27 +31,52 @@ repositories {
 	mavenCentral()
 }
 
+extra["springCloudVersion"] = "2025.1.0"
+
 dependencies {
-	implementation("org.springframework.boot:spring-boot-starter-data-jpa")
-	implementation("org.springframework.boot:spring-boot-starter-data-redis")
-	implementation("org.springframework.boot:spring-boot-starter-webmvc")
-	implementation("org.springframework.grpc:spring-grpc-server-web-spring-boot-starter")
-	implementation("io.grpc:grpc-services")
-	implementation("org.jetbrains.kotlin:kotlin-reflect")
-	implementation("tools.jackson.module:jackson-module-kotlin")
-	runtimeOnly("org.postgresql:postgresql")
-	testImplementation("org.springframework.boot:spring-boot-starter-data-jpa-test")
-	testImplementation("org.springframework.boot:spring-boot-starter-webmvc-test")
+    // Kotlin
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin")
+    implementation("org.jetbrains.kotlin:kotlin-reflect")
+
+    // Web & gRPC
+    implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.grpc:spring-grpc-server-web-spring-boot-starter")
+    implementation("io.grpc:grpc-services")
+
+    // Security & Auth & Feign
+    implementation("org.springframework.boot:spring-boot-starter-security")
+    implementation("org.springframework.boot:spring-boot-starter-validation")
+    implementation("org.springframework.cloud:spring-cloud-starter-openfeign")
+
+    // DB, Redis
+    implementation("org.springframework.boot:spring-boot-starter-data-jpa")
+    implementation("org.springframework.boot:spring-boot-starter-data-redis")
+    runtimeOnly("org.postgresql:postgresql")
     implementation("com.github.f4b6a3:ulid-creator:5.2.3")
-	testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+
+    // JWT
+    implementation("io.jsonwebtoken:jjwt-api:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-impl:0.12.6")
+    runtimeOnly("io.jsonwebtoken:jjwt-jackson:0.12.6")
+
+    // Swagger
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:3.0.1")
-	testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+
+    // Util
+    annotationProcessor("org.springframework.boot:spring-boot-configuration-processor")
+
+    // Test
+    testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.security:spring-security-test")
+    testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
 dependencyManagement {
-	imports {
-		mavenBom("org.springframework.grpc:spring-grpc-dependencies:${property("springGrpcVersion")}")
-	}
+    imports {
+        mavenBom("org.springframework.cloud:spring-cloud-dependencies:${property("springCloudVersion")}")
+        mavenBom("org.springframework.grpc:spring-grpc-dependencies:${property("springGrpcVersion")}")
+    }
 }
 
 kotlin {

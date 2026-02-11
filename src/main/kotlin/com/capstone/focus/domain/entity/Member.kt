@@ -9,6 +9,8 @@ import jakarta.persistence.EnumType
 import jakarta.persistence.Enumerated
 import jakarta.persistence.Index
 import jakarta.persistence.Table
+import org.hibernate.annotations.JdbcTypeCode
+import org.hibernate.type.SqlTypes
 import org.springframework.data.annotation.LastModifiedDate
 import java.time.LocalDateTime
 
@@ -21,18 +23,24 @@ import java.time.LocalDateTime
     ])
 @AttributeOverride(name = "id", column = Column(name = "member_id"))
 class Member(
-    email: String,
-    nickname: String,
+    kakaoId: Long,
+    email: String?,
+    nickname: String?,
     role: MemberRole = MemberRole.USER,
-    faceEmbedding: String? = null
+    faceEmbedding: List<Double>? = null
 ) : UlidPrimaryKeyEntity() {
 
-    @Column(name = "email", nullable = false, unique = true)
-    var email: String = email
+
+    @Column(name = "kakao_id", nullable = false, unique = true)
+    var kakaoId: Long = kakaoId
         protected set
 
-    @Column(name = "nickname", nullable = false)
-    var nickname: String = nickname
+    @Column(name = "email", nullable = true)
+    var email: String? = email
+        protected set
+
+    @Column(name = "nickname", nullable = true)
+    var nickname: String? = nickname
         protected set
 
     @Enumerated(EnumType.STRING)
@@ -41,7 +49,8 @@ class Member(
         protected set
 
     @Column(name = "face_embedding", columnDefinition = "jsonb")
-    var faceEmbedding: String? = faceEmbedding
+    @JdbcTypeCode(SqlTypes.JSON)
+    var faceEmbedding: List<Double>? = faceEmbedding
         protected set
 
     @LastModifiedDate
@@ -49,7 +58,7 @@ class Member(
     var updatedAt: LocalDateTime? = null
         protected set
 
-    fun updateProfile(nickname: String, faceEmbedding: String?) {
+    fun updateProfile(nickname: String, faceEmbedding: List<Double>?) {
         this.nickname = nickname
         this.faceEmbedding = faceEmbedding
     }
