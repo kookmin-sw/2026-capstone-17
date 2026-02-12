@@ -12,6 +12,8 @@ import com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtra
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.di.IoDispatcher
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CoroutineDispatcher
@@ -20,9 +22,12 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.nio.ByteBuffer
+import java.util.UUID
 import javax.inject.Inject
 
 data class VideoPlayerUiState(
@@ -35,7 +40,8 @@ data class VideoPlayerUiState(
     val frameWidth: Int = 0,
     val frameHeight: Int = 0,
     val videoWidth: Int = 0,
-    val videoHeight: Int = 0
+    val videoHeight: Int = 0,
+    val encoderSurface: android.view.Surface? = null
 )
 
 @HiltViewModel
@@ -44,6 +50,8 @@ class VideoPlayerViewModel @Inject constructor(
     private val videoFrameDecoder: VideoFrameDecoder,
     private val embeddingExtractor: ArcFaceEmbeddingExtractor,
     private val ownerClassifier: OwnerOtherClassifier,
+    private val realTimeRecorder: RealTimeRecorder,
+    private val videoLocalDataSource: VideoLocalDataSource,
     @IoDispatcher private val ioDispatcher: CoroutineDispatcher
 ) : ViewModel() {
 
@@ -58,6 +66,10 @@ class VideoPlayerViewModel @Inject constructor(
     private var lastGLResult: ProcessedFrame? = null
     @Volatile
     private var labelByTrackId: Map<Int, Boolean?> = emptyMap()
+    
+    // 녹화 중인 임시 파일
+    var currentRecordingFile: File? = null
+        private set
 
     fun loadVideo(uri: String) {
         stopDetection()
@@ -83,13 +95,48 @@ class VideoPlayerViewModel @Inject constructor(
 
     fun stopPlayback() {
         stopDetection()
+        stopRecording()
         _uiState.value = _uiState.value.copy(isPlaying = false)
+    }
+
+    private fun startRecording() {
+        try {
+            val file = videoLocalDataSource.createTempOutputFile()
+            currentRecordingFile = file
+            
+            // 영상 해상도가 있으면 그 해상도로, 없으면 기본값 (예: 720p)
+            val w = if (uiState.value.videoWidth > 0) uiState.value.videoWidth else 1280
+            val h = if (uiState.value.videoHeight > 0) uiState.value.videoHeight else 720
+            
+            realTimeRecorder.start(
+                 width = w,
+                 height = h,
+                 outputFile = file,
+                 onInputSurfaceReady = { surface ->
+                     _uiState.update { it.copy(encoderSurface = surface) }
+                 }
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("VideoPlayerVM", "녹화 시작 실패", e)
+        }
+    }
+
+    private fun stopRecording() {
+        try {
+            realTimeRecorder.stop()
+            _uiState.update { it.copy(encoderSurface = null) }
+        } catch (e: Exception) {
+            android.util.Log.e("VideoPlayerVM", "녹화 중지 실패", e)
+        }
     }
 
     fun startDetection() {
         if (_uiState.value.videoUri.isEmpty()) return
         if (_uiState.value.isDetecting) return
         _uiState.value = _uiState.value.copy(isDetecting = true)
+        
+        // 탐지 시작 시 녹화도 같이 시작
+        startRecording()
     }
 
     fun stopDetection() {

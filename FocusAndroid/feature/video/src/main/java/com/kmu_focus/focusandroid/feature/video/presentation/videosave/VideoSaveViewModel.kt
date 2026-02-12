@@ -37,7 +37,39 @@ class VideoSaveViewModel @Inject constructor(
         saveVideoInternal(sourceUri) { saveVideoUseCase.invokeToGallery(sourceUri) }
     }
 
+    fun saveRecording(file: java.io.File) {
+        _uiState.value = VideoSaveUiState(isSaving = true)
+        viewModelScope.launch {
+            try {
+                // 임시 파일을 갤러리로 복사
+                val sourceUri = android.net.Uri.fromFile(file).toString()
+                saveVideoUseCase.invokeToGallery(sourceUri)
+                    .onSuccess { path ->
+                        _uiState.value = _uiState.value.copy(
+                            isSaving = false,
+                            savedFilePath = path
+                        )
+                        // 성공 후 임시 파일 삭제
+                        file.delete()
+                    }
+                    .onFailure { e ->
+                        _uiState.value = _uiState.value.copy(
+                            isSaving = false,
+                            error = e.message ?: "저장 실패"
+                        )
+                    }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isSaving = false,
+                    error = e.message ?: "저장 중 오류 발생"
+                )
+            }
+        }
+    }
+
+    // Deprecated: 오프라인 트랜스코딩 사용 안 함
     fun transcodeAndSave(sourceUri: String) {
+        // ... (Legacy code, maybe keep for fallback or remove)
         _uiState.value = VideoSaveUiState(isSaving = true)
         viewModelScope.launch {
             transcodeVideoUseCase(sourceUri)

@@ -8,6 +8,7 @@ import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceI
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
@@ -55,5 +56,10 @@ abstract class VideoModule {
             @ApplicationContext context: Context,
             frameProcessor: FrameProcessor
         ): VideoTranscoder = VideoTranscoder(context, frameProcessor)
+
+        @Provides
+        @Singleton
+        @JvmStatic
+        fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(enableBackgroundDrain = true)
     }
 }

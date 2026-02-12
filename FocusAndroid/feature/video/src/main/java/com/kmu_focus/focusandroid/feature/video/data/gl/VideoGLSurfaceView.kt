@@ -29,6 +29,13 @@ class VideoGLSurfaceView(
         renderer.setVideoSize(width, height)
     }
 
+    /** 인코더 입력 Surface 설정 (녹화용). 메인 스레드에서 호출 가능 (내부적으로 queueEvent 처리). */
+    fun setEncoderSurface(surface: Surface?) {
+        queueEvent {
+            renderer.setEncoderSurface(surface)
+        }
+    }
+
     fun release() {
         queueEvent { renderer.release() }
     }

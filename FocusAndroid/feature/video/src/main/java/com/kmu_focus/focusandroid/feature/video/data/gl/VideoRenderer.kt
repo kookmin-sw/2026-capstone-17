@@ -1,12 +1,14 @@
 package com.kmu_focus.focusandroid.feature.video.data.gl
 
 import android.graphics.SurfaceTexture
-import android.util.Log
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
+import android.opengl.EGL14
+import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
+import com.kmu_focus.focusandroid.feature.video.data.recorder.EncoderEglSurface
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.microedition.khronos.egl.EGLConfig
@@ -49,6 +51,14 @@ class VideoRenderer(
 
     private var drawCount = 0
 
+    // --- 실시간 인코더 연동용 ---
+    @Volatile
+    private var encoderSurface: Surface? = null
+
+    // GL 스레드에서만 접근해야 함
+    private var encoderEglSurface: EncoderEglSurface? = null
+    private var recordingEnabled: Boolean = false
+
     /** 영상 해상도 설정 시 FBO에 fit(letter-box)로 렌더하여 종횡비 왜곡 제거. 0이면 보정 없음. */
     fun setVideoSize(width: Int, height: Int) {
         videoWidth = width
@@ -63,6 +73,25 @@ class VideoRenderer(
 
     fun setGLSurfaceView(view: android.opengl.GLSurfaceView) {
         glSurfaceViewRef = view
+    }
+
+    /**
+     * RealTimeRecorder에서 전달된 인코더 입력 Surface 설정.
+     *
+     * - 반드시 GLSurfaceView.queueEvent를 통해 GL 스레드에서 호출해야 한다.
+     * - null을 전달하면 녹화를 중지하고 EGLSurface를 정리한다.
+     */
+    fun setEncoderSurface(surface: Surface?) {
+        if (surface == null) {
+            recordingEnabled = false
+            encoderSurface = null
+            encoderEglSurface?.release()
+            encoderEglSurface = null
+        } else {
+            encoderSurface = surface
+            recordingEnabled = true
+            // 실제 EncoderEglSurface 생성은 onDrawFrame 안에서, EGL 컨텍스트가 유효할 때 lazy하게 처리
+        }
     }
 
     override fun onSurfaceCreated(gl: GL10?, config: EGLConfig?) {
@@ -163,6 +192,43 @@ class VideoRenderer(
             }
 
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+
+            // --- 인코더 Surface에도 동일한 FBO를 그려서 녹화 ---
+            if (recordingEnabled && encoderSurface != null) {
+                // 현재 GLSurfaceView의 EGL 상태 저장
+                val eglDisplay = EGL14.eglGetCurrentDisplay()
+                val eglDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
+                val eglReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
+                val eglContext = EGL14.eglGetCurrentContext()
+
+                if (encoderEglSurface == null) {
+                    // 인코더용 EGLSurface를 현재 컨텍스트 기준으로 생성 (GL 스레드에서만 가능)
+                    encoderEglSurface = try {
+                        EncoderEglSurface(encoderSurface!!)
+                    } catch (e: Exception) {
+                        Log.e("VideoRenderer", "EncoderEglSurface 생성 실패", e)
+                        recordingEnabled = false
+                        null
+                    }
+                }
+
+                encoderEglSurface?.let { encSurface ->
+                    // 인코더 EGLSurface를 current로 전환
+                    encSurface.makeCurrent()
+
+                    // FBO 텍스처를 인코더 Surface에 전체 화면으로 렌더
+                    GLES30.glViewport(0, 0, viewWidth, viewHeight)
+                    GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+                    program.draw2D(fboTextureId)
+
+                    // 타임스탬프는 ns 단위. 여기서는 System.nanoTime() 사용.
+                    encSurface.setPresentationTime(System.nanoTime())
+                    encSurface.swapBuffers()
+
+                    // 다시 GLSurfaceView의 원래 EGLSurface로 복귀
+                    EGL14.eglMakeCurrent(eglDisplay, eglDrawSurface, eglReadSurface, eglContext)
+                }
+            }
         }
 
         // 5. FBO → 화면 렌더링 (검출 완료 후 표시)
@@ -177,6 +243,11 @@ class VideoRenderer(
     }
 
     fun release() {
+        recordingEnabled = false
+        encoderSurface = null
+        encoderEglSurface?.release()
+        encoderEglSurface = null
+
         program.release()
 
         if (fboId != 0) {

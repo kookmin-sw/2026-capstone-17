@@ -25,7 +25,7 @@ fun VideoPlayerScreen(
     isFullScreen: Boolean = false,
     onEnterFullScreen: () -> Unit = {},
     onExitFullScreen: () -> Unit = {},
-    onPlaybackEnded: () -> Unit = {}
+    onPlaybackEnded: (java.io.File?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val exoPlayer = rememberExoPlayer(
@@ -33,7 +33,7 @@ fun VideoPlayerScreen(
         isPlaying = uiState.isPlaying,
         onPlaybackEnded = {
             viewModel.stopPlayback()
-            onPlaybackEnded()
+            onPlaybackEnded(viewModel.currentRecordingFile)
         }
     )
 
@@ -65,6 +65,7 @@ fun VideoPlayerScreen(
                 },
                 videoWidth = uiState.videoWidth,
                 videoHeight = uiState.videoHeight,
+                encoderSurface = uiState.encoderSurface,
                 modifier = Modifier.matchParentSize()
             )
 
@@ -151,6 +152,7 @@ private fun ExoPlayerGLView(
     onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> Unit,
     videoWidth: Int = 0,
     videoHeight: Int = 0,
+    encoderSurface: Surface? = null,
     modifier: Modifier = Modifier
 ) {
     AndroidView(
@@ -165,6 +167,7 @@ private fun ExoPlayerGLView(
         },
         update = { glView ->
             (glView as? VideoGLSurfaceView)?.setVideoSize(videoWidth, videoHeight)
+            (glView as? VideoGLSurfaceView)?.setEncoderSurface(encoderSurface)
         },
         onRelease = { glView ->
             exoPlayer.setVideoSurface(null)

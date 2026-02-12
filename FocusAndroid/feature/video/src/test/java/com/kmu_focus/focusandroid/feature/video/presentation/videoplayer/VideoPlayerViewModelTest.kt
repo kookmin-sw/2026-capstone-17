@@ -4,7 +4,9 @@ import com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtra
 import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerOtherClassifier
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
+import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import io.mockk.every
 import io.mockk.mockk
@@ -31,6 +33,8 @@ class VideoPlayerViewModelTest {
     private val videoFrameDecoder: VideoFrameDecoder = mockk(relaxed = true)
     private val embeddingExtractor: ArcFaceEmbeddingExtractor = mockk(relaxed = true)
     private val ownerClassifier: OwnerOtherClassifier = mockk(relaxed = true)
+    private val realTimeRecorder: RealTimeRecorder = mockk(relaxed = true)
+    private val videoLocalDataSource: VideoLocalDataSource = mockk(relaxed = true)
     private lateinit var viewModel: VideoPlayerViewModel
 
     private fun createTestBuffer(width: Int = 640, height: Int = 480): ByteBuffer {
@@ -48,6 +52,8 @@ class VideoPlayerViewModelTest {
             videoFrameDecoder,
             embeddingExtractor,
             ownerClassifier,
+            realTimeRecorder,
+            videoLocalDataSource,
             testDispatcher
         )
     }
@@ -267,13 +273,12 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `processFrameSync 연속 호출 시 매번 FrameProcessor가 호출됨`() = runTest {
+    fun `processFrameSync 연속 호출 시 매번 FrameProcessor가 호출됨`() {
         val buffer = createTestBuffer()
         val frame = ProcessedFrame(emptyList(), 640, 480, 0L)
         every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
-        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 640, 480)
         viewModel.processFrameSync(buffer, 640, 480)

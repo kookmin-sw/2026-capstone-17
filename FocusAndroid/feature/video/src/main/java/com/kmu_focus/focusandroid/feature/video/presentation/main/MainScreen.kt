@@ -151,9 +151,14 @@ fun MainScreen(
                 isFullScreen = isVideoFullScreen,
                 onEnterFullScreen = { isVideoFullScreen = true },
                 onExitFullScreen = { isVideoFullScreen = false },
-                onPlaybackEnded = {
+                onPlaybackEnded = { recordedFile ->
                     isVideoFullScreen = false
-                    saveViewModel.transcodeAndSave(uri)
+                    if (recordedFile != null && recordedFile.exists()) {
+                        saveViewModel.saveRecording(recordedFile)
+                    } else {
+                        // 녹화 파일이 없으면 기존 방식(오프라인 트랜스코딩)으로 폴백
+                        saveViewModel.transcodeAndSave(uri)
+                    }
                 }
             )
         }
