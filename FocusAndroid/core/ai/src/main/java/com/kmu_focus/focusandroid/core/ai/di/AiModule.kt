@@ -24,15 +24,19 @@ import javax.inject.Singleton
 abstract class AiModule {
 
     @Binds
+    @Singleton
     abstract fun bindFaceDetector(impl: YuNetOpenCVDetector): FaceDetector
 
     @Binds
+    @Singleton
     abstract fun bindFacial3DMMExtractor(impl: TFLiteFacial3DMMDetector): Facial3DMMExtractor
 
     @Binds
+    @Singleton
     abstract fun bindOwnerEmbeddingProvider(impl: OwnerEmbeddingStore): OwnerEmbeddingProvider
 
     @Binds
+    @Singleton
     abstract fun bindOwnerAdder(impl: OwnerEmbeddingStore): com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerAdder
 
     companion object {

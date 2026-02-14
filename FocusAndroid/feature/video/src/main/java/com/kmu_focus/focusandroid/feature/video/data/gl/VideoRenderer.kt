@@ -53,8 +53,6 @@ class VideoRenderer(
     @Volatile
     private var videoHeight = 0
 
-    private var drawCount = 0
-
     // --- 실시간 인코더 연동용 ---
     @Volatile
     private var encoderSurface: Surface? = null
@@ -183,13 +181,6 @@ class VideoRenderer(
             // 1. SurfaceTexture 업데이트
             surfaceTexture?.updateTexImage()
             surfaceTexture?.getTransformMatrix(texMatrix)
-            if (drawCount++ % 60 == 0) {
-                Log.i("VideoRenderer", "texMatrix (4x4 col-major): " +
-                    "[${texMatrix[0]}, ${texMatrix[1]}, ${texMatrix[2]}, ${texMatrix[3]}], " +
-                    "[${texMatrix[4]}, ${texMatrix[5]}, ${texMatrix[6]}, ${texMatrix[7]}], " +
-                    "[${texMatrix[8]}, ${texMatrix[9]}, ${texMatrix[10]}, ${texMatrix[11]}], " +
-                    "[${texMatrix[12]}, ${texMatrix[13]}, ${texMatrix[14]}, ${texMatrix[15]}]")
-            }
 
             // 2. OES → FBO 렌더링 (더블 버퍼 교대)
             fboIndex = 1 - fboIndex

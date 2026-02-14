@@ -79,6 +79,12 @@ class OESTextureProgram {
     private var twoDFlipYLoc = 0
     private var twoDContentScaleXLoc = 0
     private var twoDContentScaleYLoc = 0
+    private val identityMatrix = floatArrayOf(
+        1f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f,
+        0f, 0f, 1f, 0f,
+        0f, 0f, 0f, 1f,
+    )
 
     fun init() {
         oesProgramId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER_OES)
@@ -124,10 +130,7 @@ class OESTextureProgram {
         GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
         GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
 
-        val identity = FloatArray(16).apply {
-            this[0] = 1f; this[5] = 1f; this[10] = 1f; this[15] = 1f
-        }
-        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identity, 0)
+        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identityMatrix, 0)
 
         GLES30.glBindVertexArray(vaoId)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
@@ -147,10 +150,7 @@ class OESTextureProgram {
         GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
         GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
 
-        val identity = FloatArray(16).apply {
-            this[0] = 1f; this[5] = 1f; this[10] = 1f; this[15] = 1f
-        }
-        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identity, 0)
+        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identityMatrix, 0)
 
         GLES30.glBindVertexArray(vaoId)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)

@@ -231,7 +231,16 @@ class VideoTranscoder(
                 }
 
                 // --- 인코더 출력 → Muxer ---
-                drainEncoder(encoder, muxer, bufferInfo, muxerStarted, muxerVideoTrackIndex, audioExtractor, audioTrackIndex).let { (started, vIdx, aIdx) ->
+                drainEncoder(
+                    encoder = encoder,
+                    muxer = muxer,
+                    bufferInfo = bufferInfo,
+                    muxerStarted = muxerStarted,
+                    videoTrackIndex = muxerVideoTrackIndex,
+                    audioTrackIndexInMuxer = muxerAudioTrackIndex,
+                    audioExtractor = audioExtractor,
+                    audioTrackIndex = audioTrackIndex,
+                ).let { (started, vIdx, aIdx) ->
                     muxerStarted = started
                     muxerVideoTrackIndex = vIdx
                     muxerAudioTrackIndex = aIdx
@@ -332,17 +341,19 @@ class VideoTranscoder(
         bufferInfo: MediaCodec.BufferInfo,
         muxerStarted: Boolean,
         videoTrackIndex: Int,
+        audioTrackIndexInMuxer: Int,
         audioExtractor: MediaExtractor,
         audioTrackIndex: Int
     ): Triple<Boolean, Int, Int> {
         var started = muxerStarted
         var vIdx = videoTrackIndex
-        var aIdx = -1
+        var aIdx = audioTrackIndexInMuxer
 
         while (true) {
             val encOutIdx = encoder.dequeueOutputBuffer(bufferInfo, 0)
             when {
                 encOutIdx == MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    if (started) break
                     vIdx = muxer.addTrack(encoder.outputFormat)
                     if (audioTrackIndex >= 0) {
                         aIdx = muxer.addTrack(audioExtractor.getTrackFormat(audioTrackIndex))

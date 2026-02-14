@@ -23,11 +23,13 @@ import java.nio.ByteOrder
 import java.nio.MappedByteBuffer
 import java.nio.channels.FileChannel
 import javax.inject.Inject
+import javax.inject.Singleton
 
 private const val TAG = "Facial3DMMDetector"
 private const val MODEL_NAME = "facial_3DMM.tflite"
 private const val INPUT_SIZE = 128
 
+@Singleton
 class TFLiteFacial3DMMDetector @Inject constructor(
     @ApplicationContext private val context: Context
 ) : Facial3DMMExtractor {
