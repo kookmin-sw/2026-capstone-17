@@ -64,6 +64,8 @@ class VideoLocalDataSourceImpl @Inject constructor(
         return File(cacheDir, "transcode_${UUID.randomUUID()}.mp4")
     }
 
+    override fun deleteFile(file: File): Boolean = file.delete()
+
     override suspend fun moveToGallery(file: File): String =
         withContext(Dispatchers.IO) {
             val fileName = "focus_${UUID.randomUUID()}.mp4"

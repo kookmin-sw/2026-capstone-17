@@ -1,27 +1,29 @@
 package com.kmu_focus.focusandroid.feature.video.data.gl
 
 import android.graphics.SurfaceTexture
+import android.opengl.EGL14
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
-import android.opengl.EGL14
 import android.util.Log
 import android.os.Handler
 import android.os.Looper
 import android.view.Surface
-import com.kmu_focus.focusandroid.feature.video.data.recorder.EncoderEglSurface
+import com.kmu_focus.focusandroid.feature.video.data.recorder.EncoderThread
+import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * 동기 파이프라인: FBO 렌더링 → glReadPixels(동기) → 검출 콜백 → 화면 표시.
+ * 동기 파이프라인: FBO 렌더링 → glReadPixels(동기) → 검출 콜백 → 오버레이 합성 → 화면/인코더.
  * 검출 완료 후에 화면을 그리므로 박스와 영상이 완벽 동기화.
- * YuNet ~10-15ms + glReadPixels ~1-2ms = 30fps(33ms) 예산 이내.
+ * 실시간 녹화 시 FBO에 박스를 합성하여 인코더에 저장 (트랜스코딩과 동일).
  */
 class VideoRenderer(
+    private val onFrameCaptured: (ByteBuffer, Int, Int) -> ProcessedFrame,
     private val onSurfaceReady: (Surface) -> Unit,
-    private val onFrameCaptured: (ByteBuffer, Int, Int) -> Unit
+    private val encoderThread: EncoderThread = EncoderThread(),
 ) : android.opengl.GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
     private var oesTextureId = 0
@@ -30,10 +32,12 @@ class VideoRenderer(
 
     private val texMatrix = FloatArray(16)
     private val program = OESTextureProgram()
+    private val overlayRenderer = OverlayRenderer()
 
-    // FBO (싱글)
-    private var fboId = 0
-    private var fboTextureId = 0
+    // FBO 더블 버퍼 (EncoderThread가 읽는 동안 덮어쓰기 방지)
+    private val fboIds = IntArray(2)
+    private val fboTextureIds = IntArray(2)
+    private var fboIndex = 0
     private var viewWidth = 0
     private var viewHeight = 0
 
@@ -55,8 +59,12 @@ class VideoRenderer(
     @Volatile
     private var encoderSurface: Surface? = null
 
-    // GL 스레드에서만 접근해야 함
-    private var encoderEglSurface: EncoderEglSurface? = null
+    @Volatile
+    private var encoderWidth: Int = 0
+
+    @Volatile
+    private var encoderHeight: Int = 0
+
     private var recordingEnabled: Boolean = false
 
     /** 영상 해상도 설정 시 FBO에 fit(letter-box)로 렌더하여 종횡비 왜곡 제거. 0이면 보정 없음. */
@@ -81,16 +89,25 @@ class VideoRenderer(
      * - 반드시 GLSurfaceView.queueEvent를 통해 GL 스레드에서 호출해야 한다.
      * - null을 전달하면 녹화를 중지하고 EGLSurface를 정리한다.
      */
-    fun setEncoderSurface(surface: Surface?) {
+    fun setEncoderSurface(
+        surface: Surface?,
+        width: Int = 0,
+        height: Int = 0,
+    ) {
         if (surface == null) {
             recordingEnabled = false
             encoderSurface = null
-            encoderEglSurface?.release()
-            encoderEglSurface = null
+            encoderWidth = 0
+            encoderHeight = 0
+            encoderThread.stop()
         } else {
+            if (encoderSurface !== surface) {
+                encoderThread.stop()
+            }
             encoderSurface = surface
+            encoderWidth = width
+            encoderHeight = height
             recordingEnabled = true
-            // 실제 EncoderEglSurface 생성은 onDrawFrame 안에서, EGL 컨텍스트가 유효할 때 lazy하게 처리
         }
     }
 
@@ -125,32 +142,37 @@ class VideoRenderer(
         viewHeight = height
         GLES30.glViewport(0, 0, width, height)
 
-        // 기존 FBO 정리
-        if (fboId != 0) {
-            GLES30.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
-            GLES30.glDeleteTextures(1, intArrayOf(fboTextureId), 0)
+        // 기존 FBO 및 오버레이 정리
+        overlayRenderer.release()
+        if (fboIds[0] != 0) {
+            GLES30.glDeleteFramebuffers(2, fboIds, 0)
+            GLES30.glDeleteTextures(2, fboTextureIds, 0)
+            fboIds[0] = 0
+            fboIds[1] = 0
+            fboTextureIds[0] = 0
+            fboTextureIds[1] = 0
         }
 
-        // FBO 텍스처 생성
-        val texIds = IntArray(1)
-        GLES30.glGenTextures(1, texIds, 0)
-        fboTextureId = texIds[0]
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTextureId)
-        GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
-        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
-
-        // FBO 생성 및 텍스처 연결
-        val fboIds = IntArray(1)
-        GLES30.glGenFramebuffers(1, fboIds, 0)
-        fboId = fboIds[0]
-        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
-        GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, fboTextureId, 0)
+        // FBO 더블 버퍼 생성
+        GLES30.glGenTextures(2, fboTextureIds, 0)
+        GLES30.glGenFramebuffers(2, fboIds, 0)
+        for (i in 0..1) {
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTextureIds[i])
+            GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+            GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[i])
+            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, fboTextureIds[i], 0)
+        }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
 
         // glReadPixels용 버퍼 재할당
         readBuffer = ByteBuffer.allocateDirect(width * height * 4).apply {
             order(ByteOrder.nativeOrder())
+        }
+
+        if (width > 0 && height > 0) {
+            overlayRenderer.init(width, height)
         }
     }
 
@@ -169,72 +191,51 @@ class VideoRenderer(
                     "[${texMatrix[12]}, ${texMatrix[13]}, ${texMatrix[14]}, ${texMatrix[15]}]")
             }
 
-            // 2. OES → FBO 렌더링 (종횡비 보정: 영상이 view에 fit되도록 content scale 적용 → letter-box, 원본 비율 유지)
+            // 2. OES → FBO 렌더링 (더블 버퍼 교대)
+            fboIndex = 1 - fboIndex
             val (scaleX, scaleY) = if (videoWidth > 0 && videoHeight > 0) {
                 val scale = minOf(viewWidth / videoWidth.toFloat(), viewHeight / videoHeight.toFloat())
                 val contentW = videoWidth * scale
                 val contentH = videoHeight * scale
                 Pair(contentW / viewWidth, contentH / viewHeight)
             } else Pair(1f, 1f)
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboId)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[fboIndex])
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             program.drawOES(oesTextureId, texMatrix, scaleX, scaleY)
 
             // 3. glReadPixels 동기 읽기 (재사용 버퍼, GC 없음)
+            var processedFrame: ProcessedFrame? = null
             readBuffer?.let { buf ->
                 buf.clear()
                 GLES30.glReadPixels(0, 0, viewWidth, viewHeight, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
                 buf.rewind()
 
                 // 4. 검출 콜백 (동기: 콜백 완료까지 화면 표시 보류)
-                onFrameCaptured(buf, viewWidth, viewHeight)
+                val frame = onFrameCaptured(buf, viewWidth, viewHeight)
+                processedFrame = frame
+
+                // 5. 검출 결과를 FBO 위에 알파 블렌딩 (실시간 녹화 시 인코더에 박스 포함)
+                if (frame.faces.isNotEmpty()) {
+                    val overlayTexId = overlayRenderer.drawOverlay(frame)
+                    if (overlayTexId != 0) {
+                        program.draw2DBlend(overlayTexId)
+                    }
+                }
             }
 
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
 
-            // --- 인코더 Surface에도 동일한 FBO를 그려서 녹화 ---
-            if (recordingEnabled && encoderSurface != null) {
-                // 현재 GLSurfaceView의 EGL 상태 저장
-                val eglDisplay = EGL14.eglGetCurrentDisplay()
-                val eglDrawSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_DRAW)
-                val eglReadSurface = EGL14.eglGetCurrentSurface(EGL14.EGL_READ)
-                val eglContext = EGL14.eglGetCurrentContext()
-
-                if (encoderEglSurface == null) {
-                    // 인코더용 EGLSurface를 현재 컨텍스트 기준으로 생성 (GL 스레드에서만 가능)
-                    encoderEglSurface = try {
-                        EncoderEglSurface(encoderSurface!!)
-                    } catch (e: Exception) {
-                        Log.e("VideoRenderer", "EncoderEglSurface 생성 실패", e)
-                        recordingEnabled = false
-                        null
-                    }
-                }
-
-                encoderEglSurface?.let { encSurface ->
-                    // 인코더 EGLSurface를 current로 전환
-                    encSurface.makeCurrent()
-
-                    // FBO 텍스처를 인코더 Surface에 전체 화면으로 렌더
-                    GLES30.glViewport(0, 0, viewWidth, viewHeight)
-                    GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-                    program.draw2D(fboTextureId)
-
-                    // 타임스탬프는 ns 단위. 여기서는 System.nanoTime() 사용.
-                    encSurface.setPresentationTime(System.nanoTime())
-                    encSurface.swapBuffers()
-
-                    // 다시 GLSurfaceView의 원래 EGLSurface로 복귀
-                    EGL14.eglMakeCurrent(eglDisplay, eglDrawSurface, eglReadSurface, eglContext)
-                }
+            // 검출된 프레임만 인코더에 제출 (박스 누락 프레임 방지)
+            if (recordingEnabled && processedFrame?.faces?.isNotEmpty() == true) {
+                submitFrameToEncoderThread(fboTextureIds[fboIndex])
             }
         }
 
-        // 5. FBO → 화면 렌더링 (검출 완료 후 표시)
+        // 6. FBO → 화면 렌더링 (검출 완료 후 표시)
         GLES30.glViewport(0, 0, viewWidth, viewHeight)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        program.draw2D(fboTextureId)
+        program.draw2D(fboTextureIds[fboIndex])
     }
 
     override fun onFrameAvailable(st: SurfaceTexture?) {
@@ -245,14 +246,20 @@ class VideoRenderer(
     fun release() {
         recordingEnabled = false
         encoderSurface = null
-        encoderEglSurface?.release()
-        encoderEglSurface = null
+        encoderWidth = 0
+        encoderHeight = 0
+        encoderThread.stop()
 
+        overlayRenderer.release()
         program.release()
 
-        if (fboId != 0) {
-            GLES30.glDeleteFramebuffers(1, intArrayOf(fboId), 0)
-            GLES30.glDeleteTextures(1, intArrayOf(fboTextureId), 0)
+        if (fboIds[0] != 0) {
+            GLES30.glDeleteFramebuffers(2, fboIds, 0)
+            GLES30.glDeleteTextures(2, fboTextureIds, 0)
+            fboIds[0] = 0
+            fboIds[1] = 0
+            fboTextureIds[0] = 0
+            fboTextureIds[1] = 0
         }
         if (oesTextureId != 0) {
             GLES30.glDeleteTextures(1, intArrayOf(oesTextureId), 0)
@@ -263,5 +270,61 @@ class VideoRenderer(
         surface = null
         surfaceTexture = null
         readBuffer = null
+    }
+
+    private fun submitFrameToEncoderThread(textureId: Int) {
+        val targetSurface = encoderSurface ?: return
+        val targetWidth = encoderWidth
+        val targetHeight = encoderHeight
+        if (targetWidth <= 0 || targetHeight <= 0) {
+            Log.w(TAG, "encoder size invalid: ${targetWidth}x$targetHeight")
+            return
+        }
+
+        ensureEncoderThreadStarted(targetSurface)
+        if (!encoderThread.isRenderReady()) return
+
+        val fenceSync = GLES30.glFenceSync(GLES30.GL_SYNC_GPU_COMMANDS_COMPLETE, 0)
+        if (fenceSync == 0L) {
+            Log.w(TAG, "glFenceSync 생성 실패")
+            return
+        }
+
+        GLES30.glFlush()
+        encoderThread.submitFrame(
+            fboTextureId = textureId,
+            fenceSync = fenceSync,
+            timestampNs = System.nanoTime(),
+            width = targetWidth,
+            height = targetHeight,
+        )
+    }
+
+    private fun ensureEncoderThreadStarted(surface: Surface) {
+        if (encoderThread.isRunning()) {
+            if (encoderThread.isRenderReady()) return
+            Log.w(TAG, "EncoderThread running but not ready. restart 시도")
+            encoderThread.stop()
+        }
+
+        val sharedContext = EGL14.eglGetCurrentContext()
+        if (sharedContext == EGL14.EGL_NO_CONTEXT) {
+            Log.w(TAG, "shared EGLContext가 없어 EncoderThread 시작을 건너뜁니다.")
+            return
+        }
+
+        try {
+            encoderThread.start(
+                encoderInputSurface = surface,
+                sharedContext = sharedContext,
+            )
+        } catch (e: Exception) {
+            recordingEnabled = false
+            Log.e(TAG, "EncoderThread 시작 실패", e)
+        }
+    }
+
+    private companion object {
+        private const val TAG = "VideoRenderer"
     }
 }

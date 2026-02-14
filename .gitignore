@@ -54,3 +54,5 @@ secrets.properties
 claude_logs
 *.claude-session
 *CLAUDE.md
+ANTIGRAVITY.md
+AGENTS.md

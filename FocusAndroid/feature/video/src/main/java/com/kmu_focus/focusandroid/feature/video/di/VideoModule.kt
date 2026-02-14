@@ -7,10 +7,14 @@ import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceImpl
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.repository.PlaybackAnalysisRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.repository.RecordingRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
+import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
+import com.kmu_focus.focusandroid.feature.video.domain.repository.RecordingRepository
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
 import dagger.Binds
 import dagger.Module
@@ -33,6 +37,14 @@ abstract class VideoModule {
     @Binds
     @Singleton
     abstract fun bindImageRepository(impl: ImageRepositoryImpl): ImageRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecordingRepository(impl: RecordingRepositoryImpl): RecordingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPlaybackAnalysisRepository(impl: PlaybackAnalysisRepositoryImpl): PlaybackAnalysisRepository
 
     @Binds
     @Singleton
@@ -60,6 +72,8 @@ abstract class VideoModule {
         @Provides
         @Singleton
         @JvmStatic
-        fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(enableBackgroundDrain = true)
+        fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(
+            enableBackgroundDrain = System.getProperty("focus.test.mode") != "true",
+        )
     }
 }

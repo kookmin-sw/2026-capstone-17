@@ -48,6 +48,13 @@ class RealTimeRecorder(
     @Volatile
     private var videoTrackIndex: Int = -1
 
+    @Volatile
+    var lastRecordingSampleCount: Int = 0
+        private set
+
+    @Volatile
+    private var currentRecordingSampleCount: Int = 0
+
     private val bufferInfo = MediaCodec.BufferInfo()
 
     /**
@@ -85,6 +92,7 @@ class RealTimeRecorder(
         this.muxer = muxer
         this.muxerStarted = false
         this.videoTrackIndex = -1
+        this.currentRecordingSampleCount = 0
 
         isRecording = true
         draining.set(true)
@@ -103,24 +111,27 @@ class RealTimeRecorder(
     /**
      * 더 이상 프레임을 보내지 않음을 인코더에 알리고, draining 스레드가 정리되도록 한다.
      * 반복 호출해도 안전하다.
+     *
+     * 주의: join() 전에 락을 해제해야 한다. releaseInternal()이 @Synchronized이므로
+     * 락을 잡은 채 join하면 drain 스레드가 releaseInternal() 진입 시 데드락 발생.
      */
-    @Synchronized
     fun stop() {
-        if (!isRecording) return
-        isRecording = false
+        val threadToJoin = synchronized(this) {
+            if (!isRecording) return
+            isRecording = false
 
-        draining.set(false)
-        try {
-            encoder?.signalEndOfInputStream()
-        } catch (e: Exception) {
-            Log.w(loggerTag, "signalEndOfInputStream 실패", e)
+            draining.set(false)
+            try {
+                encoder?.signalEndOfInputStream()
+            } catch (e: Exception) {
+                Log.w(loggerTag, "signalEndOfInputStream 실패", e)
+            }
+            drainThread
         }
 
-        // encoder / muxer 해제까지 기다리되, 영원히 블록하지 않도록 타임아웃
-        val thread = drainThread
-        if (thread != null && thread.isAlive) {
+        if (threadToJoin != null && threadToJoin.isAlive) {
             try {
-                thread.join(DRAIN_JOIN_TIMEOUT_MS)
+                threadToJoin.join(DRAIN_JOIN_TIMEOUT_MS)
             } catch (e: InterruptedException) {
                 Log.w(loggerTag, "drainThread join 인터럽트", e)
             }
@@ -137,11 +148,19 @@ class RealTimeRecorder(
             return
         }
 
+        var tryAgainCount = 0
         try {
             while (draining.get()) {
                 val bufferIndex = encoder.dequeueOutputBuffer(bufferInfo, DEQUEUE_TIMEOUT_US)
                 when {
                     bufferIndex == MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        tryAgainCount++
+                        if (!muxerStarted && (tryAgainCount <= 3 || tryAgainCount % 120 == 0)) {
+                            Log.w(
+                                loggerTag,
+                                "drainLoop INFO_TRY_AGAIN_LATER (muxerStarted=$muxerStarted, sampleCount=$currentRecordingSampleCount, tries=$tryAgainCount)",
+                            )
+                        }
                         // 아직 출력 없음. isRecording 플래그를 보고 빠져나갈지 판단.
                         if (!isRecording && (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
                             break
@@ -154,9 +173,14 @@ class RealTimeRecorder(
                         videoTrackIndex = muxer.addTrack(newFormat)
                         muxer.start()
                         muxerStarted = true
+                        Log.w(
+                            loggerTag,
+                            "drainLoop INFO_OUTPUT_FORMAT_CHANGED: trackIndex=$videoTrackIndex, format=$newFormat",
+                        )
                     }
 
                     bufferIndex >= 0 -> {
+                        tryAgainCount = 0
                         val encodedData = encoder.getOutputBuffer(bufferIndex)
                         if (encodedData == null) {
                             encoder.releaseOutputBuffer(bufferIndex, false)
@@ -171,6 +195,18 @@ class RealTimeRecorder(
                             encodedData.position(bufferInfo.offset)
                             encodedData.limit(bufferInfo.offset + bufferInfo.size)
                             muxer.writeSampleData(videoTrackIndex, encodedData, bufferInfo)
+                            currentRecordingSampleCount++
+                            if (currentRecordingSampleCount == 1) {
+                                Log.w(
+                                    loggerTag,
+                                    "drainLoop first sample written: size=${bufferInfo.size}, ptsUs=${bufferInfo.presentationTimeUs}",
+                                )
+                            }
+                        } else if (bufferInfo.size > 0 && !muxerStarted) {
+                            Log.w(
+                                loggerTag,
+                                "drainLoop sample before muxer start: size=${bufferInfo.size}, flags=${bufferInfo.flags}",
+                            )
                         }
 
                         val isEos = (bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0
@@ -212,6 +248,8 @@ class RealTimeRecorder(
         }
 
         drainThread = null
+        lastRecordingSampleCount = currentRecordingSampleCount
+        currentRecordingSampleCount = 0
         muxerStarted = false
         videoTrackIndex = -1
     }
@@ -263,10 +301,11 @@ class RealTimeRecorder(
 
             val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
             codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val inputSurface = codec.createInputSurface()
             codec.start()
 
             return object : VideoEncoder {
-                override fun createInputSurface(): Surface = codec.createInputSurface()
+                override fun createInputSurface(): Surface = inputSurface
 
                 override fun dequeueOutputBuffer(info: MediaCodec.BufferInfo, timeoutUs: Long): Int {
                     return codec.dequeueOutputBuffer(info, timeoutUs)
@@ -345,4 +384,3 @@ class RealTimeRecorder(
         private const val DRAIN_JOIN_TIMEOUT_MS = 2_000L
     }
 }
-

@@ -14,7 +14,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.exoplayer.ExoPlayer
 import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
+import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import kotlinx.coroutines.delay
+import android.util.Log
 
 @Composable
 fun VideoPlayerScreen(
@@ -28,6 +30,7 @@ fun VideoPlayerScreen(
     onPlaybackEnded: (java.io.File?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    var glViewRef by remember { mutableStateOf<VideoGLSurfaceView?>(null) }
     val exoPlayer = rememberExoPlayer(
         uriString = videoUri,
         isPlaying = uiState.isPlaying,
@@ -36,6 +39,26 @@ fun VideoPlayerScreen(
             onPlaybackEnded(viewModel.currentRecordingFile)
         }
     )
+
+    DisposableEffect(viewModel, glViewRef) {
+        viewModel.setEncoderSurfaceDispatcher { surface, width, height ->
+            if (glViewRef == null) {
+                Log.w(
+                    TAG,
+                    "dispatcher invoked but glViewRef is null. surfaceNull=${surface == null}, size=${width}x$height",
+                )
+            } else {
+                Log.w(
+                    TAG,
+                    "dispatcher invoke -> setEncoderSurface. surfaceNull=${surface == null}, size=${width}x$height",
+                )
+            }
+            glViewRef?.setEncoderSurface(surface, width, height)
+        }
+        onDispose {
+            viewModel.setEncoderSurfaceDispatcher(null)
+        }
+    }
 
     LaunchedEffect(videoUri) {
         viewModel.loadVideo(videoUri)
@@ -65,7 +88,7 @@ fun VideoPlayerScreen(
                 },
                 videoWidth = uiState.videoWidth,
                 videoHeight = uiState.videoHeight,
-                encoderSurface = uiState.encoderSurface,
+                onGlSurfaceViewChanged = { glViewRef = it },
                 modifier = Modifier.matchParentSize()
             )
 
@@ -149,10 +172,10 @@ fun VideoPlayerScreen(
 @Composable
 private fun ExoPlayerGLView(
     exoPlayer: ExoPlayer,
-    onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> Unit,
+    onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> ProcessedFrame,
     videoWidth: Int = 0,
     videoHeight: Int = 0,
-    encoderSurface: Surface? = null,
+    onGlSurfaceViewChanged: (VideoGLSurfaceView?) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     AndroidView(
@@ -163,16 +186,20 @@ private fun ExoPlayerGLView(
                     exoPlayer.setVideoSurface(surface)
                 },
                 onFrameCaptured = onFrameCaptured
-            )
+            ).also { glView ->
+                onGlSurfaceViewChanged(glView)
+            }
         },
         update = { glView ->
             (glView as? VideoGLSurfaceView)?.setVideoSize(videoWidth, videoHeight)
-            (glView as? VideoGLSurfaceView)?.setEncoderSurface(encoderSurface)
         },
         onRelease = { glView ->
+            onGlSurfaceViewChanged(null)
             exoPlayer.setVideoSurface(null)
             glView.release()
         },
         modifier = modifier
     )
 }
+
+private const val TAG = "VideoPlayerScreen"
