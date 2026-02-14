@@ -4,8 +4,11 @@ import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.TranscodeProgress
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withContext
+import java.io.File
 import javax.inject.Inject
 
 class VideoRepositoryImpl @Inject constructor(
@@ -22,6 +25,29 @@ class VideoRepositoryImpl @Inject constructor(
     override suspend fun saveVideoToGallery(sourceUri: String): Result<String> {
         return runCatching {
             localDataSource.saveVideoToGallery(sourceUri)
+        }
+    }
+
+    override suspend fun saveRecordingWithSourceAudioToGallery(
+        recordingFilePath: String,
+        sourceUri: String
+    ): Result<String> = runCatching {
+        withContext(Dispatchers.IO) {
+            val recordingFile = File(recordingFilePath)
+            require(recordingFile.exists()) { "녹화 파일이 존재하지 않습니다: $recordingFilePath" }
+
+            val muxedFile = localDataSource.createTempOutputFile()
+            try {
+                videoTranscoder.muxSourceAudioToRecordedVideo(
+                    recordingFile = recordingFile,
+                    sourceUri = sourceUri,
+                    outputFile = muxedFile
+                )
+                localDataSource.moveToGallery(muxedFile)
+            } finally {
+                if (recordingFile.exists()) recordingFile.delete()
+                if (muxedFile.exists()) muxedFile.delete()
+            }
         }
     }
 

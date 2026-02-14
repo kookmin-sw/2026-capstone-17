@@ -335,6 +335,57 @@ class VideoTranscoder(
         }
     }.flowOn(transcodeDispatcher)
 
+    /**
+     * 실시간 녹화된 비디오 트랙(recordingFile)에 원본(sourceUri)의 오디오 트랙을 붙여 outputFile로 저장한다.
+     * sourceUri에 오디오가 없으면 비디오 트랙만 복사한다.
+     */
+    fun muxSourceAudioToRecordedVideo(
+        recordingFile: File,
+        sourceUri: String,
+        outputFile: File
+    ) {
+        require(recordingFile.exists()) { "녹화 파일이 존재하지 않습니다: ${recordingFile.absolutePath}" }
+
+        val videoExtractor = MediaExtractor()
+        val audioExtractor = MediaExtractor()
+        var muxer: MediaMuxer? = null
+        var muxerStarted = false
+        try {
+            videoExtractor.setDataSource(recordingFile.absolutePath)
+            val videoTrackIndex = findTrack(videoExtractor, "video/")
+            require(videoTrackIndex >= 0) { "녹화 파일에서 비디오 트랙을 찾을 수 없습니다" }
+            videoExtractor.selectTrack(videoTrackIndex)
+
+            audioExtractor.setDataSource(context, Uri.parse(sourceUri), null)
+            val audioTrackIndex = findTrack(audioExtractor, "audio/")
+            if (audioTrackIndex >= 0) {
+                audioExtractor.selectTrack(audioTrackIndex)
+            }
+
+            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+            val muxerVideoTrackIndex = muxer.addTrack(videoExtractor.getTrackFormat(videoTrackIndex))
+            val muxerAudioTrackIndex = if (audioTrackIndex >= 0) {
+                muxer.addTrack(audioExtractor.getTrackFormat(audioTrackIndex))
+            } else {
+                -1
+            }
+            muxer.start()
+            muxerStarted = true
+
+            copyTrackSamples(videoExtractor, muxer, muxerVideoTrackIndex)
+            if (muxerAudioTrackIndex >= 0) {
+                copyTrackSamples(audioExtractor, muxer, muxerAudioTrackIndex)
+            }
+        } finally {
+            if (muxerStarted) {
+                runCatching { muxer?.stop() }
+            }
+            runCatching { muxer?.release() }
+            runCatching { videoExtractor.release() }
+            runCatching { audioExtractor.release() }
+        }
+    }
+
     private fun drainEncoder(
         encoder: MediaCodec,
         muxer: MediaMuxer,
@@ -424,6 +475,28 @@ class VideoTranscoder(
             info.flags = audioExtractor.sampleFlags
             muxer.writeSampleData(muxerAudioTrackIndex, buffer, info)
             audioExtractor.advance()
+        }
+    }
+
+    private fun copyTrackSamples(
+        extractor: MediaExtractor,
+        muxer: MediaMuxer,
+        muxerTrackIndex: Int
+    ) {
+        val bufferSize = 1024 * 1024
+        val buffer = ByteBuffer.allocate(bufferSize)
+        val info = MediaCodec.BufferInfo()
+
+        extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
+        while (true) {
+            val sampleSize = extractor.readSampleData(buffer, 0)
+            if (sampleSize < 0) break
+            info.offset = 0
+            info.size = sampleSize
+            info.presentationTimeUs = extractor.sampleTime
+            info.flags = extractor.sampleFlags
+            muxer.writeSampleData(muxerTrackIndex, buffer, info)
+            extractor.advance()
         }
     }
 
