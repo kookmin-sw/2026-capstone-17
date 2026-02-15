@@ -2,6 +2,8 @@ package com.kmu_focus.focusandroid.feature.video.domain.entity
 
 import org.junit.Assert.*
 import org.junit.Test
+import org.json.JSONObject
+import java.io.StringWriter
 
 class VideoExportDataTest {
 
@@ -16,7 +18,8 @@ class VideoExportDataTest {
                     bbox = intArrayOf(10, 20, 100, 120),
                     idCoeffs = floatArrayOf(0.1f, 0.2f),
                     expCoeffs = floatArrayOf(0.3f),
-                    pose = floatArrayOf(0.4f, 0.5f)
+                    pose = floatArrayOf(0.4f, 0.5f),
+                    isOwner = false,
                 )
             )
         )
@@ -39,12 +42,13 @@ class VideoExportDataTest {
     }
 
     @Test
-    fun `isOwner가 true인 얼굴은 toJsonObject faces에서 제외됨`() {
+    fun `toJsonObject는 OTHER(isOwner=false)만 포함함`() {
         val frame = FrameExport(
             frameNumber = 0,
             timestamp = 0.0,
             faces = listOf(
                 FaceExport(trackingId = 0, bbox = intArrayOf(0, 0, 50, 50), isOwner = true),
+                FaceExport(trackingId = 7, bbox = intArrayOf(30, 0, 50, 50), isOwner = null),
                 FaceExport(trackingId = 1, bbox = intArrayOf(100, 0, 50, 50), isOwner = false)
             )
         )
@@ -52,6 +56,17 @@ class VideoExportDataTest {
         val faces = json.getJSONArray("faces")
         assertEquals(1, faces.length())
         assertEquals(1, faces.getJSONObject(0).getInt("tracking_id"))
+    }
+
+    @Test
+    fun `VideoExportStreaming header와 footer 조합은 유효한 JSON`() {
+        val writer = StringWriter()
+        VideoExportStreaming.writeHeader(writer, VideoInfo(640, 480, 30f))
+        VideoExportStreaming.writeFooter(writer)
+
+        val json = JSONObject(writer.toString())
+        assertEquals(640, json.getJSONObject("video_info").getInt("width"))
+        assertEquals(0, json.getJSONArray("frames").length())
     }
 
     @Test

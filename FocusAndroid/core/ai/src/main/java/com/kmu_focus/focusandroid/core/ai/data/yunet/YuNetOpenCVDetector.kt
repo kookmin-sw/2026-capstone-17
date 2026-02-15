@@ -12,7 +12,10 @@ import org.opencv.core.Size
 import org.opencv.imgproc.Imgproc
 import org.opencv.objdetect.FaceDetectorYN
 import javax.inject.Inject
+import javax.inject.Singleton
+import kotlin.math.roundToInt
 
+@Singleton
 class YuNetOpenCVDetector @Inject constructor(
     private val modelFileProvider: ModelFileProvider,
     private val config: DetectionConfig
@@ -58,11 +61,12 @@ class YuNetOpenCVDetector @Inject constructor(
                 Imgproc.cvtColor(orgMat, bgr, Imgproc.COLOR_RGB2BGR)
             }
 
-            val origWidth = bgr.cols()
-            val origHeight = bgr.rows()
-            val scale = config.inputSize.toFloat() / origWidth
-            val smallWidth = config.inputSize
-            val smallHeight = (origHeight * scale).toInt()
+            val origWidth = bgr.cols().coerceAtLeast(1)
+            val origHeight = bgr.rows().coerceAtLeast(1)
+            val shortSide = minOf(origWidth, origHeight).coerceAtLeast(1)
+            val scale = config.inputSize.toFloat() / shortSide.toFloat()
+            val smallWidth = (origWidth * scale).roundToInt().coerceAtLeast(1)
+            val smallHeight = (origHeight * scale).roundToInt().coerceAtLeast(1)
 
             val small = smallMat ?: Mat().also { smallMat = it }
             Imgproc.resize(bgr, small, Size(smallWidth.toDouble(), smallHeight.toDouble()))

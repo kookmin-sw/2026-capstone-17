@@ -1,6 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.data.repository
 
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
+import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import io.mockk.coEvery
 import io.mockk.mockk
 import kotlinx.coroutines.test.runTest
@@ -10,7 +11,8 @@ import org.junit.Test
 class VideoRepositoryImplTest {
 
     private val localDataSource: VideoLocalDataSource = mockk()
-    private val repository = VideoRepositoryImpl(localDataSource)
+    private val videoTranscoder: VideoTranscoder = mockk()
+    private val repository = VideoRepositoryImpl(localDataSource, videoTranscoder)
 
     @Test
     fun `저장 성공 시 Result success에 파일 경로가 담김`() = runTest {

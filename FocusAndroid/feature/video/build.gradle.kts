@@ -30,6 +30,14 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
         }
     }
+    testOptions {
+        unitTests {
+            all {
+                it.jvmArgs("-Xmx1536m", "-XX:+HeapDumpOnOutOfMemoryError")
+                it.systemProperty("focus.test.mode", "true")
+            }
+        }
+    }
 }
 
 dependencies {
@@ -54,6 +62,9 @@ dependencies {
 
     // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)
     implementation(libs.opencv.android)
+
+    // Image loading
+    implementation(libs.coil.compose)
 
     // Media (ExoPlayer)
     implementation(libs.androidx.media3.exoplayer)

@@ -1,15 +1,26 @@
 package com.kmu_focus.focusandroid.feature.video.di
 
+import android.content.Context
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoderImpl
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceImpl
+import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.repository.PlaybackAnalysisRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.repository.RecordingRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
+import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
+import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
+import com.kmu_focus.focusandroid.feature.video.domain.repository.RecordingRepository
 import com.kmu_focus.focusandroid.feature.video.domain.repository.VideoRepository
 import dagger.Binds
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
@@ -25,6 +36,18 @@ abstract class VideoModule {
 
     @Binds
     @Singleton
+    abstract fun bindImageRepository(impl: ImageRepositoryImpl): ImageRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindRecordingRepository(impl: RecordingRepositoryImpl): RecordingRepository
+
+    @Binds
+    @Singleton
+    abstract fun bindPlaybackAnalysisRepository(impl: PlaybackAnalysisRepositoryImpl): PlaybackAnalysisRepository
+
+    @Binds
+    @Singleton
     abstract fun bindVideoLocalDataSource(impl: VideoLocalDataSourceImpl): VideoLocalDataSource
 
     @Binds
@@ -37,5 +60,20 @@ abstract class VideoModule {
         @IoDispatcher
         @JvmStatic
         fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
+
+        @Provides
+        @Singleton
+        @JvmStatic
+        fun provideVideoTranscoder(
+            @ApplicationContext context: Context,
+            frameProcessor: FrameProcessor
+        ): VideoTranscoder = VideoTranscoder(context, frameProcessor)
+
+        @Provides
+        @Singleton
+        @JvmStatic
+        fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(
+            enableBackgroundDrain = System.getProperty("focus.test.mode") != "true",
+        )
     }
 }

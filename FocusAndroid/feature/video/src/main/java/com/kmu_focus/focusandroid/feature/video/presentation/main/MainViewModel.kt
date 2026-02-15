@@ -1,11 +1,16 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.main
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromBitmapUseCase
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.ClearOwnersUseCase
 import javax.inject.Inject
 
@@ -25,7 +30,7 @@ sealed class AddOwnerResult {
 
 @HiltViewModel
 class MainViewModel @Inject constructor(
-    private val addOwnerFromBitmapUseCase: AddOwnerFromBitmapUseCase,
+    private val addOwnerFromUriUseCase: AddOwnerFromUriUseCase,
     private val clearOwnersUseCase: ClearOwnersUseCase
 ) : ViewModel() {
 
@@ -40,30 +45,37 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(selectedVideoUri = null, addOwnerResult = null)
     }
 
-    /** 단일 추가 (기존 호환). */
-    fun addOwnerFromBitmap(bitmap: android.graphics.Bitmap) {
-        val result = if (addOwnerFromBitmapUseCase(bitmap)) AddOwnerResult.Success else AddOwnerResult.NoFace
-        _uiState.value = _uiState.value.copy(addOwnerResult = result)
-    }
-
-    /** 다중 추가. uriForDisplay는 성공 시 목록에 표시할 URI 문자열. */
-    fun addOwnersFromBitmaps(bitmapsWithUris: List<Pair<android.graphics.Bitmap, String?>>) {
-        var successCount = 0
-        var failCount = 0
-        val newUris = _uiState.value.addedOwnerUris.toMutableList()
-        for ((bitmap, uri) in bitmapsWithUris) {
-            if (addOwnerFromBitmapUseCase(bitmap)) {
-                successCount++
-                if (uri != null) newUris.add(uri)
-            } else failCount++
+    fun addOwnersFromUris(uris: List<Uri>) {
+        if (uris.isEmpty()) {
+            setAddOwnerResult(AddOwnerResult.Fail)
+            return
         }
-        _uiState.value = _uiState.value.copy(
-            addOwnerResult = when {
-                successCount > 0 || failCount > 0 -> AddOwnerResult.Multi(successCount, failCount)
-                else -> null
-            },
-            addedOwnerUris = newUris
-        )
+        viewModelScope.launch {
+            val results = withContext(Dispatchers.IO) {
+                uris.map { uri ->
+                    val success = addOwnerFromUriUseCase(uri.toString())
+                    success to uri.toString()
+                }
+            }
+            var successCount = 0
+            var failCount = 0
+            val newUris = _uiState.value.addedOwnerUris.toMutableList()
+            for ((success, uriStr) in results) {
+                if (success) {
+                    successCount++
+                    newUris.add(uriStr)
+                } else {
+                    failCount++
+                }
+            }
+            _uiState.value = _uiState.value.copy(
+                addOwnerResult = when {
+                    successCount > 0 || failCount > 0 -> AddOwnerResult.Multi(successCount, failCount)
+                    else -> null
+                },
+                addedOwnerUris = newUris
+            )
+        }
     }
 
     fun clearOwners() {

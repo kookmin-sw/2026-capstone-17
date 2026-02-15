@@ -35,12 +35,12 @@ data class FrameExport(
     val timestamp: Double,
     val faces: List<FaceExport>
 ) {
-    /** isOwner == true 인 얼굴은 제외 (Owner 전송 금지). */
+    /** isOwner == false(OTHER)만 포함 (Owner/PENDING 전송 금지). */
     fun toJsonObject(): JSONObject = JSONObject().apply {
         put("frame_number", frameNumber)
         put("timestamp", timestamp)
         put("faces", JSONArray().apply {
-            faces.filter { it.isOwner != true }.forEach { face ->
+            faces.filter { it.isOwner == false }.forEach { face ->
                 put(JSONObject().apply {
                     put("tracking_id", face.trackingId)
                     put("bbox", JSONArray().apply { face.bbox.forEach { put(it) } })
@@ -78,7 +78,7 @@ data class VideoExportData(
 
 object VideoExportStreaming {
     fun writeHeader(writer: java.io.Writer, videoInfo: VideoInfo) {
-        writer.write("{\"video_info\":{\"width\":${videoInfo.width},\"height\":${videoInfo.height},\"fps\":${videoInfo.fps},\"format\":\"3dmm\"}},\"frames\":[")
+        writer.write("{\"video_info\":{\"width\":${videoInfo.width},\"height\":${videoInfo.height},\"fps\":${videoInfo.fps},\"format\":\"3dmm\"},\"frames\":[")
     }
 
     fun writeFrame(writer: java.io.Writer, frame: FrameExport, isFirst: Boolean) {

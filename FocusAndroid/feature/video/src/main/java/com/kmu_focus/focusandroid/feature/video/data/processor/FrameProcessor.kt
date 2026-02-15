@@ -2,7 +2,6 @@ package com.kmu_focus.focusandroid.feature.video.data.processor
 
 import android.graphics.Bitmap
 import android.graphics.Rect
-import android.util.Log
 import com.kmu_focus.focusandroid.core.ai.data.recognition.FaceAlignment
 import com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtractor
 import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig
@@ -69,9 +68,6 @@ class FrameProcessor @Inject constructor(
                         crop.recycle()
                         crop = aligned
                     }
-                }
-                if (trackId in setOf(15, 31, 38, 39, 43)) {
-                    Log.i("FrameProcessor", "ID:$trackId 프리뷰 프레임 ${bitmap.width}x${bitmap.height} | ArcFace 입력 전 crop ${crop.width}x${crop.height}")
                 }
                 embeddingExtractor.extractEmbedding(crop)?.let { emb ->
                     when (trackLabelState.getLabel(trackId)) {

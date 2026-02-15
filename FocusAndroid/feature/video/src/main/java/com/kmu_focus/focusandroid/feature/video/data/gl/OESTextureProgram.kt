@@ -79,6 +79,12 @@ class OESTextureProgram {
     private var twoDFlipYLoc = 0
     private var twoDContentScaleXLoc = 0
     private var twoDContentScaleYLoc = 0
+    private val identityMatrix = floatArrayOf(
+        1f, 0f, 0f, 0f,
+        0f, 1f, 0f, 0f,
+        0f, 0f, 1f, 0f,
+        0f, 0f, 0f, 1f,
+    )
 
     fun init() {
         oesProgramId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER_OES)
@@ -114,24 +120,44 @@ class OESTextureProgram {
         GLES30.glBindVertexArray(0)
     }
 
-    // 2D 텍스처(FBO)를 화면에 그리기 (Y 재반전, 풀스크린이므로 content scale=1)
-    fun draw2D(textureId: Int) {
+    // 2D 텍스처(FBO)를 그리기 (기본은 Y 재반전 + full fit).
+    // contentScale을 1보다 크게 주면 중앙 기준으로 crop(zoom)된다.
+    fun draw2D(textureId: Int, contentScaleX: Float = 1f, contentScaleY: Float = 1f) {
         GLES30.glUseProgram(twoDProgramId)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
         GLES30.glUniform1i(twoDTextureLoc, 0)
         GLES30.glUniform1f(twoDFlipYLoc, 1.0f)
-        GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
-        GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleXLoc, contentScaleX)
+        GLES30.glUniform1f(twoDContentScaleYLoc, contentScaleY)
 
-        val identity = FloatArray(16).apply {
-            this[0] = 1f; this[5] = 1f; this[10] = 1f; this[15] = 1f
-        }
-        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identity, 0)
+        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identityMatrix, 0)
 
         GLES30.glBindVertexArray(vaoId)
         GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
         GLES30.glBindVertexArray(0)
+    }
+
+    // Canvas로 그린 오버레이 텍스처를 알파 블렌딩으로 위에 합성 (Y 반전 없음)
+    fun draw2DBlend(textureId: Int) {
+        GLES30.glEnable(GLES30.GL_BLEND)
+        GLES30.glBlendFunc(GLES30.GL_SRC_ALPHA, GLES30.GL_ONE_MINUS_SRC_ALPHA)
+
+        GLES30.glUseProgram(twoDProgramId)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
+        GLES30.glUniform1i(twoDTextureLoc, 0)
+        GLES30.glUniform1f(twoDFlipYLoc, 0.0f)
+        GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
+
+        GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identityMatrix, 0)
+
+        GLES30.glBindVertexArray(vaoId)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glBindVertexArray(0)
+
+        GLES30.glDisable(GLES30.GL_BLEND)
     }
 
     fun release() {

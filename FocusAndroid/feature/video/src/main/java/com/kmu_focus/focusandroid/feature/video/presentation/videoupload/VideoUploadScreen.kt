@@ -1,8 +1,9 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoupload
 
+import android.content.Intent
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -21,14 +22,17 @@ fun VideoUploadScreen(
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
-    val videoPickerLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.PickVisualMedia()
-    ) { uri: Uri? ->
-        uri?.let {
-            val uriString = it.toString()
-            viewModel.selectVideo(uriString)
-            onVideoSelected(uriString)
-        }
+    fun handleSelectedVideo(uri: Uri) {
+        val uriString = uri.toString()
+        viewModel.selectVideo(uriString)
+        onVideoSelected(uriString)
+    }
+
+    val galleryPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        val uri = result.data?.data ?: return@rememberLauncherForActivityResult
+        handleSelectedVideo(uri)
     }
 
     Column(
@@ -40,13 +44,17 @@ fun VideoUploadScreen(
     ) {
         Button(
             onClick = {
-                videoPickerLauncher.launch(
-                    PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
-                )
+                val galleryIntent = Intent(
+                    Intent.ACTION_PICK,
+                    MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+                ).apply {
+                    type = "video/*"
+                }
+                galleryPickerLauncher.launch(galleryIntent)
             },
             modifier = Modifier.fillMaxWidth()
         ) {
-            Text("동영상 선택")
+            Text("갤러리에서 동영상 선택")
         }
 
         when {

@@ -1,14 +1,13 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
-import com.kmu_focus.focusandroid.core.ai.data.recognition.ArcFaceEmbeddingExtractor
-import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerOtherClassifier
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
-import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.RecordingUseCase
 import io.mockk.every
 import io.mockk.mockk
 import io.mockk.verify
+import java.io.File
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import kotlinx.coroutines.Dispatchers
@@ -27,10 +26,8 @@ import org.junit.Test
 class VideoPlayerViewModelTest {
 
     private val testDispatcher = StandardTestDispatcher()
-    private val frameProcessor: FrameProcessor = mockk(relaxed = true)
-    private val videoFrameDecoder: VideoFrameDecoder = mockk(relaxed = true)
-    private val embeddingExtractor: ArcFaceEmbeddingExtractor = mockk(relaxed = true)
-    private val ownerClassifier: OwnerOtherClassifier = mockk(relaxed = true)
+    private val recordingUseCase: RecordingUseCase = mockk(relaxed = true)
+    private val playbackAnalysisUseCase: PlaybackAnalysisUseCase = mockk(relaxed = true)
     private lateinit var viewModel: VideoPlayerViewModel
 
     private fun createTestBuffer(width: Int = 640, height: Int = 480): ByteBuffer {
@@ -42,14 +39,9 @@ class VideoPlayerViewModelTest {
     @Before
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
-        every { videoFrameDecoder.getVideoDimensions(any()) } returns null
-        viewModel = VideoPlayerViewModel(
-            frameProcessor,
-            videoFrameDecoder,
-            embeddingExtractor,
-            ownerClassifier,
-            testDispatcher
-        )
+        every { playbackAnalysisUseCase.getVideoDimensions(any()) } returns null
+        every { recordingUseCase.startRecording(any(), any(), any()) } returns Result.success(File.createTempFile("test", ".mp4"))
+        viewModel = VideoPlayerViewModel(recordingUseCase, playbackAnalysisUseCase, testDispatcher)
     }
 
     @After
@@ -184,7 +176,7 @@ class VideoPlayerViewModelTest {
         val buffer = createTestBuffer()
         val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
         val frame = ProcessedFrame(faces, 640, 480, 1000L)
-        every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
+        every { playbackAnalysisUseCase.processFrame(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
@@ -198,7 +190,7 @@ class VideoPlayerViewModelTest {
     fun `processFrameSync 호출 시 frameWidth와 frameHeight가 업데이트됨`() = runTest {
         val buffer = createTestBuffer(1280, 720)
         val frame = ProcessedFrame(emptyList(), 1280, 720, 1000L)
-        every { frameProcessor.process(buffer, 1280, 720, any(), any()) } returns frame
+        every { playbackAnalysisUseCase.processFrame(buffer, 1280, 720, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
@@ -209,12 +201,12 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `isDetecting이 false이면 processFrameSync가 FrameProcessor를 호출하지 않음`() = runTest {
+    fun `isDetecting이 false이면 processFrameSync가 PlaybackAnalysisUseCase를 호출하지 않음`() = runTest {
         val buffer = createTestBuffer()
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
         viewModel.processFrameSync(buffer, 640, 480)
-        verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any(), any()) }
+        verify(exactly = 0) { playbackAnalysisUseCase.processFrame(any<ByteBuffer>(), any(), any(), any(), any()) }
     }
 
     @Test
@@ -223,7 +215,7 @@ class VideoPlayerViewModelTest {
         val faces = listOf(DetectedFace(10, 20, 100, 100, 0.9f))
         val frameWithFaces = ProcessedFrame(faces, 640, 480, 0L)
         val frameEmpty = ProcessedFrame(emptyList(), 640, 480, 100L)
-        every { frameProcessor.process(buffer, 640, 480, any(), any()) } returnsMany listOf(frameWithFaces, frameEmpty)
+        every { playbackAnalysisUseCase.processFrame(buffer, 640, 480, any(), any()) } returnsMany listOf(frameWithFaces, frameEmpty)
 
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
@@ -243,7 +235,7 @@ class VideoPlayerViewModelTest {
             DetectedFace(400, 100, 60, 60, 0.75f)
         )
         val frame = ProcessedFrame(faces, 640, 480, 1000L)
-        every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
+        every { playbackAnalysisUseCase.processFrame(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
@@ -256,28 +248,27 @@ class VideoPlayerViewModelTest {
     }
 
     @Test
-    fun `stopDetection 후 processFrameSync가 FrameProcessor를 호출하지 않음`() = runTest {
+    fun `stopDetection 후 processFrameSync가 PlaybackAnalysisUseCase를 호출하지 않음`() = runTest {
         val buffer = createTestBuffer()
         viewModel.loadVideo("content://video/1")
         advanceUntilIdle()
         viewModel.startDetection()
         viewModel.stopDetection()
         viewModel.processFrameSync(buffer, 640, 480)
-        verify(exactly = 0) { frameProcessor.process(any<ByteBuffer>(), any(), any(), any(), any()) }
+        verify(exactly = 0) { playbackAnalysisUseCase.processFrame(any<ByteBuffer>(), any(), any(), any(), any()) }
     }
 
     @Test
-    fun `processFrameSync 연속 호출 시 매번 FrameProcessor가 호출됨`() = runTest {
+    fun `processFrameSync 연속 호출 시 매번 PlaybackAnalysisUseCase가 호출됨`() {
         val buffer = createTestBuffer()
         val frame = ProcessedFrame(emptyList(), 640, 480, 0L)
-        every { frameProcessor.process(buffer, 640, 480, any(), any()) } returns frame
+        every { playbackAnalysisUseCase.processFrame(buffer, 640, 480, any(), any()) } returns frame
 
         viewModel.loadVideo("content://video/1")
-        advanceUntilIdle()
         viewModel.startDetection()
         viewModel.processFrameSync(buffer, 640, 480)
         viewModel.processFrameSync(buffer, 640, 480)
         viewModel.processFrameSync(buffer, 640, 480)
-        verify(exactly = 3) { frameProcessor.process(buffer, 640, 480, any(), any()) }
+        verify(exactly = 3) { playbackAnalysisUseCase.processFrame(buffer, 640, 480, any(), any()) }
     }
 }
