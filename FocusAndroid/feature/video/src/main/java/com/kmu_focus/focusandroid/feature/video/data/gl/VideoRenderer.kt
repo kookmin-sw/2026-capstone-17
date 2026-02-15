@@ -32,6 +32,7 @@ class VideoRenderer(
 
     private val texMatrix = FloatArray(16)
     private val program = OESTextureProgram()
+    private val mosaicProgram = MosaicProgram()
     private val overlayRenderer = OverlayRenderer()
 
     // FBO 더블 버퍼 (EncoderThread가 읽는 동안 덮어쓰기 방지)
@@ -40,6 +41,11 @@ class VideoRenderer(
     private var fboIndex = 0
     private var viewWidth = 0
     private var viewHeight = 0
+    private var renderContentScaleX = 1f
+    private var renderContentScaleY = 1f
+
+    @Volatile
+    private var contentScaleDirty = true
 
     // glReadPixels용 재사용 버퍼 (GC 방지)
     private var readBuffer: ByteBuffer? = null
@@ -70,6 +76,7 @@ class VideoRenderer(
     fun setVideoSize(width: Int, height: Int) {
         videoWidth = width
         videoHeight = height
+        contentScaleDirty = true
     }
 
     // ExoPlayer.setVideoSurface()는 메인 스레드에서만 호출 가능
@@ -132,6 +139,7 @@ class VideoRenderer(
         surface = Surface(surfaceTexture)
 
         program.init()
+        mosaicProgram.init()
 
         // GL 스레드 → 메인 스레드 전환
         val readySurface = surface!!
@@ -141,6 +149,7 @@ class VideoRenderer(
     override fun onSurfaceChanged(gl: GL10?, width: Int, height: Int) {
         viewWidth = width
         viewHeight = height
+        contentScaleDirty = true
         GLES30.glViewport(0, 0, width, height)
 
         // 기존 FBO 및 오버레이 정리
@@ -188,12 +197,11 @@ class VideoRenderer(
 
             // 2. OES → FBO 렌더링 (더블 버퍼 교대)
             fboIndex = 1 - fboIndex
-            val (scaleX, scaleY) = if (videoWidth > 0 && videoHeight > 0) {
-                val scale = minOf(viewWidth / videoWidth.toFloat(), viewHeight / videoHeight.toFloat())
-                val contentW = videoWidth * scale
-                val contentH = videoHeight * scale
-                Pair(contentW / viewWidth, contentH / viewHeight)
-            } else Pair(1f, 1f)
+            if (contentScaleDirty) {
+                updateRenderContentScale()
+            }
+            val scaleX = renderContentScaleX
+            val scaleY = renderContentScaleY
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[fboIndex])
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
@@ -210,7 +218,26 @@ class VideoRenderer(
                 val frame = onFrameCaptured(buf, viewWidth, viewHeight)
                 processedFrame = frame
 
-                // 5. 검출 결과를 FBO 위에 알파 블렌딩 (실시간 녹화 시 인코더에 박스 포함)
+                // 5. 검출 직후 모자이크 패스 적용 (타원 대상이 있으면 반대편 FBO로 스왑)
+                val ellipses = FaceEllipseCalculator.calculate(frame)
+                if (ellipses.isNotEmpty()) {
+                    val srcTexture = fboTextureIds[fboIndex]
+                    val dstFboIdx = 1 - fboIndex
+                    GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[dstFboIdx])
+                    GLES30.glViewport(0, 0, viewWidth, viewHeight)
+                    GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
+                    mosaicProgram.draw(
+                        inputTexId = srcTexture,
+                        ellipses = ellipses,
+                        blockSize = MOSAIC_BLOCK_SIZE_PX,
+                        viewWidth = viewWidth,
+                        viewHeight = viewHeight
+                    )
+                    fboIndex = dstFboIdx
+                }
+
+                // 6. 검출 결과를 FBO 위에 알파 블렌딩 (실시간 녹화 시 인코더에 박스 포함)
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[fboIndex])
                 if (frame.faces.isNotEmpty()) {
                     val overlayTexId = overlayRenderer.drawOverlay(frame)
                     if (overlayTexId != 0) {
@@ -251,6 +278,7 @@ class VideoRenderer(
         encoderThread.stop()
 
         overlayRenderer.release()
+        mosaicProgram.release()
         program.release()
 
         if (fboIds[0] != 0) {
@@ -339,8 +367,23 @@ class VideoRenderer(
         }
     }
 
+    private fun updateRenderContentScale() {
+        renderContentScaleX = 1f
+        renderContentScaleY = 1f
+
+        if (videoWidth > 0 && videoHeight > 0 && viewWidth > 0 && viewHeight > 0) {
+            val scale = minOf(viewWidth / videoWidth.toFloat(), viewHeight / videoHeight.toFloat())
+            val contentW = videoWidth * scale
+            val contentH = videoHeight * scale
+            renderContentScaleX = contentW / viewWidth.toFloat()
+            renderContentScaleY = contentH / viewHeight.toFloat()
+        }
+        contentScaleDirty = false
+    }
+
     private companion object {
         private const val TAG = "VideoRenderer"
+        private const val MOSAIC_BLOCK_SIZE_PX = 16f
     }
 }
 
