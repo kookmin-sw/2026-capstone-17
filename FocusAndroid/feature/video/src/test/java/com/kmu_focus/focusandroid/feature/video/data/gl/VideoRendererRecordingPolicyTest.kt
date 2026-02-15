@@ -2,6 +2,7 @@ package com.kmu_focus.focusandroid.feature.video.data.gl
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -65,6 +66,31 @@ class VideoRendererRecordingPolicyTest {
         )
 
         assertTrue(shouldSubmit)
+    }
+
+    @Test
+    fun `인코더 버퍼 인덱스는 0에서 1로 토글된다`() {
+        val resolved = nextEncoderBufferIndex(0)
+
+        assertEquals(1, resolved)
+    }
+
+    @Test
+    fun `인코더 버퍼 인덱스는 1에서 0으로 토글된다`() {
+        val resolved = nextEncoderBufferIndex(1)
+
+        assertEquals(0, resolved)
+    }
+
+    @Test
+    fun `인코더 버퍼 인덱스는 연속 호출 시 0과 1을 반복한다`() {
+        val first = nextEncoderBufferIndex(0)
+        val second = nextEncoderBufferIndex(first)
+        val third = nextEncoderBufferIndex(second)
+
+        assertEquals(1, first)
+        assertEquals(0, second)
+        assertEquals(1, third)
     }
 
     private fun processedFrameWithNoFaces(): ProcessedFrame = ProcessedFrame(

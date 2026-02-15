@@ -16,9 +16,9 @@ import javax.microedition.khronos.egl.EGLConfig
 import javax.microedition.khronos.opengles.GL10
 
 /**
- * 동기 파이프라인: FBO 렌더링 → glReadPixels(동기) → 검출 콜백 → 오버레이 합성 → 화면/인코더.
- * 검출 완료 후에 화면을 그리므로 박스와 영상이 완벽 동기화.
- * 실시간 녹화 시 FBO에 박스를 합성하여 인코더에 저장 (트랜스코딩과 동일).
+ * 동기 파이프라인: FBO 렌더링 → glReadPixels(동기) → 검출 콜백 → (인코더/프리뷰 분기) → 화면/인코더.
+ * 검출 완료 후에 화면을 그리므로 프리뷰 오버레이와 영상이 동기화된다.
+ * 프리뷰는 단일 FBO(박스 오버레이), 인코더는 전용 더블 버퍼 FBO(모자이크 경로)로 분리한다.
  */
 class VideoRenderer(
     private val onFrameCaptured: (ByteBuffer, Int, Int) -> ProcessedFrame,
@@ -35,10 +35,14 @@ class VideoRenderer(
     private val mosaicProgram = MosaicProgram()
     private val overlayRenderer = OverlayRenderer()
 
-    // FBO 더블 버퍼 (EncoderThread가 읽는 동안 덮어쓰기 방지)
-    private val fboIds = IntArray(2)
-    private val fboTextureIds = IntArray(2)
-    private var fboIndex = 0
+    // 프리뷰용 단일 FBO
+    private var previewFboId = 0
+    private var previewFboTextureId = 0
+
+    // 인코더용 더블 버퍼 FBO (EncoderThread 읽기와 쓰기 충돌 방지)
+    private val encoderFboIds = IntArray(2)
+    private val encoderFboTextureIds = IntArray(2)
+    private var encoderFboWriteIndex = 0
     private var viewWidth = 0
     private var viewHeight = 0
     private var renderContentScaleX = 1f
@@ -154,27 +158,57 @@ class VideoRenderer(
 
         // 기존 FBO 및 오버레이 정리
         overlayRenderer.release()
-        if (fboIds[0] != 0) {
-            GLES30.glDeleteFramebuffers(2, fboIds, 0)
-            GLES30.glDeleteTextures(2, fboTextureIds, 0)
-            fboIds[0] = 0
-            fboIds[1] = 0
-            fboTextureIds[0] = 0
-            fboTextureIds[1] = 0
-        }
+        releaseFramebuffers()
 
-        // FBO 더블 버퍼 생성
-        GLES30.glGenTextures(2, fboTextureIds, 0)
-        GLES30.glGenFramebuffers(2, fboIds, 0)
+        // 프리뷰용 단일 FBO 생성
+        val previewTextureIds = IntArray(1)
+        val previewFramebufferIds = IntArray(1)
+        GLES30.glGenTextures(1, previewTextureIds, 0)
+        GLES30.glGenFramebuffers(1, previewFramebufferIds, 0)
+        previewFboTextureId = previewTextureIds[0]
+        previewFboId = previewFramebufferIds[0]
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, previewFboTextureId)
+        GLES30.glTexImage2D(
+            GLES30.GL_TEXTURE_2D,
+            0,
+            GLES30.GL_RGBA,
+            width,
+            height,
+            0,
+            GLES30.GL_RGBA,
+            GLES30.GL_UNSIGNED_BYTE,
+            null
+        )
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
+        GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
+        GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, previewFboId)
+        GLES30.glFramebufferTexture2D(
+            GLES30.GL_FRAMEBUFFER,
+            GLES30.GL_COLOR_ATTACHMENT0,
+            GLES30.GL_TEXTURE_2D,
+            previewFboTextureId,
+            0
+        )
+
+        // 인코더용 더블 버퍼 FBO 생성
+        GLES30.glGenTextures(2, encoderFboTextureIds, 0)
+        GLES30.glGenFramebuffers(2, encoderFboIds, 0)
         for (i in 0..1) {
-            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, fboTextureIds[i])
+            GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, encoderFboTextureIds[i])
             GLES30.glTexImage2D(GLES30.GL_TEXTURE_2D, 0, GLES30.GL_RGBA, width, height, 0, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, null)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MIN_FILTER, GLES30.GL_LINEAR)
             GLES30.glTexParameteri(GLES30.GL_TEXTURE_2D, GLES30.GL_TEXTURE_MAG_FILTER, GLES30.GL_LINEAR)
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[i])
-            GLES30.glFramebufferTexture2D(GLES30.GL_FRAMEBUFFER, GLES30.GL_COLOR_ATTACHMENT0, GLES30.GL_TEXTURE_2D, fboTextureIds[i], 0)
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, encoderFboIds[i])
+            GLES30.glFramebufferTexture2D(
+                GLES30.GL_FRAMEBUFFER,
+                GLES30.GL_COLOR_ATTACHMENT0,
+                GLES30.GL_TEXTURE_2D,
+                encoderFboTextureIds[i],
+                0
+            )
         }
         GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
+        encoderFboWriteIndex = 0
 
         // glReadPixels용 버퍼 재할당
         readBuffer = ByteBuffer.allocateDirect(width * height * 4).apply {
@@ -195,20 +229,20 @@ class VideoRenderer(
             surfaceTexture?.getTransformMatrix(texMatrix)
             val frameTimestampNs = surfaceTexture?.timestamp ?: 0L
 
-            // 2. OES → FBO 렌더링 (더블 버퍼 교대)
-            fboIndex = 1 - fboIndex
+            // 2. OES → 프리뷰 FBO 렌더링
             if (contentScaleDirty) {
                 updateRenderContentScale()
             }
             val scaleX = renderContentScaleX
             val scaleY = renderContentScaleY
-            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[fboIndex])
+            GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, previewFboId)
             GLES30.glViewport(0, 0, viewWidth, viewHeight)
             GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
             program.drawOES(oesTextureId, texMatrix, scaleX, scaleY)
 
             // 3. glReadPixels 동기 읽기 (재사용 버퍼, GC 없음)
             var processedFrame: ProcessedFrame? = null
+            var encoderTextureIdForSubmit = 0
             readBuffer?.let { buf ->
                 buf.clear()
                 GLES30.glReadPixels(0, 0, viewWidth, viewHeight, GLES30.GL_RGBA, GLES30.GL_UNSIGNED_BYTE, buf)
@@ -218,26 +252,25 @@ class VideoRenderer(
                 val frame = onFrameCaptured(buf, viewWidth, viewHeight)
                 processedFrame = frame
 
-                // 5. 검출 직후 모자이크 패스 적용 (타원 대상이 있으면 반대편 FBO로 스왑)
-                val ellipses = FaceEllipseCalculator.calculate(frame)
-                if (ellipses.isNotEmpty()) {
-                    val srcTexture = fboTextureIds[fboIndex]
-                    val dstFboIdx = 1 - fboIndex
-                    GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[dstFboIdx])
+                // 5. 인코더용 FBO: 전용 더블 버퍼에 모자이크/패스스루 렌더
+                if (shouldSubmitFrameForRecording(recordingEnabled, frame)) {
+                    encoderFboWriteIndex = nextEncoderBufferIndex(encoderFboWriteIndex)
+                    val ellipses = FaceEllipseCalculator.calculate(frame)
+                    GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, encoderFboIds[encoderFboWriteIndex])
                     GLES30.glViewport(0, 0, viewWidth, viewHeight)
                     GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
                     mosaicProgram.draw(
-                        inputTexId = srcTexture,
+                        inputTexId = previewFboTextureId,
                         ellipses = ellipses,
                         blockSize = MOSAIC_BLOCK_SIZE_PX,
                         viewWidth = viewWidth,
                         viewHeight = viewHeight
                     )
-                    fboIndex = dstFboIdx
+                    encoderTextureIdForSubmit = encoderFboTextureIds[encoderFboWriteIndex]
                 }
 
-                // 6. 검출 결과를 FBO 위에 알파 블렌딩 (실시간 녹화 시 인코더에 박스 포함)
-                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, fboIds[fboIndex])
+                // 6. 프리뷰용 FBO: 박스 오버레이만 합성 (모자이크 없음)
+                GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, previewFboId)
                 if (frame.faces.isNotEmpty()) {
                     val overlayTexId = overlayRenderer.drawOverlay(frame)
                     if (overlayTexId != 0) {
@@ -249,9 +282,9 @@ class VideoRenderer(
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
 
             // 얼굴 미검출 프레임도 녹화는 지속한다.
-            if (shouldSubmitFrameForRecording(recordingEnabled, processedFrame)) {
+            if (shouldSubmitFrameForRecording(recordingEnabled, processedFrame) && encoderTextureIdForSubmit != 0) {
                 submitFrameToEncoderThread(
-                    textureId = fboTextureIds[fboIndex],
+                    textureId = encoderTextureIdForSubmit,
                     frameTimestampNs = frameTimestampNs,
                     contentScaleX = scaleX,
                     contentScaleY = scaleY,
@@ -259,10 +292,10 @@ class VideoRenderer(
             }
         }
 
-        // 6. FBO → 화면 렌더링 (검출 완료 후 표시)
+        // 7. 프리뷰 FBO → 화면 렌더링 (검출 완료 후 표시)
         GLES30.glViewport(0, 0, viewWidth, viewHeight)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        program.draw2D(fboTextureIds[fboIndex])
+        program.draw2D(previewFboTextureId)
     }
 
     override fun onFrameAvailable(st: SurfaceTexture?) {
@@ -280,15 +313,7 @@ class VideoRenderer(
         overlayRenderer.release()
         mosaicProgram.release()
         program.release()
-
-        if (fboIds[0] != 0) {
-            GLES30.glDeleteFramebuffers(2, fboIds, 0)
-            GLES30.glDeleteTextures(2, fboTextureIds, 0)
-            fboIds[0] = 0
-            fboIds[1] = 0
-            fboTextureIds[0] = 0
-            fboTextureIds[1] = 0
-        }
+        releaseFramebuffers()
         if (oesTextureId != 0) {
             GLES30.glDeleteTextures(1, intArrayOf(oesTextureId), 0)
         }
@@ -381,6 +406,27 @@ class VideoRenderer(
         contentScaleDirty = false
     }
 
+    private fun releaseFramebuffers() {
+        if (previewFboId != 0) {
+            GLES30.glDeleteFramebuffers(1, intArrayOf(previewFboId), 0)
+            previewFboId = 0
+        }
+        if (previewFboTextureId != 0) {
+            GLES30.glDeleteTextures(1, intArrayOf(previewFboTextureId), 0)
+            previewFboTextureId = 0
+        }
+        if (encoderFboIds[0] != 0 || encoderFboIds[1] != 0) {
+            GLES30.glDeleteFramebuffers(2, encoderFboIds, 0)
+            encoderFboIds[0] = 0
+            encoderFboIds[1] = 0
+        }
+        if (encoderFboTextureIds[0] != 0 || encoderFboTextureIds[1] != 0) {
+            GLES30.glDeleteTextures(2, encoderFboTextureIds, 0)
+            encoderFboTextureIds[0] = 0
+            encoderFboTextureIds[1] = 0
+        }
+    }
+
     private companion object {
         private const val TAG = "VideoRenderer"
         private const val MOSAIC_BLOCK_SIZE_PX = 16f
@@ -391,3 +437,5 @@ internal fun shouldSubmitFrameForRecording(
     recordingEnabled: Boolean,
     processedFrame: ProcessedFrame?
 ): Boolean = recordingEnabled && processedFrame != null
+
+internal fun nextEncoderBufferIndex(currentIndex: Int): Int = 1 - currentIndex
