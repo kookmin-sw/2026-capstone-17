@@ -120,15 +120,16 @@ class OESTextureProgram {
         GLES30.glBindVertexArray(0)
     }
 
-    // 2D 텍스처(FBO)를 화면에 그리기 (Y 재반전, 풀스크린이므로 content scale=1)
-    fun draw2D(textureId: Int) {
+    // 2D 텍스처(FBO)를 그리기 (기본은 Y 재반전 + full fit).
+    // contentScale을 1보다 크게 주면 중앙 기준으로 crop(zoom)된다.
+    fun draw2D(textureId: Int, contentScaleX: Float = 1f, contentScaleY: Float = 1f) {
         GLES30.glUseProgram(twoDProgramId)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, textureId)
         GLES30.glUniform1i(twoDTextureLoc, 0)
         GLES30.glUniform1f(twoDFlipYLoc, 1.0f)
-        GLES30.glUniform1f(twoDContentScaleXLoc, 1.0f)
-        GLES30.glUniform1f(twoDContentScaleYLoc, 1.0f)
+        GLES30.glUniform1f(twoDContentScaleXLoc, contentScaleX)
+        GLES30.glUniform1f(twoDContentScaleYLoc, contentScaleY)
 
         GLES30.glUniformMatrix4fv(twoDTexMatrixLoc, 1, false, identityMatrix, 0)
 

@@ -64,6 +64,7 @@ class VideoRenderer(
     private var encoderHeight: Int = 0
 
     private var recordingEnabled: Boolean = false
+    private var lastEncoderTimestampNs: Long = Long.MIN_VALUE
 
     /** 영상 해상도 설정 시 FBO에 fit(letter-box)로 렌더하여 종횡비 왜곡 제거. 0이면 보정 없음. */
     fun setVideoSize(width: Int, height: Int) {
@@ -97,10 +98,12 @@ class VideoRenderer(
             encoderSurface = null
             encoderWidth = 0
             encoderHeight = 0
+            lastEncoderTimestampNs = Long.MIN_VALUE
             encoderThread.stop()
         } else {
             if (encoderSurface !== surface) {
                 encoderThread.stop()
+                lastEncoderTimestampNs = Long.MIN_VALUE
             }
             encoderSurface = surface
             encoderWidth = width
@@ -181,6 +184,7 @@ class VideoRenderer(
             // 1. SurfaceTexture 업데이트
             surfaceTexture?.updateTexImage()
             surfaceTexture?.getTransformMatrix(texMatrix)
+            val frameTimestampNs = surfaceTexture?.timestamp ?: 0L
 
             // 2. OES → FBO 렌더링 (더블 버퍼 교대)
             fboIndex = 1 - fboIndex
@@ -217,9 +221,14 @@ class VideoRenderer(
 
             GLES30.glBindFramebuffer(GLES30.GL_FRAMEBUFFER, 0)
 
-            // 검출된 프레임만 인코더에 제출 (박스 누락 프레임 방지)
-            if (recordingEnabled && processedFrame?.faces?.isNotEmpty() == true) {
-                submitFrameToEncoderThread(fboTextureIds[fboIndex])
+            // 얼굴 미검출 프레임도 녹화는 지속한다.
+            if (shouldSubmitFrameForRecording(recordingEnabled, processedFrame)) {
+                submitFrameToEncoderThread(
+                    textureId = fboTextureIds[fboIndex],
+                    frameTimestampNs = frameTimestampNs,
+                    contentScaleX = scaleX,
+                    contentScaleY = scaleY,
+                )
             }
         }
 
@@ -263,7 +272,12 @@ class VideoRenderer(
         readBuffer = null
     }
 
-    private fun submitFrameToEncoderThread(textureId: Int) {
+    private fun submitFrameToEncoderThread(
+        textureId: Int,
+        frameTimestampNs: Long,
+        contentScaleX: Float,
+        contentScaleY: Float,
+    ) {
         val targetSurface = encoderSurface ?: return
         val targetWidth = encoderWidth
         val targetHeight = encoderHeight
@@ -281,13 +295,23 @@ class VideoRenderer(
             return
         }
 
+        val baseTimestampNs = if (frameTimestampNs > 0L) frameTimestampNs else System.nanoTime()
+        val timestampNs = if (lastEncoderTimestampNs == Long.MIN_VALUE) {
+            baseTimestampNs
+        } else {
+            maxOf(baseTimestampNs, lastEncoderTimestampNs + 1_000L)
+        }
+        lastEncoderTimestampNs = timestampNs
+
         GLES30.glFlush()
         encoderThread.submitFrame(
             fboTextureId = textureId,
             fenceSync = fenceSync,
-            timestampNs = System.nanoTime(),
+            timestampNs = timestampNs,
             width = targetWidth,
             height = targetHeight,
+            contentScaleX = contentScaleX,
+            contentScaleY = contentScaleY,
         )
     }
 
@@ -319,3 +343,8 @@ class VideoRenderer(
         private const val TAG = "VideoRenderer"
     }
 }
+
+internal fun shouldSubmitFrameForRecording(
+    recordingEnabled: Boolean,
+    processedFrame: ProcessedFrame?
+): Boolean = recordingEnabled && processedFrame != null

@@ -22,6 +22,8 @@ open class EncoderThread(
         val timestampNs: Long,
         val width: Int,
         val height: Int,
+        val contentScaleX: Float,
+        val contentScaleY: Float,
     )
 
     private val frameLock = Object()
@@ -40,6 +42,12 @@ open class EncoderThread(
 
     @Volatile
     private var frameHeight: Int = 0
+
+    @Volatile
+    private var frameContentScaleX: Float = 1f
+
+    @Volatile
+    private var frameContentScaleY: Float = 1f
 
     // frameLock으로 보호
     private var pendingFrame: PendingFrame? = null
@@ -109,6 +117,8 @@ open class EncoderThread(
         timestampNs: Long,
         width: Int = 0,
         height: Int = 0,
+        contentScaleX: Float = 1f,
+        contentScaleY: Float = 1f,
     ) {
         if (fenceSync == 0L) return
         if (!running) {
@@ -138,6 +148,8 @@ open class EncoderThread(
                 timestampNs = timestampNs,
                 width = width,
                 height = height,
+                contentScaleX = contentScaleX,
+                contentScaleY = contentScaleY,
             )
             frameLock.notifyAll()
         }
@@ -182,12 +194,32 @@ open class EncoderThread(
             return
         }
 
+        // 화면에서 fit(letter/pillar-box)된 결과를 녹화할 때 여백 제거를 위해
+        // 인코더 출력에서만 중앙 crop(zoom) 적용.
+        val encoderScaleX = if (frameContentScaleX > 0f) {
+            (1f / frameContentScaleX).coerceAtLeast(1f)
+        } else {
+            1f
+        }
+        val encoderScaleY = if (frameContentScaleY > 0f) {
+            (1f / frameContentScaleY).coerceAtLeast(1f)
+        } else {
+            1f
+        }
+
         GLES30.glViewport(0, 0, w, h)
         GLES30.glClear(GLES30.GL_COLOR_BUFFER_BIT)
-        textureProgram?.draw2D(fboTextureId)
+        textureProgram?.draw2D(
+            textureId = fboTextureId,
+            contentScaleX = encoderScaleX,
+            contentScaleY = encoderScaleY,
+        )
         renderedFrameCount++
         if (renderedFrameCount <= 3 || renderedFrameCount % 30 == 0) {
-            Log.w(loggerTag, "renderToEncoder done: fbo=$fboTextureId size=${w}x$h rendered=$renderedFrameCount")
+            Log.w(
+                loggerTag,
+                "renderToEncoder done: fbo=$fboTextureId size=${w}x$h rendered=$renderedFrameCount scale=${encoderScaleX}x$encoderScaleY",
+            )
         }
     }
 
@@ -247,6 +279,8 @@ open class EncoderThread(
 
                 frameWidth = frame.width
                 frameHeight = frame.height
+                frameContentScaleX = frame.contentScaleX
+                frameContentScaleY = frame.contentScaleY
 
                 makeCurrent()
                 waitForFence(frame.fenceSync)
