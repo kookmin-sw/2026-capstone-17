@@ -2,7 +2,9 @@ package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
+import com.kmu_focus.focusandroid.feature.video.domain.usecase.RegisterOwnerDuringPlaybackUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RecordingUseCase
 import io.mockk.every
 import io.mockk.mockk
@@ -28,6 +30,8 @@ class VideoPlayerViewModelTest {
     private val testDispatcher = StandardTestDispatcher()
     private val recordingUseCase: RecordingUseCase = mockk(relaxed = true)
     private val playbackAnalysisUseCase: PlaybackAnalysisUseCase = mockk(relaxed = true)
+    private val registerOwnerDuringPlaybackUseCase: RegisterOwnerDuringPlaybackUseCase = mockk(relaxed = true)
+    private val addOwnerFromUriUseCase: AddOwnerFromUriUseCase = mockk(relaxed = true)
     private lateinit var viewModel: VideoPlayerViewModel
 
     private fun createTestBuffer(width: Int = 640, height: Int = 480): ByteBuffer {
@@ -41,7 +45,13 @@ class VideoPlayerViewModelTest {
         Dispatchers.setMain(testDispatcher)
         every { playbackAnalysisUseCase.getVideoDimensions(any()) } returns null
         every { recordingUseCase.startRecording(any(), any(), any()) } returns Result.success(File.createTempFile("test", ".mp4"))
-        viewModel = VideoPlayerViewModel(recordingUseCase, playbackAnalysisUseCase, testDispatcher)
+        viewModel = VideoPlayerViewModel(
+            recordingUseCase,
+            playbackAnalysisUseCase,
+            registerOwnerDuringPlaybackUseCase,
+            addOwnerFromUriUseCase,
+            testDispatcher,
+        )
     }
 
     @After

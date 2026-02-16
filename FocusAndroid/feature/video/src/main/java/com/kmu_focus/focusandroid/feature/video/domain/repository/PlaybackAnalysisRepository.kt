@@ -18,5 +18,21 @@ interface PlaybackAnalysisRepository {
         glResult: ProcessedFrame,
     ): Map<Int, Boolean?>
 
+    suspend fun extractEmbeddingForTrack(
+        uri: String,
+        positionMs: Long,
+        glResult: ProcessedFrame,
+        trackId: Int,
+    ): FloatArray?
+
+    suspend fun saveFaceSnapshotForTrack(
+        uri: String,
+        positionMs: Long,
+        glResult: ProcessedFrame,
+        trackId: Int,
+    ): String?
+
+    fun deleteTemporaryFaceSnapshot(snapshotUri: String): Boolean
+
     fun getVideoDimensions(uri: String): Pair<Int, Int>?
 }

@@ -1,25 +1,31 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import android.view.Surface
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.layout.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.exoplayer.ExoPlayer
+import coil.compose.AsyncImage
 import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import kotlinx.coroutines.delay
 import android.util.Log
+import androidx.compose.ui.platform.LocalContext
 
 @Composable
 fun VideoPlayerScreen(
@@ -33,6 +39,7 @@ fun VideoPlayerScreen(
     onPlaybackEnded: (java.io.File?) -> Unit = {}
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     var glViewRef by remember { mutableStateOf<VideoGLSurfaceView?>(null) }
     val exoPlayer = rememberExoPlayer(
         uriString = videoUri,
@@ -65,6 +72,11 @@ fun VideoPlayerScreen(
 
     LaunchedEffect(videoUri) {
         viewModel.loadVideo(videoUri)
+    }
+
+    LaunchedEffect(uiState.lastRegisteredOwnerImageUri) {
+        if (uiState.lastRegisteredOwnerImageUri == null) return@LaunchedEffect
+        Toast.makeText(context, "등록 얼굴 이미지를 임시 저장했습니다.", Toast.LENGTH_SHORT).show()
     }
 
     LaunchedEffect(uiState.isPlaying, exoPlayer, videoUri) {
@@ -104,6 +116,50 @@ fun VideoPlayerScreen(
                     trackingIds = uiState.trackingIds,
                     modifier = Modifier.matchParentSize()
                 )
+                FaceTouchOverlay(
+                    faces = uiState.detectedFaces,
+                    trackingIds = uiState.trackingIds,
+                    frameWidth = uiState.frameWidth,
+                    frameHeight = uiState.frameHeight,
+                    onFaceTapped = { trackId, faceIndex ->
+                        viewModel.registerOwnerByTrackId(
+                            trackId = trackId,
+                            fallbackFaceIndex = faceIndex,
+                            positionMsHint = exoPlayer.currentPosition.coerceAtLeast(0L),
+                        )
+                    },
+                    modifier = Modifier.matchParentSize(),
+                )
+            }
+
+            uiState.lastRegisteredOwnerImageUri?.let { savedImageUri ->
+                Card(
+                    modifier = Modifier
+                        .align(Alignment.TopStart)
+                        .padding(12.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = Color.Black.copy(alpha = 0.55f),
+                    ),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "최근 등록 이미지",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White,
+                        )
+                        AsyncImage(
+                            model = savedImageUri,
+                            contentDescription = "등록된 얼굴 이미지",
+                            modifier = Modifier
+                                .size(88.dp)
+                                .clip(RoundedCornerShape(8.dp)),
+                            contentScale = ContentScale.Crop,
+                        )
+                    }
+                }
             }
 
             if (isFullScreen) {

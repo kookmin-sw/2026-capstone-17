@@ -31,6 +31,7 @@ class YuNetOpenCVDetector @Inject constructor(
     private var bgrMat: Mat? = null
     private var smallMat: Mat? = null
     private var facesMat: Mat? = null
+    private val detectorLock = Any()
 
     private fun ensureInitialized() {
         if (detector != null) return
@@ -47,69 +48,73 @@ class YuNetOpenCVDetector @Inject constructor(
     }
 
     override fun detectFaces(frame: Bitmap): List<DetectedFace> {
-        ensureInitialized()
-        val det = detector ?: return emptyList()
+        return synchronized(detectorLock) {
+            ensureInitialized()
+            val det = detector ?: return@synchronized emptyList()
 
-        return try {
-            val orgMat = originalMat ?: Mat().also { originalMat = it }
-            Utils.bitmapToMat(frame, orgMat)
+            try {
+                val orgMat = originalMat ?: Mat().also { originalMat = it }
+                Utils.bitmapToMat(frame, orgMat)
 
-            val bgr = bgrMat ?: Mat().also { bgrMat = it }
-            if (orgMat.type() == CvType.CV_8UC4 && orgMat.channels() == 4) {
-                Imgproc.cvtColor(orgMat, bgr, Imgproc.COLOR_RGBA2BGR)
-            } else {
-                Imgproc.cvtColor(orgMat, bgr, Imgproc.COLOR_RGB2BGR)
-            }
-
-            val origWidth = bgr.cols().coerceAtLeast(1)
-            val origHeight = bgr.rows().coerceAtLeast(1)
-            val shortSide = minOf(origWidth, origHeight).coerceAtLeast(1)
-            val scale = config.inputSize.toFloat() / shortSide.toFloat()
-            val smallWidth = (origWidth * scale).roundToInt().coerceAtLeast(1)
-            val smallHeight = (origHeight * scale).roundToInt().coerceAtLeast(1)
-
-            val small = smallMat ?: Mat().also { smallMat = it }
-            Imgproc.resize(bgr, small, Size(smallWidth.toDouble(), smallHeight.toDouble()))
-
-            det.setInputSize(Size(small.cols().toDouble(), small.rows().toDouble()))
-
-            val faces = facesMat ?: Mat().also { facesMat = it }
-            det.detect(small, faces)
-
-            if (faces.rows() > 0 && faces.cols() >= 15) {
-                val rows = (0 until faces.rows()).map { i ->
-                    FloatArray(15).also { data -> faces.row(i).get(0, 0, data) }
+                val bgr = bgrMat ?: Mat().also { bgrMat = it }
+                if (orgMat.type() == CvType.CV_8UC4 && orgMat.channels() == 4) {
+                    Imgproc.cvtColor(orgMat, bgr, Imgproc.COLOR_RGBA2BGR)
+                } else {
+                    Imgproc.cvtColor(orgMat, bgr, Imgproc.COLOR_RGB2BGR)
                 }
-                val scaleBack = 1f / scale
-                parseFaceOutput(rows, scaleBack, scaleBack).map { face ->
-                    val cx = face.x.coerceIn(0, frame.width - 1)
-                    val cy = face.y.coerceIn(0, frame.height - 1)
-                    face.copy(
-                        x = cx,
-                        y = cy,
-                        width = face.width.coerceIn(1, frame.width - cx),
-                        height = face.height.coerceIn(1, frame.height - cy)
-                    )
+
+                val origWidth = bgr.cols().coerceAtLeast(1)
+                val origHeight = bgr.rows().coerceAtLeast(1)
+                val shortSide = minOf(origWidth, origHeight).coerceAtLeast(1)
+                val scale = config.inputSize.toFloat() / shortSide.toFloat()
+                val smallWidth = (origWidth * scale).roundToInt().coerceAtLeast(1)
+                val smallHeight = (origHeight * scale).roundToInt().coerceAtLeast(1)
+
+                val small = smallMat ?: Mat().also { smallMat = it }
+                Imgproc.resize(bgr, small, Size(smallWidth.toDouble(), smallHeight.toDouble()))
+
+                det.setInputSize(Size(small.cols().toDouble(), small.rows().toDouble()))
+
+                val faces = facesMat ?: Mat().also { facesMat = it }
+                det.detect(small, faces)
+
+                if (faces.rows() > 0 && faces.cols() >= 15) {
+                    val rows = (0 until faces.rows()).map { i ->
+                        FloatArray(15).also { data -> faces.row(i).get(0, 0, data) }
+                    }
+                    val scaleBack = 1f / scale
+                    parseFaceOutput(rows, scaleBack, scaleBack).map { face ->
+                        val cx = face.x.coerceIn(0, frame.width - 1)
+                        val cy = face.y.coerceIn(0, frame.height - 1)
+                        face.copy(
+                            x = cx,
+                            y = cy,
+                            width = face.width.coerceIn(1, frame.width - cx),
+                            height = face.height.coerceIn(1, frame.height - cy)
+                        )
+                    }
+                } else {
+                    emptyList()
                 }
-            } else {
+            } catch (e: Exception) {
+                Log.e(TAG, "얼굴 검출 실패", e)
                 emptyList()
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "얼굴 검출 실패", e)
-            emptyList()
         }
     }
 
     override fun release() {
-        detector = null
-        originalMat?.release()
-        bgrMat?.release()
-        smallMat?.release()
-        facesMat?.release()
-        originalMat = null
-        bgrMat = null
-        smallMat = null
-        facesMat = null
+        synchronized(detectorLock) {
+            detector = null
+            originalMat?.release()
+            bgrMat?.release()
+            smallMat?.release()
+            facesMat?.release()
+            originalMat = null
+            bgrMat = null
+            smallMat = null
+            facesMat = null
+        }
     }
 
     override fun getDetectorType(): String = "YuNet OpenCV (CPU)"
