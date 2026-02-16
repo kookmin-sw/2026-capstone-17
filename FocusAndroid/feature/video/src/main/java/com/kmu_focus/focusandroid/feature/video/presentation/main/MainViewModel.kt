@@ -83,6 +83,11 @@ class MainViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(addedOwnerUris = emptyList())
     }
 
+    fun resetAfterSave() {
+        clearOwners()
+        onClearSelection()
+    }
+
     fun setAddOwnerResult(result: AddOwnerResult) {
         _uiState.value = _uiState.value.copy(addOwnerResult = result)
     }

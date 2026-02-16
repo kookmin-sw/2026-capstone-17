@@ -67,6 +67,54 @@ class VideoPlayerViewModelTest {
         assertFalse(viewModel.uiState.value.isDetecting)
     }
 
+    @Test
+    fun `초기 상태에서 컨트롤 메뉴는 닫혀있다`() = runTest {
+        val state = viewModel.uiState.value
+        assertFalse(state.isControlMenuExpanded)
+    }
+
+    @Test
+    fun `toggleControlMenu 호출 시 메뉴가 열린다`() = runTest {
+        viewModel.toggleControlMenu()
+        assertTrue(viewModel.uiState.value.isControlMenuExpanded)
+    }
+
+    @Test
+    fun `메뉴가 열린 상태에서 toggleControlMenu 호출 시 메뉴가 닫힌다`() = runTest {
+        viewModel.toggleControlMenu()
+        assertTrue(viewModel.uiState.value.isControlMenuExpanded)
+
+        viewModel.toggleControlMenu()
+        assertFalse(viewModel.uiState.value.isControlMenuExpanded)
+    }
+
+    @Test
+    fun `closeControlMenu 호출 시 메뉴가 닫힌다`() = runTest {
+        viewModel.toggleControlMenu()
+        assertTrue(viewModel.uiState.value.isControlMenuExpanded)
+
+        viewModel.closeControlMenu()
+        assertFalse(viewModel.uiState.value.isControlMenuExpanded)
+    }
+
+    @Test
+    fun `togglePlayback 호출 시 컨트롤 메뉴가 닫힌다`() = runTest {
+        viewModel.toggleControlMenu()
+        assertTrue(viewModel.uiState.value.isControlMenuExpanded)
+
+        viewModel.togglePlayback()
+        assertFalse(viewModel.uiState.value.isControlMenuExpanded)
+    }
+
+    @Test
+    fun `stopPlayback 호출 시 컨트롤 메뉴가 닫힌다`() = runTest {
+        viewModel.toggleControlMenu()
+        assertTrue(viewModel.uiState.value.isControlMenuExpanded)
+
+        viewModel.stopPlayback()
+        assertFalse(viewModel.uiState.value.isControlMenuExpanded)
+    }
+
     // --- loadVideo 테스트 ---
 
     @Test
