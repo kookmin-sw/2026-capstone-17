@@ -23,6 +23,7 @@ import javax.inject.Inject
 data class VideoPlayerUiState(
     val videoUri: String = "",
     val isPlaying: Boolean = false,
+    val isControlMenuExpanded: Boolean = false,
     val isDetecting: Boolean = false,
     val detectedFaces: List<DetectedFace> = emptyList(),
     val faceLabels: List<Boolean?> = emptyList(),
@@ -89,7 +90,10 @@ class VideoPlayerViewModel @Inject constructor(
 
     fun togglePlayback() {
         val newIsPlaying = !_uiState.value.isPlaying
-        _uiState.value = _uiState.value.copy(isPlaying = newIsPlaying)
+        _uiState.value = _uiState.value.copy(
+            isPlaying = newIsPlaying,
+            isControlMenuExpanded = false,
+        )
 
         if (newIsPlaying) {
             startDetection()
@@ -100,7 +104,20 @@ class VideoPlayerViewModel @Inject constructor(
 
     fun stopPlayback() {
         stopDetection()
-        _uiState.value = _uiState.value.copy(isPlaying = false)
+        _uiState.value = _uiState.value.copy(
+            isPlaying = false,
+            isControlMenuExpanded = false,
+        )
+    }
+
+    fun toggleControlMenu() {
+        _uiState.value = _uiState.value.copy(
+            isControlMenuExpanded = !_uiState.value.isControlMenuExpanded,
+        )
+    }
+
+    fun closeControlMenu() {
+        _uiState.value = _uiState.value.copy(isControlMenuExpanded = false)
     }
 
     private fun startRecording() {

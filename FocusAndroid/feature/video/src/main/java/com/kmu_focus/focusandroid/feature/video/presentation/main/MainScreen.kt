@@ -22,6 +22,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -47,6 +48,8 @@ fun MainScreen(
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val saveViewModel: VideoSaveViewModel = hiltViewModel()
+    val saveUiState by saveViewModel.uiState.collectAsStateWithLifecycle()
     val context = LocalContext.current
 
     val multiPickerLauncher = rememberLauncherForActivityResult(
@@ -80,12 +83,27 @@ fun MainScreen(
 
     var isVideoFullScreen by remember { mutableStateOf(false) }
     val activity = context as? Activity
+    val initialRequestedOrientation = remember(activity) {
+        activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+    }
 
-    LaunchedEffect(isVideoFullScreen) {
+    LaunchedEffect(activity, isVideoFullScreen) {
         activity?.requestedOrientation = if (isVideoFullScreen) {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
-            ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            initialRequestedOrientation
+        }
+    }
+
+    DisposableEffect(activity, initialRequestedOrientation) {
+        onDispose {
+            activity?.requestedOrientation = initialRequestedOrientation
+        }
+    }
+
+    LaunchedEffect(saveUiState.savedFilePath) {
+        if (saveUiState.savedFilePath != null) {
+            viewModel.resetAfterSave()
         }
     }
 
@@ -131,19 +149,22 @@ fun MainScreen(
             VideoUploadScreen(
                 onVideoSelected = { uri -> viewModel.onVideoSelected(uri) }
             )
-        }
 
-        uiState.selectedVideoUri?.let { uri ->
-            val saveViewModel: VideoSaveViewModel = hiltViewModel()
-
-            if (!isVideoFullScreen) {
+            if (
+                uiState.selectedVideoUri != null ||
+                saveUiState.isSaving ||
+                saveUiState.savedFilePath != null ||
+                saveUiState.error != null
+            ) {
                 VideoSaveScreen(
-                    videoUri = uri,
+                    videoUri = uiState.selectedVideoUri.orEmpty(),
                     viewModel = saveViewModel,
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+        }
 
+        uiState.selectedVideoUri?.let { uri ->
             VideoPlayerScreen(
                 videoUri = uri,
                 onClearSelection = { viewModel.onClearSelection() },

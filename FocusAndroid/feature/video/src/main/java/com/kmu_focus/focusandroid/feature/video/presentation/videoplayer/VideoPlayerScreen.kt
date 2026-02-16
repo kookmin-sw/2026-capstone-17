@@ -2,7 +2,10 @@ package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import android.view.Surface
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.*
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -104,38 +107,38 @@ fun VideoPlayerScreen(
             }
 
             if (isFullScreen) {
-                Row(
+                Box(
                     modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .background(Color.Black.copy(alpha = 0.6f))
-                        .padding(12.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        .align(Alignment.TopEnd)
+                        .padding(12.dp)
                 ) {
-                    Button(
-                        onClick = { viewModel.togglePlayback() },
-                        modifier = Modifier.weight(1f)
+                    IconButton(
+                        onClick = { viewModel.toggleControlMenu() },
+                        modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), CircleShape)
                     ) {
-                        Text(if (uiState.isPlaying) "일시정지" else "재생")
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
+                            contentDescription = "재생 메뉴",
+                            tint = Color.White
+                        )
                     }
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.stopPlayback()
-                            onExitFullScreen()
-                        },
-                        modifier = Modifier.weight(1f)
+
+                    DropdownMenu(
+                        expanded = uiState.isControlMenuExpanded,
+                        onDismissRequest = { viewModel.closeControlMenu() }
                     ) {
-                        Text("전체화면 나가기")
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            viewModel.stopPlayback()
-                            onExitFullScreen()
-                            onClearSelection()
-                        },
-                        modifier = Modifier.weight(1f)
-                    ) {
-                        Text("선택 해제")
+                        DropdownMenuItem(
+                            text = { Text(if (uiState.isPlaying) "일시정지" else "재생") },
+                            onClick = { viewModel.togglePlayback() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("나가기") },
+                            onClick = {
+                                viewModel.stopPlayback()
+                                onExitFullScreen()
+                                onClearSelection()
+                            }
+                        )
                     }
                 }
             }
