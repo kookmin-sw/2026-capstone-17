@@ -11,18 +11,27 @@ import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerOther
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import com.kmu_focus.focusandroid.core.ai.domain.entity.FaceLandmarks5
 import com.kmu_focus.focusandroid.core.ai.domain.entity.Point2f
+import com.kmu_focus.focusandroid.core.metadata.domain.mapper.MetadataMapper
+import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.pool.BitmapPool
 import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.feature.video.di.IoDispatcher
 import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
-import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.joinAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.UUID
 import javax.inject.Inject
+import javax.inject.Provider
 
 class PlaybackAnalysisRepositoryImpl @Inject constructor(
     @ApplicationContext private val context: Context,
@@ -31,7 +40,16 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
     private val embeddingExtractor: ArcFaceEmbeddingExtractor,
     private val ownerClassifier: OwnerOtherClassifier,
     private val bitmapPool: BitmapPool,
+    private val metadataRepositoryProvider: Provider<MetadataRepository>,
+    @IoDispatcher private val ioDispatcher: CoroutineDispatcher,
 ) : PlaybackAnalysisRepository {
+
+    private val metadataScope = CoroutineScope(SupervisorJob() + ioDispatcher)
+    private val metadataJobs = mutableSetOf<Job>()
+    private val metadataJobsLock = Any()
+    private val metadataStateLock = Any()
+    private var metadataRepository: MetadataRepository? = null
+    private var metadataSessionId: String? = null
 
     override fun processFrame(
         buffer: ByteBuffer,
@@ -39,13 +57,17 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
         height: Int,
         timestampMs: Long,
         frameIndex: Int?,
-    ): ProcessedFrame = frameProcessor.process(buffer, width, height, timestampMs, frameIndex)
+    ): ProcessedFrame {
+        val processed = frameProcessor.process(buffer, width, height, timestampMs, frameIndex)
+        enqueueMetadataFrame(processed)
+        return processed
+    }
 
     override suspend fun extractLabelsAtPosition(
         uri: String,
         positionMs: Long,
         glResult: ProcessedFrame,
-    ): Map<Int, Boolean?> = withContext(Dispatchers.IO) {
+    ): Map<Int, Boolean?> = withContext(ioDispatcher) {
         val bitmap = videoFrameDecoder.decodeFrameAt(uri, positionMs) ?: return@withContext emptyMap()
         try {
             extractLabelsFromOriginalFrame(bitmap, glResult)
@@ -59,7 +81,7 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
         positionMs: Long,
         glResult: ProcessedFrame,
         trackId: Int,
-    ): FloatArray? = withContext(Dispatchers.IO) {
+    ): FloatArray? = withContext(ioDispatcher) {
         val bitmap = videoFrameDecoder.decodeFrameAt(uri, positionMs) ?: return@withContext null
         try {
             extractEmbeddingForTrackFromOriginalFrame(bitmap, glResult, trackId)
@@ -73,7 +95,7 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
         positionMs: Long,
         glResult: ProcessedFrame,
         trackId: Int,
-    ): String? = withContext(Dispatchers.IO) {
+    ): String? = withContext(ioDispatcher) {
         val bitmap = videoFrameDecoder.decodeFrameAt(uri, positionMs) ?: return@withContext null
         try {
             saveTrackFaceSnapshotToTempFile(bitmap, glResult, trackId)
@@ -91,6 +113,19 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
 
     override fun getVideoDimensions(uri: String): Pair<Int, Int>? =
         videoFrameDecoder.getVideoDimensions(uri)
+
+    override suspend fun closeMetadataSession() {
+        val jobs = synchronized(metadataJobsLock) { metadataJobs.toList() }
+        jobs.joinAll()
+
+        val repo = synchronized(metadataStateLock) {
+            val current = metadataRepository
+            metadataRepository = null
+            metadataSessionId = null
+            current
+        }
+        repo?.close()
+    }
 
     /**
      * BitmapPool로 crop 재사용하여 GC 스파이크 방지.
@@ -272,8 +307,55 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
         val originalHeight: Int,
     )
 
+    private fun enqueueMetadataFrame(frame: ProcessedFrame) {
+        val frameExport = frame.frameExport ?: return
+        val sessionId = synchronized(metadataStateLock) {
+            metadataSessionId ?: UUID.randomUUID().toString().also { metadataSessionId = it }
+        }
+        val metadata = MetadataMapper.mapFrame(
+            sessionId = sessionId,
+            timestampSeconds = frameExport.timestamp,
+            faces = frameExport.faces.map { face ->
+                MetadataMapper.FaceExportPayload(
+                    trackingId = face.trackingId,
+                    bbox = face.bbox,
+                    idCoeffs = face.idCoeffs,
+                    expCoeffs = face.expCoeffs,
+                    pose = face.pose,
+                    extraCoeffs = face.extraCoeffs,
+                    isOwner = face.isOwner,
+                    modelVersion = FACIAL_3DMM_MODEL_VERSION,
+                )
+            },
+        )
+
+        launchMetadataJob {
+            val repo = synchronized(metadataStateLock) {
+                metadataRepository ?: metadataRepositoryProvider.get().also {
+                    metadataRepository = it
+                }
+            }
+            repo.sendFrame(metadata)
+        }
+    }
+
+    private fun launchMetadataJob(block: suspend () -> Unit) {
+        val job = metadataScope.launch {
+            runCatching { block() }
+        }
+        synchronized(metadataJobsLock) {
+            metadataJobs += job
+        }
+        job.invokeOnCompletion {
+            synchronized(metadataJobsLock) {
+                metadataJobs -= job
+            }
+        }
+    }
+
     private companion object {
         private const val SNAPSHOT_JPEG_QUALITY = 95
         private const val TEMP_SNAPSHOT_DIR = "owner_snapshots"
+        private const val FACIAL_3DMM_MODEL_VERSION = "facial_3DMM.tflite"
     }
 }

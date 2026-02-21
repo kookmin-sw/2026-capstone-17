@@ -19,4 +19,21 @@ class Face3DMMCoeffsTest {
         val b = Face3DMMCoeffs(floatArrayOf(9f), floatArrayOf(3f), floatArrayOf(4f))
         assertNotEquals(a, b)
     }
+
+    @Test
+    fun `equals - extra coeffs 다르면 false`() {
+        val a = Face3DMMCoeffs(
+            idCoeffs = floatArrayOf(1f),
+            expCoeffs = floatArrayOf(3f),
+            pose = floatArrayOf(4f),
+            extraCoeffs = floatArrayOf(0.1f),
+        )
+        val b = Face3DMMCoeffs(
+            idCoeffs = floatArrayOf(1f),
+            expCoeffs = floatArrayOf(3f),
+            pose = floatArrayOf(4f),
+            extraCoeffs = floatArrayOf(0.2f),
+        )
+        assertNotEquals(a, b)
+    }
 }

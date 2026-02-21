@@ -35,4 +35,6 @@ interface PlaybackAnalysisRepository {
     fun deleteTemporaryFaceSnapshot(snapshotUri: String): Boolean
 
     fun getVideoDimensions(uri: String): Pair<Int, Int>?
+
+    suspend fun closeMetadataSession() {}
 }

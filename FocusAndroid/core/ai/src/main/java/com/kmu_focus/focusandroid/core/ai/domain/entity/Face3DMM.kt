@@ -3,15 +3,20 @@ package com.kmu_focus.focusandroid.core.ai.domain.entity
 data class Face3DMMCoeffs(
     val idCoeffs: FloatArray,
     val expCoeffs: FloatArray,
-    val pose: FloatArray
+    val pose: FloatArray,
+    val extraCoeffs: FloatArray = floatArrayOf(),
 ) {
     override fun equals(other: Any?) = (other is Face3DMMCoeffs) &&
         idCoeffs.contentEquals(other.idCoeffs) &&
         expCoeffs.contentEquals(other.expCoeffs) &&
-        pose.contentEquals(other.pose)
+        pose.contentEquals(other.pose) &&
+        extraCoeffs.contentEquals(other.extraCoeffs)
 
     override fun hashCode() =
-        idCoeffs.contentHashCode() + 31 * expCoeffs.contentHashCode() + 31 * 31 * pose.contentHashCode()
+        idCoeffs.contentHashCode() +
+            31 * expCoeffs.contentHashCode() +
+            31 * 31 * pose.contentHashCode() +
+            31 * 31 * 31 * extraCoeffs.contentHashCode()
 }
 
 data class Vertex2D(val x: Float, val y: Float)
