@@ -4,6 +4,8 @@ import com.kmu_focus.focusandroid.core.metadata.domain.entity.BBox
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.FaceData
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.FrameMetadata
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.ThreeDMM
+import java.util.logging.Level
+import java.util.logging.Logger
 
 object MetadataMapper {
 
@@ -34,14 +36,26 @@ object MetadataMapper {
                 val id = face.idCoeffs
                 val exp = face.expCoeffs
                 val pose = face.pose
-                if (id == null || exp == null || pose == null) return@mapNotNull null
-                if (face.bbox.size < BBOX_SIZE) return@mapNotNull null
+                if (id == null || exp == null || pose == null) {
+                    logDrop("missing coeffs", face)
+                    return@mapNotNull null
+                }
+                if (face.bbox.size < BBOX_SIZE) {
+                    logDrop("invalid bbox size=${face.bbox.size}", face)
+                    return@mapNotNull null
+                }
                 val extra = face.extraCoeffs ?: floatArrayOf()
                 val idDim = id.size
                 val expDim = exp.size
                 val poseDim = pose.size
                 val extraDim = extra.size
-                if (!isFaceMapLayout(idDim, expDim, poseDim, extraDim)) return@mapNotNull null
+                if (!isFaceMapLayout(idDim, expDim, poseDim, extraDim)) {
+                    logDrop(
+                        reason = "unsupported FaceMap layout(id=$idDim, exp=$expDim, pose=$poseDim, extra=$extraDim)",
+                        face = face,
+                    )
+                    return@mapNotNull null
+                }
 
                 FaceData(
                     trackingId = face.trackingId,
@@ -71,6 +85,7 @@ object MetadataMapper {
     private const val FACEMAP_EXP_DIM = 39
     private const val FACEMAP_POSE_DIM = 6
     private const val FACEMAP_EXTRA_DIM = 1
+    private val logger: Logger = Logger.getLogger(MetadataMapper::class.java.name)
 
     private fun concatCoeffs(
         idCoeffs: FloatArray,
@@ -100,5 +115,12 @@ object MetadataMapper {
             expDim == FACEMAP_EXP_DIM &&
             poseDim == FACEMAP_POSE_DIM &&
             extraDim == FACEMAP_EXTRA_DIM
+    }
+
+    private fun logDrop(reason: String, face: FaceExportPayload) {
+        if (!logger.isLoggable(Level.WARNING)) return
+        logger.warning(
+            "MetadataMapper dropped face(trackId=${face.trackingId}): $reason"
+        )
     }
 }
