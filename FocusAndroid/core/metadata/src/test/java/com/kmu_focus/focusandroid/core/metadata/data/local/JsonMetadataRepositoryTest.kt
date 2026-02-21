@@ -4,7 +4,6 @@ import com.kmu_focus.focusandroid.core.metadata.domain.entity.BBox
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.FaceData
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.FrameMetadata
 import com.kmu_focus.focusandroid.core.metadata.domain.entity.ThreeDMM
-import com.kmu_focus.focusandroid.core.metadata.domain.entity.ThreeDMMFormat
 import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -59,12 +58,7 @@ class JsonMetadataRepositoryTest {
                         trackingId = 0,
                         bbox = BBox(100, 50, 200, 200),
                         tdmm = ThreeDMM(
-                            format = ThreeDMMFormat.ID80_EXP64_POSE6_V1,
-                            modelVersion = "3dmm-v1",
-                            coeffs = FloatArray(150) { 0.1f },
-                            idDim = 80,
-                            expDim = 64,
-                            poseDim = 6,
+                            coeffs = FloatArray(265) { 0.1f },
                         ),
                     )
                 ),
@@ -77,8 +71,6 @@ class JsonMetadataRepositoryTest {
         assertTrue(json.contains("pts_us"))
         assertTrue(json.contains("tdmm_raw"))
         assertTrue(json.contains("coeffs"))
-        assertTrue(json.contains("extra_dim"))
-        assertTrue(json.contains("ID80_EXP64_POSE6_V1"))
     }
 
     @Test

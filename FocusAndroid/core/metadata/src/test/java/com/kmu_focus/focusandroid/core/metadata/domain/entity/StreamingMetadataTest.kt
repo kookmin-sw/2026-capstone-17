@@ -11,12 +11,7 @@ class StreamingMetadataTest {
             trackingId = 0,
             bbox = BBox(x = 659, y = 177, width = 49, height = 64),
             tdmm = ThreeDMM(
-                format = ThreeDMMFormat.ID80_EXP64_POSE6_V1,
-                modelVersion = "3dmm-v1",
-                coeffs = FloatArray(150) { 0.1f },
-                idDim = 80,
-                expDim = 64,
-                poseDim = 6,
+                coeffs = FloatArray(265) { 0.1f },
             ),
         )
 
@@ -30,13 +25,7 @@ class StreamingMetadataTest {
         assertEquals(133333L, metadata.ptsUs)
         assertEquals(1, metadata.faces.size)
         assertEquals(0, metadata.faces[0].trackingId)
-        assertEquals(ThreeDMMFormat.ID80_EXP64_POSE6_V1, metadata.faces[0].tdmm.format)
-        assertEquals("3dmm-v1", metadata.faces[0].tdmm.modelVersion)
-        assertEquals(150, metadata.faces[0].tdmm.coeffs.size)
-        assertEquals(80, metadata.faces[0].tdmm.idDim)
-        assertEquals(64, metadata.faces[0].tdmm.expDim)
-        assertEquals(6, metadata.faces[0].tdmm.poseDim)
-        assertEquals(0, metadata.faces[0].tdmm.extraDim)
+        assertEquals(265, metadata.faces[0].tdmm.coeffs.size)
     }
 
     @Test

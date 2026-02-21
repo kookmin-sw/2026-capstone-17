@@ -324,7 +324,6 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
                     pose = face.pose,
                     extraCoeffs = face.extraCoeffs,
                     isOwner = face.isOwner,
-                    modelVersion = FACIAL_3DMM_MODEL_VERSION,
                 )
             },
         )
@@ -356,6 +355,5 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
     private companion object {
         private const val SNAPSHOT_JPEG_QUALITY = 95
         private const val TEMP_SNAPSHOT_DIR = "owner_snapshots"
-        private const val FACIAL_3DMM_MODEL_VERSION = "facial_3DMM.tflite"
     }
 }
