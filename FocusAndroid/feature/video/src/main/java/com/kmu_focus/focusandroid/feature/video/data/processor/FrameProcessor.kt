@@ -80,7 +80,7 @@ class FrameProcessor @Inject constructor(
             }
         }
 
-        val frameExport = if (frameIndex != null && faces.isNotEmpty()) {
+        val frameExport = if (frameIndex != null) {
             val facesExport = faces.mapIndexed { idx, face ->
                 val raw3dmm = raw3dmmList.getOrNull(idx)
                 val trackId = trackingIds.getOrElse(idx) { idx }
@@ -91,6 +91,7 @@ class FrameProcessor @Inject constructor(
                     idCoeffs = raw3dmm?.idCoeffs,
                     expCoeffs = raw3dmm?.expCoeffs,
                     pose = raw3dmm?.pose,
+                    extraCoeffs = raw3dmm?.extraCoeffs,
                     isOwner = isOwner
                 )
             }

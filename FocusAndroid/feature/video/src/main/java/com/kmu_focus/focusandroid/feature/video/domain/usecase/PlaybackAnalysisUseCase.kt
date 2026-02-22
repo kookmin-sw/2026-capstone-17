@@ -29,6 +29,9 @@ class PlaybackAnalysisUseCase @Inject constructor(
     fun getVideoDimensions(uri: String): Pair<Int, Int>? =
         playbackAnalysisRepository.getVideoDimensions(uri)
 
+    suspend fun closeMetadataSession() =
+        playbackAnalysisRepository.closeMetadataSession()
+
     /** OWNER 확정 후 OTHER로 바꾸지 않음. 디코드에서는 OWNER만 반영. */
     fun mergeLabelsWithoutOverwritingOwner(
         current: Map<Int, Boolean?>,

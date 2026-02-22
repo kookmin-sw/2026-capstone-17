@@ -19,6 +19,7 @@ class VideoExportDataTest {
                     idCoeffs = floatArrayOf(0.1f, 0.2f),
                     expCoeffs = floatArrayOf(0.3f),
                     pose = floatArrayOf(0.4f, 0.5f),
+                    extraCoeffs = floatArrayOf(0.6f),
                     isOwner = false,
                 )
             )
@@ -39,6 +40,7 @@ class VideoExportDataTest {
         assertEquals(0.1, idCoeffs.getDouble(0), 0.001)
         assertEquals(0.3, d3.getJSONArray("exp_coeffs").getDouble(0), 0.001)
         assertEquals(0.4, d3.getJSONArray("pose").getDouble(0), 0.001)
+        assertEquals(0.6, d3.getJSONArray("extra_coeffs").getDouble(0), 0.001)
     }
 
     @Test

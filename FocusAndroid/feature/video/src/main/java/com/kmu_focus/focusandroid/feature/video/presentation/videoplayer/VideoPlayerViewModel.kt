@@ -217,6 +217,12 @@ class VideoPlayerViewModel @Inject constructor(
 
     fun stopDetection() {
         stopRecording()
+        viewModelScope.launch(ioDispatcher) {
+            runCatching { playbackAnalysisUseCase.closeMetadataSession() }
+                .onFailure { error ->
+                    Log.e(TAG, "메타데이터 세션 종료 실패", error)
+                }
+        }
         lastGLResult = null
         labelByTrackId = emptyMap()
         val snapshotUrisToDelete = synchronized(ownerRegistrationLock) {

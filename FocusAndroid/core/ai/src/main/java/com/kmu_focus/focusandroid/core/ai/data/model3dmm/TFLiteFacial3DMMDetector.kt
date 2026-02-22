@@ -35,10 +35,17 @@ class TFLiteFacial3DMMDetector @Inject constructor(
 ) : Facial3DMMExtractor {
 
     companion object {
+        private const val FACEMAP_ID_DIM = 219
+        private const val FACEMAP_EXP_DIM = 39
+        private const val FACEMAP_POSE_DIM = 6
+        private const val FACEMAP_TOTAL_DIM = 265
+
         @JvmStatic
-        var idDim: Int = 80
+        var idDim: Int = FACEMAP_ID_DIM
         @JvmStatic
-        var expDim: Int = 64
+        var expDim: Int = FACEMAP_EXP_DIM
+        @JvmStatic
+        var poseDim: Int = FACEMAP_POSE_DIM
         @JvmStatic
         var enableBenchmark: Boolean = true
     }
@@ -181,10 +188,10 @@ class TFLiteFacial3DMMDetector @Inject constructor(
                     interp.run(inputBuffer, outBuf)
                     outBuf[0].copyOf()
                 }
-                val poseDim = size - idDim - expDim
-                val idCoeffs = if (idDim > 0 && size >= idDim) coeffs.copyOfRange(0, idDim) else floatArrayOf()
-                val expCoeffs = if (expDim > 0 && size >= idDim + expDim) coeffs.copyOfRange(idDim, idDim + expDim) else floatArrayOf()
-                val pose = if (poseDim > 0 && size >= idDim + expDim + poseDim) coeffs.copyOfRange(idDim + expDim, size) else floatArrayOf()
+                if (size != FACEMAP_TOTAL_DIM) {
+                    Log.w(TAG, "예상 출력(265)과 다른 3DMM 출력 길이: $size")
+                }
+                val parsed = parseCoefficientLayout(coeffs)
                 frameCounter++
                 if (enableBenchmark && frameCounter % 30 == 0) {
                     val t1 = SystemClock.elapsedRealtimeNanos()
@@ -193,7 +200,12 @@ class TFLiteFacial3DMMDetector @Inject constructor(
                 return Face3DMMResult(
                     vertices = emptyList(),
                     faceRect = faceRectDomain,
-                    coeffs = Face3DMMCoeffs(idCoeffs, expCoeffs, pose)
+                    coeffs = Face3DMMCoeffs(
+                        idCoeffs = parsed.idCoeffs,
+                        expCoeffs = parsed.expCoeffs,
+                        pose = parsed.pose,
+                        extraCoeffs = parsed.extraCoeffs,
+                    )
                 )
             }
 
@@ -309,6 +321,32 @@ class TFLiteFacial3DMMDetector @Inject constructor(
                 v.z
             )
         }
+
+    private data class ParsedCoefficients(
+        val idCoeffs: FloatArray,
+        val expCoeffs: FloatArray,
+        val pose: FloatArray,
+        val extraCoeffs: FloatArray,
+    )
+
+    private fun parseCoefficientLayout(coeffs: FloatArray): ParsedCoefficients {
+        val size = coeffs.size
+        val idEnd = minOf(size, idDim.coerceAtLeast(0))
+        val expEnd = minOf(size, idEnd + expDim.coerceAtLeast(0))
+        val poseEnd = minOf(size, expEnd + poseDim.coerceAtLeast(0))
+
+        val idCoeffs = coeffs.copyOfRange(0, idEnd)
+        val expCoeffs = coeffs.copyOfRange(idEnd, expEnd)
+        val pose = coeffs.copyOfRange(expEnd, poseEnd)
+        val extraCoeffs = if (size > poseEnd) coeffs.copyOfRange(poseEnd, size) else floatArrayOf()
+
+        return ParsedCoefficients(
+            idCoeffs = idCoeffs,
+            expCoeffs = expCoeffs,
+            pose = pose,
+            extraCoeffs = extraCoeffs,
+        )
+    }
 
     override fun release() {
         interpreter?.close()

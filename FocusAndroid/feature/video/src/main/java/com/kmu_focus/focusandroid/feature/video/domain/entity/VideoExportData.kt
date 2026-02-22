@@ -15,6 +15,7 @@ data class FaceExport(
     val idCoeffs: FloatArray? = null,
     val expCoeffs: FloatArray? = null,
     val pose: FloatArray? = null,
+    val extraCoeffs: FloatArray? = null,
     /** null = PENDING, true = OWNER(전송 제외), false = OTHER */
     val isOwner: Boolean? = null
 ) {
@@ -24,10 +25,15 @@ data class FaceExport(
         (idCoeffs == null && other.idCoeffs == null || idCoeffs != null && other.idCoeffs != null && idCoeffs.contentEquals(other.idCoeffs)) &&
         (expCoeffs == null && other.expCoeffs == null || expCoeffs != null && other.expCoeffs != null && expCoeffs.contentEquals(other.expCoeffs)) &&
         (pose == null && other.pose == null || pose != null && other.pose != null && pose.contentEquals(other.pose)) &&
+        (extraCoeffs == null && other.extraCoeffs == null || extraCoeffs != null && other.extraCoeffs != null && extraCoeffs.contentEquals(other.extraCoeffs)) &&
         isOwner == other.isOwner
 
     override fun hashCode() = 31 * trackingId + bbox.contentHashCode() +
-        (idCoeffs?.contentHashCode() ?: 0) + 31 * (expCoeffs?.contentHashCode() ?: 0) + 31 * 31 * (pose?.contentHashCode() ?: 0) + 31 * 31 * 31 * (isOwner?.hashCode() ?: 0)
+        (idCoeffs?.contentHashCode() ?: 0) +
+        31 * (expCoeffs?.contentHashCode() ?: 0) +
+        31 * 31 * (pose?.contentHashCode() ?: 0) +
+        31 * 31 * 31 * (extraCoeffs?.contentHashCode() ?: 0) +
+        31 * 31 * 31 * 31 * (isOwner?.hashCode() ?: 0)
 }
 
 data class FrameExport(
@@ -48,6 +54,7 @@ data class FrameExport(
                         put("id_coeffs", JSONArray().apply { (face.idCoeffs ?: floatArrayOf()).forEach { put(it.toDouble()) } })
                         put("exp_coeffs", JSONArray().apply { (face.expCoeffs ?: floatArrayOf()).forEach { put(it.toDouble()) } })
                         put("pose", JSONArray().apply { (face.pose ?: floatArrayOf()).forEach { put(it.toDouble()) } })
+                        put("extra_coeffs", JSONArray().apply { (face.extraCoeffs ?: floatArrayOf()).forEach { put(it.toDouble()) } })
                     })
                 })
             }

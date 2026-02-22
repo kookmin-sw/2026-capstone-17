@@ -57,6 +57,7 @@ dependencies {
     // Feature Modules
     implementation(project(":feature:video"))
     implementation(project(":core:ai"))
+    implementation(project(":core:metadata"))
 
     // Core & UI
     implementation(libs.androidx.core.ktx)

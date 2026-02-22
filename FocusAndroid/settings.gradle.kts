@@ -23,3 +23,4 @@ rootProject.name = "FocusAndroid"
 include(":app")
 include(":feature:video")
 include(":core:ai")
+include(":core:metadata")
