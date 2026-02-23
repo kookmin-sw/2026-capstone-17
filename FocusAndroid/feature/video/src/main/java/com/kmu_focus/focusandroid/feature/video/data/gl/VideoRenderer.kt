@@ -23,6 +23,7 @@ import javax.microedition.khronos.opengles.GL10
 class VideoRenderer(
     private val onFrameCaptured: (ByteBuffer, Int, Int) -> ProcessedFrame,
     private val onSurfaceReady: (Surface) -> Unit,
+    private val onRendererReleased: (() -> Unit)? = null,
     private val encoderThread: EncoderThread = EncoderThread(),
 ) : android.opengl.GLSurfaceView.Renderer, SurfaceTexture.OnFrameAvailableListener {
 
@@ -323,6 +324,8 @@ class VideoRenderer(
         surface = null
         surfaceTexture = null
         readBuffer = null
+
+        onRendererReleased?.invoke()
     }
 
     private fun submitFrameToEncoderThread(

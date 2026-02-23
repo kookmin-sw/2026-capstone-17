@@ -29,6 +29,9 @@ class PlaybackAnalysisUseCase @Inject constructor(
     fun getVideoDimensions(uri: String): Pair<Int, Int>? =
         playbackAnalysisRepository.getVideoDimensions(uri)
 
+    fun clearProcessingThreadCache() =
+        playbackAnalysisRepository.clearProcessingThreadCache()
+
     suspend fun closeMetadataSession() =
         playbackAnalysisRepository.closeMetadataSession()
 

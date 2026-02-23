@@ -114,6 +114,10 @@ class PlaybackAnalysisRepositoryImpl @Inject constructor(
     override fun getVideoDimensions(uri: String): Pair<Int, Int>? =
         videoFrameDecoder.getVideoDimensions(uri)
 
+    override fun clearProcessingThreadCache() {
+        frameProcessor.clearThreadLocalCache()
+    }
+
     override suspend fun closeMetadataSession() {
         val jobs = synchronized(metadataJobsLock) { metadataJobs.toList() }
         jobs.joinAll()

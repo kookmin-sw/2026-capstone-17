@@ -24,6 +24,9 @@ class FrameProcessor @Inject constructor(
     private val trackLabelState: TrackLabelState,
     private val embeddingExtractor: ArcFaceEmbeddingExtractor
 ) {
+    // GL/트랜스코드 루프에서 매 프레임 Bitmap 신규 할당을 피하기 위해 스레드별 재사용한다.
+    private val frameBitmapHolder = ThreadLocal<Bitmap>()
+
     fun process(bitmap: Bitmap, timestampMs: Long, frameIndex: Int? = null): ProcessedFrame {
         val faces = faceDetector.detectFaces(bitmap)
             .filter { it.confidence >= config.confidenceThreshold }
@@ -115,12 +118,35 @@ class FrameProcessor @Inject constructor(
     }
 
     fun process(rgbaBuffer: ByteBuffer, width: Int, height: Int, timestampMs: Long, frameIndex: Int? = null): ProcessedFrame {
-        val bitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+        val bitmap = obtainReusableFrameBitmap(width, height)
         rgbaBuffer.rewind()
         bitmap.copyPixelsFromBuffer(rgbaBuffer)
-        return try {
-            process(bitmap, timestampMs, frameIndex)
-        } finally {
+        return process(bitmap, timestampMs, frameIndex)
+    }
+
+    private fun obtainReusableFrameBitmap(width: Int, height: Int): Bitmap {
+        val safeWidth = width.coerceAtLeast(1)
+        val safeHeight = height.coerceAtLeast(1)
+        val cached = frameBitmapHolder.get()
+        if (cached != null &&
+            !cached.isRecycled &&
+            cached.width == safeWidth &&
+            cached.height == safeHeight
+        ) {
+            return cached
+        }
+        if (cached != null && !cached.isRecycled) {
+            cached.recycle()
+        }
+        return Bitmap.createBitmap(safeWidth, safeHeight, Bitmap.Config.ARGB_8888).also {
+            frameBitmapHolder.set(it)
+        }
+    }
+
+    fun clearThreadLocalCache() {
+        val bitmap = frameBitmapHolder.get()
+        frameBitmapHolder.remove()
+        if (bitmap != null && !bitmap.isRecycled) {
             bitmap.recycle()
         }
     }

@@ -330,6 +330,10 @@ class VideoPlayerViewModel @Inject constructor(
         return result.copy(faceLabels = mergedLabels)
     }
 
+    fun clearProcessingThreadCache() {
+        playbackAnalysisUseCase.clearProcessingThreadCache()
+    }
+
     private fun tryRegisterPendingOwners(
         glSnapshot: ProcessedFrame?,
         positionMs: Long,

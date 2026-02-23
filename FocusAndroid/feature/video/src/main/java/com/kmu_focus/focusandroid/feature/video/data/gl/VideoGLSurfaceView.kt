@@ -11,11 +11,13 @@ class VideoGLSurfaceView(
     context: Context,
     private val onFrameCaptured: (ByteBuffer, Int, Int) -> ProcessedFrame,
     private val onSurfaceReady: (Surface) -> Unit,
+    private val onRendererReleased: (() -> Unit)? = null,
 ) : GLSurfaceView(context) {
 
     private val renderer = VideoRenderer(
         onFrameCaptured = onFrameCaptured,
         onSurfaceReady = onSurfaceReady,
+        onRendererReleased = onRendererReleased,
     )
 
     init {

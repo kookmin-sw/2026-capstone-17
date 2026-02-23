@@ -2,6 +2,8 @@ package com.kmu_focus.focusandroid.core.ai.data.model3dmm
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
 import android.graphics.Rect
 import android.os.SystemClock
 import android.util.Log
@@ -54,6 +56,14 @@ class TFLiteFacial3DMMDetector @Inject constructor(
     private var nnApiDelegate: NnApiDelegate? = null
     private var gpuDelegate: GpuDelegate? = null
     private var inputBuffer: ByteBuffer? = null
+    private val inputPixels = IntArray(INPUT_SIZE * INPUT_SIZE)
+    private val inferenceLock = Any()
+
+    private var inputBitmap: Bitmap? = null
+    private var inputCanvas: Canvas? = null
+    private val inputSrcRect = Rect()
+    private val inputDstRect = Rect(0, 0, INPUT_SIZE, INPUT_SIZE)
+    private val inputPaint = Paint(Paint.FILTER_BITMAP_FLAG)
 
     private var numVertices: Int = 0
     private var numChannels: Int = 2
@@ -144,124 +154,136 @@ class TFLiteFacial3DMMDetector @Inject constructor(
     }
 
     override fun extract3DMM(frame: Bitmap, faceRect: Rect): Face3DMMResult? {
-        val interp = interpreter ?: return null
-        try {
-            val t0 = SystemClock.elapsedRealtimeNanos()
-            val safeFaceRect = Rect(
-                faceRect.left.coerceIn(0, frame.width - 1),
-                faceRect.top.coerceIn(0, frame.height - 1),
-                faceRect.right.coerceIn(1, frame.width),
-                faceRect.bottom.coerceIn(1, frame.height)
-            )
-            if (safeFaceRect.width() <= 0 || safeFaceRect.height() <= 0) return null
-
-            val faceCrop = Bitmap.createBitmap(
-                frame,
-                safeFaceRect.left,
-                safeFaceRect.top,
-                safeFaceRect.width(),
-                safeFaceRect.height()
-            )
-            val resized = Bitmap.createScaledBitmap(faceCrop, INPUT_SIZE, INPUT_SIZE, true)
-            if (faceCrop != resized) faceCrop.recycle()
-            prepareInputBuffer(resized)
-            resized.recycle()
-
-            val faceRectDomain = FaceRect(
-                safeFaceRect.left,
-                safeFaceRect.top,
-                safeFaceRect.right,
-                safeFaceRect.bottom
-            )
-
-            if (isCoefficientMode) {
-                val outTensor = interp.getOutputTensor(0)
-                val size = coefficientSize
-                val coeffs = if (outTensor.dataType() == DataType.UINT8) {
-                    val outBuf = Array(1) { ByteArray(size) }
-                    interp.run(inputBuffer, outBuf)
-                    val scale = outTensor.quantizationParams().scale
-                    val zeroPoint = outTensor.quantizationParams().zeroPoint
-                    FloatArray(size) { i -> ((outBuf[0][i].toInt() and 0xFF) - zeroPoint) * scale }
-                } else {
-                    val outBuf = Array(1) { FloatArray(size) }
-                    interp.run(inputBuffer, outBuf)
-                    outBuf[0].copyOf()
-                }
-                if (size != FACEMAP_TOTAL_DIM) {
-                    Log.w(TAG, "예상 출력(265)과 다른 3DMM 출력 길이: $size")
-                }
-                val parsed = parseCoefficientLayout(coeffs)
-                frameCounter++
-                if (enableBenchmark && frameCounter % 30 == 0) {
-                    val t1 = SystemClock.elapsedRealtimeNanos()
-                    Log.d(TAG, "[3DMM 계수] 평균 추론: ${(t1 - t0) / 1_000_000}ms")
-                }
-                return Face3DMMResult(
-                    vertices = emptyList(),
-                    faceRect = faceRectDomain,
-                    coeffs = Face3DMMCoeffs(
-                        idCoeffs = parsed.idCoeffs,
-                        expCoeffs = parsed.expCoeffs,
-                        pose = parsed.pose,
-                        extraCoeffs = parsed.extraCoeffs,
-                    )
+        synchronized(inferenceLock) {
+            val interp = interpreter ?: return null
+            try {
+                val t0 = SystemClock.elapsedRealtimeNanos()
+                val safeFaceRect = Rect(
+                    faceRect.left.coerceIn(0, frame.width - 1),
+                    faceRect.top.coerceIn(0, frame.height - 1),
+                    faceRect.right.coerceIn(1, frame.width),
+                    faceRect.bottom.coerceIn(1, frame.height)
                 )
-            }
+                if (safeFaceRect.width() <= 0 || safeFaceRect.height() <= 0) return null
 
-            val outputSize = outputShape[1] * if (outputShape.size == 3) outputShape[2] else 1
-            val vertices: List<Vertex2D>
-            val vertices3D: List<Vertex3D>?
+                // 매 호출마다 crop/resized Bitmap을 생성하지 않고 고정 입력 Bitmap을 재사용한다.
+                val inputBitmap = obtainInputBitmap()
+                inputSrcRect.set(safeFaceRect)
+                inputCanvas?.drawBitmap(frame, inputSrcRect, inputDstRect, inputPaint)
+                prepareInputBuffer(inputBitmap)
 
-            if (isQuantized) {
-                val outputBuffer = Array(1) { ByteArray(outputSize) }
-                interp.run(inputBuffer, outputBuffer)
-                val parsed = parseOutputQuantized(outputBuffer[0])
-                vertices = parsed.first
-                vertices3D = parsed.second
-            } else {
-                val outputBuffer = Array(1) { FloatArray(outputSize) }
-                interp.run(inputBuffer, outputBuffer)
-                val parsed = parseOutput(outputBuffer[0])
-                vertices = parsed.first
-                vertices3D = parsed.second
-            }
+                val faceRectDomain = FaceRect(
+                    safeFaceRect.left,
+                    safeFaceRect.top,
+                    safeFaceRect.right,
+                    safeFaceRect.bottom
+                )
 
-            val t1 = SystemClock.elapsedRealtimeNanos()
-            frameCounter++
-            if (enableBenchmark) {
-                totalInferenceMs += (t1 - t0) / 1_000_000
-                if (frameCounter % 30 == 0) {
-                    Log.d(TAG, "[3DMM 정점] 평균 추론: ${totalInferenceMs / frameCounter}ms")
+                if (isCoefficientMode) {
+                    val outTensor = interp.getOutputTensor(0)
+                    val size = coefficientSize
+                    val coeffs = if (outTensor.dataType() == DataType.UINT8) {
+                        val outBuf = Array(1) { ByteArray(size) }
+                        interp.run(inputBuffer, outBuf)
+                        val scale = outTensor.quantizationParams().scale
+                        val zeroPoint = outTensor.quantizationParams().zeroPoint
+                        FloatArray(size) { i -> ((outBuf[0][i].toInt() and 0xFF) - zeroPoint) * scale }
+                    } else {
+                        val outBuf = Array(1) { FloatArray(size) }
+                        interp.run(inputBuffer, outBuf)
+                        outBuf[0].copyOf()
+                    }
+                    if (size != FACEMAP_TOTAL_DIM) {
+                        Log.w(TAG, "예상 출력(265)과 다른 3DMM 출력 길이: $size")
+                    }
+                    val parsed = parseCoefficientLayout(coeffs)
+                    frameCounter++
+                    if (enableBenchmark && frameCounter % 30 == 0) {
+                        val t1 = SystemClock.elapsedRealtimeNanos()
+                        Log.d(TAG, "[3DMM 계수] 평균 추론: ${(t1 - t0) / 1_000_000}ms")
+                    }
+                    return Face3DMMResult(
+                        vertices = emptyList(),
+                        faceRect = faceRectDomain,
+                        coeffs = Face3DMMCoeffs(
+                            idCoeffs = parsed.idCoeffs,
+                            expCoeffs = parsed.expCoeffs,
+                            pose = parsed.pose,
+                            extraCoeffs = parsed.extraCoeffs,
+                        )
+                    )
                 }
-            }
 
-            val absolute3D = vertices3D?.let { toAbsolute3D(faceRectDomain, it) }
-            return Face3DMMResult(
-                vertices = vertices,
-                faceRect = faceRectDomain,
-                vertices3D = absolute3D,
-                rawVertices3D = vertices3D
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "3DMM 추출 오류: ${e.message}", e)
-            return null
+                val outputSize = outputShape[1] * if (outputShape.size == 3) outputShape[2] else 1
+                val vertices: List<Vertex2D>
+                val vertices3D: List<Vertex3D>?
+
+                if (isQuantized) {
+                    val outputBuffer = Array(1) { ByteArray(outputSize) }
+                    interp.run(inputBuffer, outputBuffer)
+                    val parsed = parseOutputQuantized(outputBuffer[0])
+                    vertices = parsed.first
+                    vertices3D = parsed.second
+                } else {
+                    val outputBuffer = Array(1) { FloatArray(outputSize) }
+                    interp.run(inputBuffer, outputBuffer)
+                    val parsed = parseOutput(outputBuffer[0])
+                    vertices = parsed.first
+                    vertices3D = parsed.second
+                }
+
+                val t1 = SystemClock.elapsedRealtimeNanos()
+                frameCounter++
+                if (enableBenchmark) {
+                    totalInferenceMs += (t1 - t0) / 1_000_000
+                    if (frameCounter % 30 == 0) {
+                        Log.d(TAG, "[3DMM 정점] 평균 추론: ${totalInferenceMs / frameCounter}ms")
+                    }
+                }
+
+                val absolute3D = vertices3D?.let { toAbsolute3D(faceRectDomain, it) }
+                return Face3DMMResult(
+                    vertices = vertices,
+                    faceRect = faceRectDomain,
+                    vertices3D = absolute3D,
+                    rawVertices3D = vertices3D
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "3DMM 추출 오류: ${e.message}", e)
+                return null
+            }
+        }
+    }
+
+    private fun obtainInputBitmap(): Bitmap {
+        val cached = inputBitmap
+        if (cached != null && !cached.isRecycled && cached.width == INPUT_SIZE && cached.height == INPUT_SIZE) {
+            if (inputCanvas == null) {
+                inputCanvas = Canvas(cached)
+            }
+            return cached
+        }
+        if (cached != null && !cached.isRecycled) {
+            cached.recycle()
+        }
+        return Bitmap.createBitmap(INPUT_SIZE, INPUT_SIZE, Bitmap.Config.ARGB_8888).also { bitmap ->
+            inputBitmap = bitmap
+            inputCanvas = Canvas(bitmap)
         }
     }
 
     private fun prepareInputBuffer(bitmap: Bitmap) {
         val buffer = inputBuffer ?: return
         buffer.rewind()
-        val pixels = IntArray(INPUT_SIZE * INPUT_SIZE)
-        bitmap.getPixels(pixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
+        bitmap.getPixels(inputPixels, 0, INPUT_SIZE, 0, 0, INPUT_SIZE, INPUT_SIZE)
         if (isQuantized) {
-            for (pixel in pixels) {
+            for (pixel in inputPixels) {
                 buffer.put(((pixel shr 16) and 0xFF).toByte())
                 buffer.put(((pixel shr 8) and 0xFF).toByte())
                 buffer.put((pixel and 0xFF).toByte())
             }
         } else {
-            for (pixel in pixels) {
+            for (pixel in inputPixels) {
                 buffer.putFloat(((pixel shr 16) and 0xFF) / 255.0f)
                 buffer.putFloat(((pixel shr 8) and 0xFF) / 255.0f)
                 buffer.putFloat((pixel and 0xFF) / 255.0f)
@@ -349,11 +371,20 @@ class TFLiteFacial3DMMDetector @Inject constructor(
     }
 
     override fun release() {
-        interpreter?.close()
-        interpreter = null
-        nnApiDelegate?.close()
-        nnApiDelegate = null
-        gpuDelegate?.close()
-        gpuDelegate = null
+        synchronized(inferenceLock) {
+            val reusableInputBitmap = inputBitmap
+            if (reusableInputBitmap != null && !reusableInputBitmap.isRecycled) {
+                reusableInputBitmap.recycle()
+            }
+            inputBitmap = null
+            inputCanvas = null
+            inputBuffer = null
+            interpreter?.close()
+            interpreter = null
+            nnApiDelegate?.close()
+            nnApiDelegate = null
+            gpuDelegate?.close()
+            gpuDelegate = null
+        }
     }
 }

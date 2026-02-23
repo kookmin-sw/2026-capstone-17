@@ -101,6 +101,9 @@ fun VideoPlayerScreen(
                 onFrameCaptured = { buffer, width, height ->
                     viewModel.processFrameSync(buffer, width, height)
                 },
+                onRendererReleased = {
+                    viewModel.clearProcessingThreadCache()
+                },
                 videoWidth = uiState.videoWidth,
                 videoHeight = uiState.videoHeight,
                 onGlSurfaceViewChanged = { glViewRef = it },
@@ -232,6 +235,7 @@ fun VideoPlayerScreen(
 private fun ExoPlayerGLView(
     exoPlayer: ExoPlayer,
     onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> ProcessedFrame,
+    onRendererReleased: (() -> Unit)? = null,
     videoWidth: Int = 0,
     videoHeight: Int = 0,
     onGlSurfaceViewChanged: (VideoGLSurfaceView?) -> Unit = {},
@@ -244,7 +248,8 @@ private fun ExoPlayerGLView(
                 onSurfaceReady = { surface: Surface ->
                     exoPlayer.setVideoSurface(surface)
                 },
-                onFrameCaptured = onFrameCaptured
+                onFrameCaptured = onFrameCaptured,
+                onRendererReleased = onRendererReleased,
             ).also { glView ->
                 onGlSurfaceViewChanged(glView)
             }

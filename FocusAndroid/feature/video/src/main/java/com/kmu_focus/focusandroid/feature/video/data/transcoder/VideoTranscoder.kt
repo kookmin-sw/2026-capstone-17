@@ -332,6 +332,7 @@ class VideoTranscoder(
             } catch (e: Exception) {
                 Log.w(TAG, "eglCore.release 실패", e)
             }
+            frameProcessor.clearThreadLocalCache()
         }
     }.flowOn(transcodeDispatcher)
 

@@ -36,5 +36,7 @@ interface PlaybackAnalysisRepository {
 
     fun getVideoDimensions(uri: String): Pair<Int, Int>?
 
+    fun clearProcessingThreadCache() {}
+
     suspend fun closeMetadataSession() {}
 }
