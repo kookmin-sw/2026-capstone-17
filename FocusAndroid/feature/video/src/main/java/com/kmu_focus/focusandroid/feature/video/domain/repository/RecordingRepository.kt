@@ -12,6 +12,8 @@ interface RecordingRepository {
         width: Int,
         height: Int,
         onSurfaceReady: (encoderSurface: Any, width: Int, height: Int) -> Unit,
+        sourceUri: String? = null,
+        audioStartPositionMs: Long = 0L,
     ): File
 
     fun stopRecording()

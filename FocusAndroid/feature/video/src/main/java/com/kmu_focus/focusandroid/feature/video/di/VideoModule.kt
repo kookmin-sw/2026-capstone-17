@@ -10,6 +10,7 @@ import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryI
 import com.kmu_focus.focusandroid.feature.video.data.repository.PlaybackAnalysisRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.RecordingRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
+import com.kmu_focus.focusandroid.feature.video.data.recorder.AudioTrackExtractor
 import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
@@ -75,5 +76,14 @@ abstract class VideoModule {
         fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(
             enableBackgroundDrain = System.getProperty("focus.test.mode") != "true",
         )
+
+        @Provides
+        @Singleton
+        @JvmStatic
+        fun provideAudioTrackExtractorFactory(
+            @ApplicationContext context: Context,
+        ): AudioTrackExtractor.Factory = AudioTrackExtractor.Factory { sourceUri ->
+            AudioTrackExtractor.create(sourceUri, context)
+        }
     }
 }

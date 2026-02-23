@@ -28,26 +28,13 @@ class VideoRepositoryImpl @Inject constructor(
         }
     }
 
-    override suspend fun saveRecordingWithSourceAudioToGallery(
+    override suspend fun saveRecordingToGallery(
         recordingFilePath: String,
-        sourceUri: String
     ): Result<String> = runCatching {
         withContext(Dispatchers.IO) {
             val recordingFile = File(recordingFilePath)
             require(recordingFile.exists()) { "녹화 파일이 존재하지 않습니다: $recordingFilePath" }
-
-            val muxedFile = localDataSource.createTempOutputFile()
-            try {
-                videoTranscoder.muxSourceAudioToRecordedVideo(
-                    recordingFile = recordingFile,
-                    sourceUri = sourceUri,
-                    outputFile = muxedFile
-                )
-                localDataSource.moveToGallery(muxedFile)
-            } finally {
-                if (recordingFile.exists()) recordingFile.delete()
-                if (muxedFile.exists()) muxedFile.delete()
-            }
+            localDataSource.moveToGallery(recordingFile)
         }
     }
 

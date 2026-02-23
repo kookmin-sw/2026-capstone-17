@@ -43,9 +43,15 @@ class VideoPlayerViewModelRegisterOwnerTest {
     fun setup() {
         Dispatchers.setMain(testDispatcher)
         every { playbackAnalysisUseCase.getVideoDimensions(any()) } returns null
-        every { recordingUseCase.startRecording(any(), any(), any()) } returns Result.success(
-            File.createTempFile("register-owner", ".mp4")
-        )
+        every {
+            recordingUseCase.startRecording(
+                width = any(),
+                height = any(),
+                onSurfaceReady = any(),
+                sourceUri = any(),
+                audioStartPositionMs = any(),
+            )
+        } returns Result.success(File.createTempFile("register-owner", ".mp4"))
         viewModel = VideoPlayerViewModel(
             recordingUseCase = recordingUseCase,
             playbackAnalysisUseCase = playbackAnalysisUseCase,

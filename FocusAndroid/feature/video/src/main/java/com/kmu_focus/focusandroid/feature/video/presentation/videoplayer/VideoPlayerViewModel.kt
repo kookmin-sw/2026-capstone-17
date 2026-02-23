@@ -178,14 +178,22 @@ class VideoPlayerViewModel @Inject constructor(
     private fun startRecording() {
         val w = if (_uiState.value.videoWidth > 0) _uiState.value.videoWidth else 1280
         val h = if (_uiState.value.videoHeight > 0) _uiState.value.videoHeight else 720
+        val sourceUri = _uiState.value.videoUri.takeIf { it.isNotBlank() }
+        val startPositionMs = latestPositionMs.coerceAtLeast(0L)
 
-        recordingUseCase.startRecording(w, h) { encoderSurface, width, height ->
-            currentEncoderSurface = encoderSurface as? Surface
-            currentEncoderWidth = width
-            currentEncoderHeight = height
-            Log.w(TAG, "onInputSurfaceReady: dispatcherNull=${encoderSurfaceDispatcher == null}, size=${width}x$height")
-            encoderSurfaceDispatcher?.invoke(currentEncoderSurface, width, height)
-        }.fold(
+        recordingUseCase.startRecording(
+            width = w,
+            height = h,
+            sourceUri = sourceUri,
+            audioStartPositionMs = startPositionMs,
+            onSurfaceReady = { encoderSurface, width, height ->
+                currentEncoderSurface = encoderSurface as? Surface
+                currentEncoderWidth = width
+                currentEncoderHeight = height
+                Log.w(TAG, "onInputSurfaceReady: dispatcherNull=${encoderSurfaceDispatcher == null}, size=${width}x$height")
+                encoderSurfaceDispatcher?.invoke(currentEncoderSurface, width, height)
+            },
+        ).fold(
             onSuccess = { file ->
                 currentRecordingFile = file
             },

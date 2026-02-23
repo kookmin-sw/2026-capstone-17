@@ -37,4 +37,41 @@ class SaveVideoUseCaseTest {
         assertTrue(result.isFailure)
         assertEquals("파일 저장 실패", result.exceptionOrNull()?.message)
     }
+
+    // ── 오디오 동시 녹화 후 저장 간소화 테스트 ──
+
+    @Test
+    fun `녹화 파일 저장 시 post-mux 없이 바로 갤러리에 저장됨`() = runTest {
+        // Given: 녹화 파일에 이미 오디오가 포함되어 있으므로
+        // saveRecordingToGallery는 단순 파일 이동만 수행해야 한다
+        val recordingFilePath = "/tmp/recording.mp4"
+        val galleryUri = "content://media/external/video/456"
+        coEvery {
+            videoRepository.saveRecordingToGallery(recordingFilePath)
+        } returns Result.success(galleryUri)
+
+        // When
+        val result = saveVideoUseCase.invokeRecordingToGallery(recordingFilePath)
+
+        // Then: sourceUri 없이 단순 갤러리 이동
+        assertTrue(result.isSuccess)
+        assertEquals(galleryUri, result.getOrNull())
+        coVerify(exactly = 1) {
+            videoRepository.saveRecordingToGallery(recordingFilePath)
+        }
+    }
+
+    @Test
+    fun `녹화 파일 갤러리 저장 실패 시 에러 반환`() = runTest {
+        val recordingFilePath = "/tmp/recording.mp4"
+        val exception = RuntimeException("갤러리 저장 실패")
+        coEvery {
+            videoRepository.saveRecordingToGallery(recordingFilePath)
+        } returns Result.failure(exception)
+
+        val result = saveVideoUseCase.invokeRecordingToGallery(recordingFilePath)
+
+        assertTrue(result.isFailure)
+        assertEquals("갤러리 저장 실패", result.exceptionOrNull()?.message)
+    }
 }

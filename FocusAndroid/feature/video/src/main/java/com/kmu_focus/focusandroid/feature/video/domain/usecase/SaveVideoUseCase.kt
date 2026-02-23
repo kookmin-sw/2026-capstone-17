@@ -14,10 +14,9 @@ class SaveVideoUseCase @Inject constructor(
         return videoRepository.saveVideoToGallery(sourceUri)
     }
 
-    suspend fun invokeRecordingWithSourceAudioToGallery(
+    suspend fun invokeRecordingToGallery(
         recordingFilePath: String,
-        sourceUri: String
     ): Result<String> {
-        return videoRepository.saveRecordingWithSourceAudioToGallery(recordingFilePath, sourceUri)
+        return videoRepository.saveRecordingToGallery(recordingFilePath)
     }
 }
