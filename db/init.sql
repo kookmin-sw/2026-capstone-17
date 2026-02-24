@@ -39,6 +39,7 @@ CREATE TABLE broadcast (
                            started_at      TIMESTAMP WITH TIME ZONE,
                            ended_at        TIMESTAMP WITH TIME ZONE,
                            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                           deleted_at TIMESTAMP WITH TIME ZONE,
                            CONSTRAINT fk_broadcast_member FOREIGN KEY (member_id) REFERENCES member(member_id)
 );
 

@@ -12,7 +12,7 @@ import jakarta.persistence.Index
 import jakarta.persistence.JoinColumn
 import jakarta.persistence.ManyToOne
 import jakarta.persistence.Table
-import java.net.URL
+import org.hibernate.annotations.SQLDelete
 import java.time.LocalDateTime
 
 @Entity
@@ -22,6 +22,7 @@ import java.time.LocalDateTime
         Index(name = "idx_broadcast_member_id", columnList = "member_id"),
         Index(name = "idx_broadcast_stream_key", columnList = "stream_key")
     ])
+@SQLDelete(sql = "UPDATE broadcast SET deleted_at = NOW() WHERE broadcast_id = ?")
 @AttributeOverride(name = "id", column = Column(name = "broadcast_id"))
 class Broadcast(
     member: Member,
@@ -34,11 +35,11 @@ class Broadcast(
     var member: Member = member
         protected set
 
-    @Column(name = "stream_key", nullable = false, unique = true)
+    @Column(name = "stream_key", nullable = false, unique = true, length = 100)
     var streamKey: String = streamKey
         protected set
 
-    @Column(name = "title")
+    @Column(name = "title", length = 20)
     var title: String? = title
         protected set
 
@@ -58,6 +59,14 @@ class Broadcast(
     @Column(name = "ended_at")
     var endedAt: LocalDateTime? = null
         protected set
+
+    @Column(name = "deleted_at")
+    var deletedAt: LocalDateTime? = null
+        protected set
+
+    fun updateTitle(newTitle: String?) {
+        this.title = newTitle
+    }
 
     fun startBroadcast(hlsUrl: String) {
         this.status = BroadcastStatus.ON_AIR
