@@ -11,7 +11,7 @@ Spring Boot가 제어하는 내부 영상 워커 API입니다.
 
 - 방송 시작 시: `/api/stream/start`
 - 방송 종료 시: `/api/stream/stop`
-- 운영 모니터링: `/api/stream/{stream_id}/status`
+- 운영 모니터링: `/api/stream/{broadcast_id}/status`
 
 FastAPI는 클라이언트 직접 통신이 아닌, 스트림 파이프라인 실행/중지를 담당합니다.
 """

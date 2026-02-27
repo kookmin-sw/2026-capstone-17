@@ -12,7 +12,11 @@ class StreamState(str, Enum):
 
 
 class StreamStartRequest(BaseModel):
-    stream_id: str = Field(min_length=1, max_length=100)
+    broadcast_id: str = Field(
+        min_length=1,
+        max_length=100,
+        description="Spring broadcast.id",
+    )
     input_url: str = Field(description="MediaMTX ingest URL (e.g. srt://...).")
     output_path: str = Field(description="HLS output target path.")
     avatar_id: str | None = Field(default=None, max_length=100)
@@ -20,9 +24,9 @@ class StreamStartRequest(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "stream_id": "live-101",
+                "broadcast_id": "bc_20260227_001",
                 "input_url": "srt://mediamtx:8890/live/101",
-                "output_path": "/var/www/hls/live-101",
+                "output_path": "/var/www/hls/bc_20260227_001",
                 "avatar_id": "avatar-a",
             }
         }
@@ -30,15 +34,15 @@ class StreamStartRequest(BaseModel):
 
 
 class StreamStopRequest(BaseModel):
-    stream_id: str = Field(min_length=1, max_length=100)
+    broadcast_id: str = Field(min_length=1, max_length=100)
 
     model_config = ConfigDict(
-        json_schema_extra={"example": {"stream_id": "live-101"}}
+        json_schema_extra={"example": {"broadcast_id": "bc_20260227_001"}}
     )
 
 
 class StreamStatusResponse(BaseModel):
-    stream_id: str
+    broadcast_id: str
     state: StreamState
     processed_frames: int = Field(default=0, ge=0)
     dropped_frames: int = Field(default=0, ge=0)
@@ -48,7 +52,7 @@ class StreamStatusResponse(BaseModel):
     model_config = ConfigDict(
         json_schema_extra={
             "example": {
-                "stream_id": "live-101",
+                "broadcast_id": "bc_20260227_001",
                 "state": "running",
                 "processed_frames": 1842,
                 "dropped_frames": 17,

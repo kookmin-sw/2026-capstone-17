@@ -8,7 +8,7 @@ except ImportError:  # pragma: no cover
 
 
 class MetadataStore(Protocol):
-    async def get_face_metadata(self, stream_id: str, pts_us: int) -> dict[str, Any] | None:
+    async def get_face_metadata(self, broadcast_id: str, pts_us: int) -> dict[str, Any] | None:
         ...
 
     async def close(self) -> None:
@@ -29,12 +29,19 @@ class RedisMetadataStore:
         self._client = redis.from_url(self._redis_url, decode_responses=True)
         return self._client
 
-    async def get_face_metadata(self, stream_id: str, pts_us: int) -> dict[str, Any] | None:
+    def _build_key(self, broadcast_id: str, pts_us: int) -> str:
+        try:
+            return self._key_template.format(broadcast_id=broadcast_id, pts_us=pts_us)
+        except KeyError:
+            # Backward compatibility with old template: stream:{stream_id}:meta:{pts_us}
+            return self._key_template.format(stream_id=broadcast_id, pts_us=pts_us)
+
+    async def get_face_metadata(self, broadcast_id: str, pts_us: int) -> dict[str, Any] | None:
         client = await self._ensure_client()
         if client is None:
             return None
 
-        key = self._key_template.format(stream_id=stream_id, pts_us=pts_us)
+        key = self._build_key(broadcast_id=broadcast_id, pts_us=pts_us)
         payload = await client.get(key)
         if not payload:
             return None

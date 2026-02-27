@@ -13,7 +13,7 @@ class Settings(BaseSettings):
     api_openapi_url: str = "/openapi.json"
 
     redis_url: str = "redis://localhost:6379/0"
-    redis_metadata_key_template: str = "stream:{stream_id}:meta:{pts_us}"
+    redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
 
     pipeline_fps: int = 30
     max_frame_lag_ms: int = 250

@@ -32,7 +32,7 @@ class PipelineStats:
 class StreamPipeline:
     def __init__(
         self,
-        stream_id: str,
+        broadcast_id: str,
         input_url: str,
         output_path: str,
         avatar_id: str | None,
@@ -43,7 +43,7 @@ class StreamPipeline:
         frame_sink: FrameSink | None = None,
         renderer: AvatarRenderer | None = None,
     ) -> None:
-        self.stream_id = stream_id
+        self.broadcast_id = broadcast_id
         self.input_url = input_url
         self.output_path = output_path
         self.avatar_id = avatar_id
@@ -74,7 +74,7 @@ class StreamPipeline:
         self._state = PipelineState.STARTING
         self._detail = None
         self._stop_event.clear()
-        self._task = asyncio.create_task(self._run(), name=f"pipeline:{self.stream_id}")
+        self._task = asyncio.create_task(self._run(), name=f"pipeline:{self.broadcast_id}")
 
     async def stop(self) -> None:
         if self._state in {PipelineState.STOPPED, PipelineState.FAILED} and not self._task:
@@ -88,7 +88,7 @@ class StreamPipeline:
 
     def snapshot(self) -> StreamStatusResponse:
         return StreamStatusResponse(
-            stream_id=self.stream_id,
+            broadcast_id=self.broadcast_id,
             state=self._state.value,
             processed_frames=self._stats.processed_frames,
             dropped_frames=self._stats.dropped_frames,
@@ -98,7 +98,7 @@ class StreamPipeline:
 
     async def _run(self) -> None:
         self._state = PipelineState.RUNNING
-        logger.info("pipeline_started stream_id=%s input=%s", self.stream_id, self.input_url)
+        logger.info("pipeline_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
 
         try:
             while not self._stop_event.is_set():
@@ -112,12 +112,12 @@ class StreamPipeline:
 
                 try:
                     face_metadata = await self._metadata_store.get_face_metadata(
-                        self.stream_id, frame.pts_us
+                        self.broadcast_id, frame.pts_us
                     )
                 except Exception:  # pragma: no cover
                     logger.warning(
-                        "metadata_lookup_failed stream_id=%s pts_us=%s",
-                        self.stream_id,
+                        "metadata_lookup_failed broadcast_id=%s pts_us=%s",
+                        self.broadcast_id,
                         frame.pts_us,
                     )
                     face_metadata = None
@@ -125,7 +125,11 @@ class StreamPipeline:
                 try:
                     rendered = await self._renderer.render(frame, face_metadata, self.avatar_id)
                 except Exception:  # pragma: no cover
-                    logger.exception("render_failed stream_id=%s pts_us=%s", self.stream_id, frame.pts_us)
+                    logger.exception(
+                        "render_failed broadcast_id=%s pts_us=%s",
+                        self.broadcast_id,
+                        frame.pts_us,
+                    )
                     rendered = await self._renderer.emergency_fallback(frame)
 
                 await self._frame_sink.write_frame(rendered)
@@ -134,12 +138,12 @@ class StreamPipeline:
         except Exception as exc:  # pragma: no cover
             self._state = PipelineState.FAILED
             self._detail = str(exc)
-            logger.exception("pipeline_failed stream_id=%s", self.stream_id)
+            logger.exception("pipeline_failed broadcast_id=%s", self.broadcast_id)
         finally:
             await self._close_components()
             if self._state != PipelineState.FAILED:
                 self._state = PipelineState.STOPPED
-            logger.info("pipeline_finished stream_id=%s state=%s", self.stream_id, self._state.value)
+            logger.info("pipeline_finished broadcast_id=%s state=%s", self.broadcast_id, self._state.value)
 
     def _should_drop_frame(self, pts_us: int) -> bool:
         now_us = int(time.monotonic() * 1_000_000)
@@ -162,4 +166,8 @@ class StreamPipeline:
         try:
             await resource.close()
         except Exception:  # pragma: no cover
-            logger.warning("resource_close_failed stream_id=%s resource=%s", self.stream_id, name)
+            logger.warning(
+                "resource_close_failed broadcast_id=%s resource=%s",
+                self.broadcast_id,
+                name,
+            )

@@ -15,20 +15,22 @@ class StreamManager:
 
     async def start_stream(self, req: StreamStartRequest) -> StreamStatusResponse:
         async with self._lock:
-            pipeline = self._pipelines.get(req.stream_id)
+            pipeline = self._pipelines.get(req.broadcast_id)
             if pipeline and pipeline.state in {
                 PipelineState.STARTING,
                 PipelineState.RUNNING,
                 PipelineState.STOPPING,
             }:
-                raise StreamAlreadyRunningError(f"stream_id '{req.stream_id}' is already active")
+                raise StreamAlreadyRunningError(
+                    f"broadcast_id '{req.broadcast_id}' is already active"
+                )
 
             metadata_store = RedisMetadataStore(
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
             )
             pipeline = StreamPipeline(
-                stream_id=req.stream_id,
+                broadcast_id=req.broadcast_id,
                 input_url=req.input_url,
                 output_path=req.output_path,
                 avatar_id=req.avatar_id,
@@ -36,26 +38,26 @@ class StreamManager:
                 max_frame_lag_ms=self._settings.max_frame_lag_ms,
                 metadata_store=metadata_store,
             )
-            self._pipelines[req.stream_id] = pipeline
+            self._pipelines[req.broadcast_id] = pipeline
 
         await pipeline.start()
         return pipeline.snapshot()
 
-    async def stop_stream(self, stream_id: str) -> StreamStatusResponse:
+    async def stop_stream(self, broadcast_id: str) -> StreamStatusResponse:
         async with self._lock:
-            pipeline = self._pipelines.get(stream_id)
+            pipeline = self._pipelines.get(broadcast_id)
 
         if not pipeline:
-            raise StreamNotFoundError(f"stream_id '{stream_id}' was not found")
+            raise StreamNotFoundError(f"broadcast_id '{broadcast_id}' was not found")
 
         await pipeline.stop()
         return pipeline.snapshot()
 
-    async def get_status(self, stream_id: str) -> StreamStatusResponse:
+    async def get_status(self, broadcast_id: str) -> StreamStatusResponse:
         async with self._lock:
-            pipeline = self._pipelines.get(stream_id)
+            pipeline = self._pipelines.get(broadcast_id)
 
         if not pipeline:
-            raise StreamNotFoundError(f"stream_id '{stream_id}' was not found")
+            raise StreamNotFoundError(f"broadcast_id '{broadcast_id}' was not found")
 
         return pipeline.snapshot()
