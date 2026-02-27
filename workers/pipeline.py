@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from app.adapters.frame_sink import DummyHlsSink, FrameSink
-from app.adapters.media_source import DummyMediaSource, MediaSource
-from app.adapters.metadata_store import MetadataStore
-from app.model.renderer import AvatarRenderer
-from app.schemas.stream import StreamStatusResponse
+from adapters.frame_sink import DummyHlsSink, FrameSink
+from adapters.media_source import DummyMediaSource, MediaSource
+from adapters.metadata_store import MetadataStore
+from model.renderer import AvatarRenderer
+from schemas.stream import StreamStatusResponse
 
 logger = logging.getLogger(__name__)
 

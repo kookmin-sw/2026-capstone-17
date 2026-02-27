@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Body, Depends, HTTPException, status
 
-from app.schemas.common import ErrorResponse
-from app.schemas.stream import StreamStartRequest, StreamStatusResponse, StreamStopRequest
-from app.services.container import get_stream_manager
-from app.services.errors import StreamAlreadyRunningError, StreamNotFoundError
-from app.services.stream_manager import StreamManager
+from schemas.common import ErrorResponse
+from schemas.stream import StreamStartRequest, StreamStatusResponse, StreamStopRequest
+from services.container import get_stream_manager
+from services.errors import StreamAlreadyRunningError, StreamNotFoundError
+from services.stream_manager import StreamManager
 
 router = APIRouter(prefix="/stream", tags=["stream-control"])
 

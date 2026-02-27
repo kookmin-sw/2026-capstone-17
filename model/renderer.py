@@ -1,6 +1,6 @@
 from typing import Any
 
-from app.workers.types import VideoFrame
+from workers.types import VideoFrame
 
 
 class AvatarRenderer:

@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.workers.types import VideoFrame
+from workers.types import VideoFrame
 
 
 class FrameSink(Protocol):

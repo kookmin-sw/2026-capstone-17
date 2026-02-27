@@ -1,10 +1,10 @@
 import asyncio
 
-from app.adapters.metadata_store import RedisMetadataStore
-from app.core.config import Settings
-from app.schemas.stream import StreamStartRequest, StreamStatusResponse
-from app.services.errors import StreamAlreadyRunningError, StreamNotFoundError
-from app.workers.pipeline import PipelineState, StreamPipeline
+from adapters.metadata_store import RedisMetadataStore
+from core.config import Settings
+from schemas.stream import StreamStartRequest, StreamStatusResponse
+from services.errors import StreamAlreadyRunningError, StreamNotFoundError
+from workers.pipeline import PipelineState, StreamPipeline
 
 
 class StreamManager:
