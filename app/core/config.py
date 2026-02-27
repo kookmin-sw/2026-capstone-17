@@ -8,6 +8,9 @@ class Settings(BaseSettings):
     app_version: str = "0.1.0"
     app_env: str = "local"
     log_level: str = "INFO"
+    api_docs_url: str = "/swagger"
+    api_redoc_url: str = "/redoc"
+    api_openapi_url: str = "/openapi.json"
 
     redis_url: str = "redis://localhost:6379/0"
     redis_metadata_key_template: str = "stream:{stream_id}:meta:{pts_us}"

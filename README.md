@@ -128,7 +128,20 @@ cp .env.example .env
 uvicorn main:app --reload
 ```
 
-## 9. 다음 구현 우선순위 제안
+## 9. Swagger 문서
+
+- Swagger UI: `http://localhost:8000/swagger`
+- ReDoc: `http://localhost:8000/redoc`
+- OpenAPI JSON: `http://localhost:8000/openapi.json`
+
+Swagger에는 아래 내용이 반영되어 있습니다.
+
+- 스트림 시작/중지 요청 예시(SRT, RTMP fallback)
+- 상태 조회 응답 스키마 및 예시
+- 404/409 오류 응답 스키마 예시
+- 내부 제어 API 목적/설명(태그 기반)
+
+## 10. 다음 구현 우선순위 제안
 
 1. PyAV로 RTMP/SRT 입력 디코더 연결 (`pts_us` 정규화)
 2. Redis 조회 키를 Spring 적재 포맷과 정확히 일치
