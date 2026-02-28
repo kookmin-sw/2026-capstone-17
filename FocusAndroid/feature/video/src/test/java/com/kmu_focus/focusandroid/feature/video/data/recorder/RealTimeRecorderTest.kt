@@ -1,15 +1,18 @@
-package com.kmu_focus.focusandroid.feature.video.data.recorder
+package com.kmu_focus.focusandroid.core.media.data.recorder
 
 import android.media.MediaCodec
 import android.media.MediaFormat
+import android.util.Log
 import android.view.Surface
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkStatic
 import io.mockk.verify
 import io.mockk.verifyOrder
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
+import org.junit.Before
 import org.junit.Test
 import java.io.File
 import java.nio.ByteBuffer
@@ -26,6 +29,18 @@ class RealTimeRecorderTest {
         muxerFactory = muxerFactory,
         enableBackgroundDrain = false,
     )
+
+    @Before
+    fun setup() {
+        mockkStatic(Log::class)
+        every { Log.w(any(), any<String>()) } returns 0
+        every { Log.w(any(), any<String>(), any()) } returns 0
+        every { Log.i(any(), any()) } returns 0
+        every { Log.e(any(), any()) } returns 0
+        every { Log.e(any(), any(), any()) } returns 0
+        every { Log.d(any(), any()) } returns 0
+        every { Log.v(any(), any()) } returns 0
+    }
 
     // ── 기존 테스트 ──
 

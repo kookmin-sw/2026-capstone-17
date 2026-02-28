@@ -1,7 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RegisterOwnerDuringPlaybackUseCase

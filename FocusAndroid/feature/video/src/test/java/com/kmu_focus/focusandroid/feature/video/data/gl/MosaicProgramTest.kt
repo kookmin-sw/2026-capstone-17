@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.feature.video.data.gl
+package com.kmu_focus.focusandroid.core.media.data.gl
 
 import org.junit.Assert.assertEquals
 import org.junit.Test

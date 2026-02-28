@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.feature.video.data.recorder
+package com.kmu_focus.focusandroid.core.media.data.recorder
 
 import android.media.MediaFormat
 import io.mockk.every

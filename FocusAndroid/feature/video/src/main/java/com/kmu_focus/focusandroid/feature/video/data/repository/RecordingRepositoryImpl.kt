@@ -1,9 +1,9 @@
 package com.kmu_focus.focusandroid.feature.video.data.repository
 
 import android.util.Log
-import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
-import com.kmu_focus.focusandroid.feature.video.data.recorder.AudioTrackExtractor
-import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
+import com.kmu_focus.focusandroid.core.media.data.recorder.AudioTrackExtractor
+import com.kmu_focus.focusandroid.core.media.data.recorder.RealTimeRecorder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.RecordingRepository
 import java.io.File
 import javax.inject.Inject

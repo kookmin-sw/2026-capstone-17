@@ -6,12 +6,12 @@ import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.lifecycle.viewModelScope
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RegisterOwnerDuringPlaybackUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RecordingUseCase
-import com.kmu_focus.focusandroid.feature.video.di.IoDispatcher
+import com.kmu_focus.focusandroid.core.media.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -123,6 +123,18 @@ class VideoPlayerViewModel @Inject constructor(
             isPlaying = false,
             isControlMenuExpanded = false,
         )
+    }
+
+    fun stopPlaybackAndGetRecordingFileOrNull(): File? {
+        stopPlayback()
+        val finishedFile = currentRecordingFile
+        val sampleCount = recordingUseCase.lastRecordingSampleCount
+        val isValid = finishedFile != null &&
+            finishedFile.exists() &&
+            finishedFile.length() > 0L &&
+            sampleCount > 0
+        currentRecordingFile = null
+        return if (isValid) finishedFile else null
     }
 
     fun toggleControlMenu() {

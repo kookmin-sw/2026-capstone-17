@@ -1,6 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.domain.repository
 
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import java.nio.ByteBuffer
 
 interface PlaybackAnalysisRepository {

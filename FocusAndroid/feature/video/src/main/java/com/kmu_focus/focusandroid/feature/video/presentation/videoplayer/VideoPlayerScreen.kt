@@ -21,8 +21,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.AsyncImage
-import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.data.gl.VideoGLSurfaceView
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.presentation.overlay.FaceDetectionOverlay
+import com.kmu_focus.focusandroid.core.media.presentation.overlay.FaceTouchOverlay
 import kotlinx.coroutines.delay
 import android.util.Log
 import androidx.compose.ui.platform.LocalContext
@@ -45,8 +47,8 @@ fun VideoPlayerScreen(
         uriString = videoUri,
         isPlaying = uiState.isPlaying,
         onPlaybackEnded = {
-            viewModel.stopPlayback()
-            onPlaybackEnded(viewModel.currentRecordingFile)
+            val recordedFile = viewModel.stopPlaybackAndGetRecordingFileOrNull()
+            onPlaybackEnded(recordedFile)
         }
     )
 

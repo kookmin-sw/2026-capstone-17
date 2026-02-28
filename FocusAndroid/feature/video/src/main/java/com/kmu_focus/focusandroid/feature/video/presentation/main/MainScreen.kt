@@ -45,6 +45,7 @@ import com.kmu_focus.focusandroid.feature.video.domain.config.VideoConfig
 @Composable
 fun MainScreen(
     modifier: Modifier = Modifier,
+    onBackToModeSelection: (() -> Unit)? = null,
     viewModel: MainViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -108,7 +109,18 @@ fun MainScreen(
     }
 
     Column(modifier = modifier.fillMaxSize()) {
-        if (!isVideoFullScreen) {
+        val showTopControls = !isVideoFullScreen && uiState.selectedVideoUri == null
+
+        if (showTopControls) {
+            if (onBackToModeSelection != null) {
+                OutlinedButton(
+                    onClick = onBackToModeSelection,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Text("모드 선택으로 돌아가기")
+                }
+            }
+
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -150,12 +162,7 @@ fun MainScreen(
                 onVideoSelected = { uri -> viewModel.onVideoSelected(uri) }
             )
 
-            if (
-                uiState.selectedVideoUri != null ||
-                saveUiState.isSaving ||
-                saveUiState.savedFilePath != null ||
-                saveUiState.error != null
-            ) {
+            if (saveUiState.isSaving || saveUiState.savedFilePath != null || saveUiState.error != null) {
                 VideoSaveScreen(
                     videoUri = uiState.selectedVideoUri.orEmpty(),
                     viewModel = saveViewModel,

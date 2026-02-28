@@ -11,11 +11,11 @@ import android.net.Uri
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
-import com.kmu_focus.focusandroid.feature.video.data.gl.EglCore
-import com.kmu_focus.focusandroid.feature.video.data.gl.OESTextureProgram
-import com.kmu_focus.focusandroid.feature.video.data.gl.OffscreenSurface
-import com.kmu_focus.focusandroid.feature.video.data.gl.OverlayRenderer
-import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.data.gl.EglCore
+import com.kmu_focus.focusandroid.core.media.data.gl.OESTextureProgram
+import com.kmu_focus.focusandroid.core.media.data.gl.OffscreenSurface
+import com.kmu_focus.focusandroid.core.media.data.gl.OverlayRenderer
+import com.kmu_focus.focusandroid.core.media.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.TranscodeProgress
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow

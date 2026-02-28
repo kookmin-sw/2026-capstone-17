@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.feature.video.data.processor
+package com.kmu_focus.focusandroid.core.media.data.processor
 
 import android.graphics.Bitmap
 import com.kmu_focus.focusandroid.core.ai.domain.config.DetectionConfig

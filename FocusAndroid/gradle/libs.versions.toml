@@ -31,6 +31,9 @@ coroutines = "1.9.0"
 media3 = "1.4.1"
 coil = "2.5.0"
 
+# --- CameraX ---
+camerax = "1.4.1"
+
 [libraries]
 # --- Android Core ---
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -67,6 +70,11 @@ androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplaye
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
 androidx-media3-ui = { group = "androidx.media3", name = "media3-ui", version.ref = "media3" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+
+# --- CameraX ---
+androidx-camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "camerax" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "camerax" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "camerax" }
 
 # --- Testing ---
 junit = { group = "junit", name = "junit", version.ref = "junit" }

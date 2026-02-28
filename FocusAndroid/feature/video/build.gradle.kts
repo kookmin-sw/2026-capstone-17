@@ -60,6 +60,7 @@ dependencies {
 
     // Feature Module
     implementation(project(":core:ai"))
+    implementation(project(":core:media"))
     implementation(project(":core:metadata"))
 
     // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)

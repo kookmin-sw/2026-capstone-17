@@ -15,9 +15,9 @@ import com.kmu_focus.focusandroid.core.metadata.domain.mapper.MetadataMapper
 import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.pool.BitmapPool
-import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
-import com.kmu_focus.focusandroid.feature.video.di.IoDispatcher
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.di.IoDispatcher
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineDispatcher
