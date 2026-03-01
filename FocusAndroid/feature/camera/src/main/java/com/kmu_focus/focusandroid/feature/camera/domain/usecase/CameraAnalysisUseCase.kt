@@ -1,5 +1,6 @@
 package com.kmu_focus.focusandroid.feature.camera.domain.usecase
 
+import com.kmu_focus.focusandroid.feature.camera.domain.entity.OwnerRegistrationResult
 import com.kmu_focus.focusandroid.feature.camera.domain.repository.CameraAnalysisRepository
 import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import java.nio.ByteBuffer
@@ -18,6 +19,20 @@ class CameraAnalysisUseCase @Inject constructor(
         width = width,
         height = height,
         timestampMs = timestampMs,
+    )
+
+    fun registerOwnerFromFrame(
+        rgbaBuffer: ByteBuffer,
+        width: Int,
+        height: Int,
+        trackId: Int,
+        processedFrame: ProcessedFrame,
+    ): OwnerRegistrationResult = cameraAnalysisRepository.registerOwnerFromFrame(
+        rgbaBuffer = rgbaBuffer,
+        width = width,
+        height = height,
+        trackId = trackId,
+        processedFrame = processedFrame,
     )
 
     fun clearProcessingThreadCache() {

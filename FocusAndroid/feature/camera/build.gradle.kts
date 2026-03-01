@@ -72,6 +72,9 @@ dependencies {
     // OpenCV (ByteBuffer→Mat 변환)
     implementation(libs.opencv.android)
 
+    // Image Loading
+    implementation(libs.coil.compose)
+
     // Test
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)

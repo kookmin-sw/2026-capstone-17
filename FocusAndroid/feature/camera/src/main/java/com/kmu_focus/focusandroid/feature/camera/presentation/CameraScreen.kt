@@ -17,6 +17,7 @@ import androidx.camera.core.resolutionselector.AspectRatioStrategy
 import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.core.resolutionselector.ResolutionStrategy
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -26,16 +27,22 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import coil.compose.AsyncImage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -308,12 +315,36 @@ fun CameraScreen(
                 .padding(12.dp)
                 .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
                 .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(
-                text = "탭으로 OWNER 지정",
-                color = Color.White,
-            )
+            if (uiState.registeredOwnerThumbnails.isNotEmpty()) {
+                Text(
+                    text = "등록된 OWNER (${uiState.registeredOwnerThumbnails.size}명)",
+                    color = Color.Green,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(uiState.registeredOwnerThumbnails) { path ->
+                        Card(
+                            shape = CircleShape,
+                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                            modifier = Modifier
+                                .size(48.dp)
+                                .border(2.dp, Color.Green, CircleShape),
+                        ) {
+                            AsyncImage(
+                                model = File(path),
+                                contentDescription = "Owner",
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            } else {
+                Text(
+                    text = "탭으로 OWNER 지정",
+                    color = Color.White,
+                )
+            }
             Text(
                 text = "렌즈: ${if (uiState.lensFacing == LensFacing.BACK) "후면" else "전면"}",
                 color = Color.White,

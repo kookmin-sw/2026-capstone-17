@@ -33,6 +33,7 @@ data class CameraUiState(
     val frameWidth: Int = 0,
     val frameHeight: Int = 0,
     val recordingFile: File? = null,
+    val registeredOwnerThumbnails: List<String> = emptyList(),
 )
 
 @HiltViewModel
@@ -62,6 +63,9 @@ class CameraViewModel @Inject constructor(
 
     private val manualOwnerTrackIds = linkedSetOf<Int>()
 
+    @Volatile
+    private var pendingOwnerRegistrationTrackId: Int? = null
+
     fun setEncoderSurfaceDispatcher(dispatcher: ((Surface?, Int, Int) -> Unit)?) {
         encoderSurfaceDispatcher = dispatcher
         dispatcher?.invoke(currentEncoderSurface, currentEncoderWidth, currentEncoderHeight)
@@ -75,6 +79,7 @@ class CameraViewModel @Inject constructor(
     fun stopCamera() {
         stopRecordingInternal(saveRecordingFile = false)
         manualOwnerTrackIds.clear()
+        pendingOwnerRegistrationTrackId = null
         _uiState.value = _uiState.value.copy(
             isCameraActive = false,
             isDetecting = false,
@@ -82,6 +87,7 @@ class CameraViewModel @Inject constructor(
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            registeredOwnerThumbnails = emptyList(),
         )
         cameraAnalysisUseCase.clearProcessingThreadCache()
     }
@@ -95,12 +101,14 @@ class CameraViewModel @Inject constructor(
     fun stopDetection() {
         stopRecordingInternal(saveRecordingFile = false)
         manualOwnerTrackIds.clear()
+        pendingOwnerRegistrationTrackId = null
         _uiState.value = _uiState.value.copy(
             isDetecting = false,
             isRecording = false,
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            registeredOwnerThumbnails = emptyList(),
         )
     }
 
@@ -118,6 +126,27 @@ class CameraViewModel @Inject constructor(
             height = height,
             timestampMs = System.currentTimeMillis(),
         )
+
+        val pendingTrackId = pendingOwnerRegistrationTrackId
+        if (pendingTrackId != null && result.trackingIds.contains(pendingTrackId)) {
+            pendingOwnerRegistrationTrackId = null
+            val regResult = cameraAnalysisUseCase.registerOwnerFromFrame(
+                rgbaBuffer = buffer,
+                width = width,
+                height = height,
+                trackId = pendingTrackId,
+                processedFrame = result,
+            )
+            if (regResult.success) {
+                manualOwnerTrackIds.add(pendingTrackId)
+                regResult.thumbnailPath?.let { path ->
+                    _uiState.value = _uiState.value.copy(
+                        registeredOwnerThumbnails = _uiState.value.registeredOwnerThumbnails + path,
+                    )
+                }
+            }
+        }
+
         val mergedLabels = result.faces.indices.map { index ->
             val trackId = result.trackingIds.getOrNull(index) ?: index
             if (trackId in manualOwnerTrackIds) {
@@ -179,6 +208,7 @@ class CameraViewModel @Inject constructor(
 
     fun switchLensFacing() {
         manualOwnerTrackIds.clear()
+        pendingOwnerRegistrationTrackId = null
 
         val nextLens = when (_uiState.value.lensFacing) {
             LensFacing.FRONT -> LensFacing.BACK
@@ -189,6 +219,7 @@ class CameraViewModel @Inject constructor(
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            registeredOwnerThumbnails = emptyList(),
         )
         cameraAnalysisUseCase.clearProcessingThreadCache()
     }
@@ -200,7 +231,9 @@ class CameraViewModel @Inject constructor(
         val state = _uiState.value
         if (!state.isCameraActive || !state.isDetecting) return
         val resolvedTrackId = resolveTrackId(trackId, fallbackFaceIndex, state.trackingIds)
-        manualOwnerTrackIds.add(resolvedTrackId)
+
+        pendingOwnerRegistrationTrackId = resolvedTrackId
+
         _uiState.value = state.copy(
             faceLabels = state.faceLabels.mapIndexed { index, currentLabel ->
                 val currentTrackId = state.trackingIds.getOrNull(index) ?: index
