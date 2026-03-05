@@ -6,7 +6,7 @@ from enum import Enum
 from typing import Any
 
 from adapters.frame_sink import DummyHlsSink, FrameSink
-from adapters.media_source import DummyMediaSource, MediaSource
+from adapters.media_source import MediaSource, create_media_source
 from adapters.metadata_store import MetadataStore
 from model.renderer import AvatarRenderer
 from schemas.stream import StreamStatusResponse
@@ -50,7 +50,7 @@ class StreamPipeline:
 
         self._max_frame_lag_us = max_frame_lag_ms * 1_000
         self._metadata_store = metadata_store
-        self._media_source = media_source or DummyMediaSource(fps=fps)
+        self._media_source = media_source or create_media_source(input_url=input_url, fps=fps)
         self._frame_sink = frame_sink or DummyHlsSink(output_path=output_path)
         self._renderer = renderer or AvatarRenderer()
 

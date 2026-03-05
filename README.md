@@ -22,7 +22,7 @@
   - Redis 조회 실패 시 `face_metadata=None`
   - 렌더링 예외 시 `emergency_fallback()`
 
-아직 실제 미디어 처리(PyAV/FFmpeg)와 실제 아바타 합성 로직은 더미 구현입니다.
+RTMP/SRT 입력 디코더(PyAV)는 구현되었고, FFmpeg 출력/실제 아바타 합성은 더미 구현입니다.
 
 ## 2. FastAPI 역할 (R&R)
 
@@ -54,6 +54,8 @@ FastAPI는 외부 클라이언트 API 서버가 아니라 Spring Boot가 제어�
   "avatar_id": "avatar-a"
 }
 ```
+
+테스트용으로 `input_url`에 `dummy://stream`을 넣으면 더미 입력 소스를 사용할 수 있습니다.
 
 ### 종료 요청 예시
 
@@ -144,8 +146,7 @@ uvicorn main:app --reload
 
 ## 8. 다음 구현 우선순위
 
-1. PyAV로 RTMP/SRT 입력 디코더 연결 (`pts_us` 정규화)
-2. Spring 적재 포맷과 Redis 키/필드 완전 일치
-3. 모델러 함수 연결 및 블러 fallback 정책 확정
-4. FFmpeg HLS 출력 + Nginx/S3 저장 전략 확정
-5. 다중 방송 부하 테스트 및 드랍 정책 튜닝
+1. Spring 적재 포맷과 Redis 키/필드 완전 일치
+2. 모델러 함수 연결 및 블러 fallback 정책 확정
+3. FFmpeg HLS 출력 + Nginx/S3 저장 전략 확정
+4. 다중 방송 부하 테스트 및 드랍 정책 튜닝
