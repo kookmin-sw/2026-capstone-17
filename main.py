@@ -1,6 +1,7 @@
 import uvicorn
 from fastapi import FastAPI
 
+from api.exception_handlers import register_exception_handlers
 from api.routes_health import router as health_router
 from api.routes_stream import router as stream_router
 from core.config import get_settings
@@ -41,6 +42,7 @@ def create_app() -> FastAPI:
         redoc_url=settings.api_redoc_url,
         openapi_url=settings.api_openapi_url,
     )
+    register_exception_handlers(app)
     app.include_router(health_router)
     app.include_router(stream_router, prefix="/api")
     return app

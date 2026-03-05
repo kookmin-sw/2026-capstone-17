@@ -2,8 +2,8 @@ import asyncio
 
 from adapters.metadata_store import RedisMetadataStore
 from core.config import Settings
+from core.exceptions import ApiException, ErrorTitle
 from schemas.stream import StreamStartRequest, StreamStatusResponse
-from services.errors import StreamAlreadyRunningError, StreamNotFoundError
 from workers.pipeline import PipelineState, StreamPipeline
 
 
@@ -21,8 +21,9 @@ class StreamManager:
                 PipelineState.RUNNING,
                 PipelineState.STOPPING,
             }:
-                raise StreamAlreadyRunningError(
-                    f"broadcast_id '{req.broadcast_id}' is already active"
+                raise ApiException(
+                    ErrorTitle.BadRequest,
+                    f"이미 실행 중인 방송입니다. broadcast_id={req.broadcast_id}",
                 )
 
             metadata_store = RedisMetadataStore(
@@ -48,7 +49,10 @@ class StreamManager:
             pipeline = self._pipelines.get(broadcast_id)
 
         if not pipeline:
-            raise StreamNotFoundError(f"broadcast_id '{broadcast_id}' was not found")
+            raise ApiException(
+                ErrorTitle.NotFoundBroadcast,
+                f"존재하지 않는 방송입니다. broadcast_id={broadcast_id}",
+            )
 
         await pipeline.stop()
         return pipeline.snapshot()
@@ -58,6 +62,9 @@ class StreamManager:
             pipeline = self._pipelines.get(broadcast_id)
 
         if not pipeline:
-            raise StreamNotFoundError(f"broadcast_id '{broadcast_id}' was not found")
+            raise ApiException(
+                ErrorTitle.NotFoundBroadcast,
+                f"존재하지 않는 방송입니다. broadcast_id={broadcast_id}",
+            )
 
         return pipeline.snapshot()

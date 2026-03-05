@@ -82,7 +82,29 @@ fallback 정책:
 - 렌더링 예외: `emergency_fallback(frame)`
 - 운영 단계에서 블러/원본/마지막 정상 프레임 정책으로 교체 권장
 
-## 5. Redis 계약(현재 기준)
+## 5. 예외 응답 규칙 (focus-server 통일)
+
+실패 응답은 `focus-server`와 동일한 포맷을 사용합니다.
+
+```json
+{
+  "success": false,
+  "message": "존재하지 않는 방송입니다. broadcast_id=bc_20260227_001",
+  "errorTitle": "NotFoundBroadcast",
+  "errorCode": 404
+}
+```
+
+- `errorTitle`: Spring `ErrorTitle` enum 이름과 동일
+- `errorCode`: HTTP 상태 코드
+- 대표 매핑
+  - 요청 검증 실패: `InvalidInputValue` (400)
+  - 잘못된 요청: `BadRequest` (400)
+  - 방송 미존재: `NotFoundBroadcast` (404)
+  - 미정의 엔드포인트: `NotFoundEndpoint` (404)
+  - 내부 오류: `InternalServerError` (500)
+
+## 6. Redis 계약(현재 기준)
 
 - URL: `REDIS_URL`
 - 키 템플릿: `REDIS_METADATA_KEY_TEMPLATE` (기본값: `broadcast:{broadcast_id}:meta:{pts_us}`)
@@ -105,7 +127,7 @@ broadcast:bc_20260227_001:meta:61400000
 }
 ```
 
-## 6. Docker Compose (로컬 Redis 전용)
+## 7. Docker Compose (로컬 Redis 전용)
 
 - 파일: `docker-compose.yaml`
 - Redis 설정 파일: `infra/redis/redis.conf`
@@ -141,7 +163,7 @@ Swagger:
 - `http://localhost:8000/redoc`
 - `http://localhost:8000/openapi.json`
 
-## 7. 로컬 실행
+## 8. 로컬 실행
 
 ```bash
 python3 -m venv .venv
@@ -152,7 +174,7 @@ pip install -r requirements.txt
 uvicorn main:app --reload
 ```
 
-## 8. 다음 구현 우선순위
+## 9. 다음 구현 우선순위
 
 1. Spring 적재 포맷과 Redis 키/필드 완전 일치
 2. 모델러 함수 연결 및 블러 fallback 정책 확정
