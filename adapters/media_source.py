@@ -44,7 +44,8 @@ class PyAVMediaSource:
     def __init__(self, input_url: str, fallback_fps: int = 30) -> None:
         if av is None:
             raise RuntimeError(
-                "PyAV is not installed. Install it with `pip install av` to use live inputs."
+                "PyAV is not installed. Install optional deps with "
+                "`pip install -r requirements.media.txt` to use live inputs."
             )
 
         self._input_url = input_url

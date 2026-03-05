@@ -129,6 +129,12 @@ FastAPI는 로컬에서 직접 실행:
 uvicorn main:app --reload
 ```
 
+라이브 RTMP/SRT 입력(PyAV)까지 테스트할 경우:
+
+```bash
+pip install -r requirements.media.txt
+```
+
 Swagger:
 
 - `http://localhost:8000/swagger`
@@ -141,6 +147,8 @@ Swagger:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# 라이브 입력 테스트 시에만 추가
+# pip install -r requirements.media.txt
 uvicorn main:app --reload
 ```
 

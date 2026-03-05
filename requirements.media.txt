@@ -1,0 +1,2 @@
+# Optional media ingest dependency (RTMP/SRT decode via PyAV)
+av>=13.0,<15.0
