@@ -30,15 +30,18 @@ class StreamManager:
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
             )
-            pipeline = StreamPipeline(
-                broadcast_id=req.broadcast_id,
-                input_url=req.input_url,
-                output_path=req.output_path,
-                avatar_id=req.avatar_id,
-                fps=self._settings.pipeline_fps,
-                max_frame_lag_ms=self._settings.max_frame_lag_ms,
-                metadata_store=metadata_store,
-            )
+            try:
+                pipeline = StreamPipeline(
+                    broadcast_id=req.broadcast_id,
+                    input_url=req.input_url,
+                    output_path=req.output_path,
+                    avatar_id=req.avatar_id,
+                    fps=self._settings.pipeline_fps,
+                    max_frame_lag_ms=self._settings.max_frame_lag_ms,
+                    metadata_store=metadata_store,
+                )
+            except RuntimeError as exc:
+                raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc
             self._pipelines[req.broadcast_id] = pipeline
 
         await pipeline.start()
