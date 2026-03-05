@@ -1,4 +1,18 @@
 services:
+  mediamtx:
+    image: bluenviron/mediamtx:1
+    container_name: focus-mediamtx
+    restart: unless-stopped
+    environment:
+      MTX_RTSPTRANSPORTS: tcp
+    ports:
+      - "8554:8554" # RTSP
+      - "1935:1935" # RTMP
+      - "8888:8888" # HLS
+      - "8889:8889" # WebRTC
+      - "8890:8890/udp" # SRT
+      - "8189:8189/udp" # WebRTC ICE/UDP
+
   redis:
     image: redis:7.2-alpine
     container_name: focus-redis

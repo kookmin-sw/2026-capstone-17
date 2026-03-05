@@ -127,23 +127,33 @@ broadcast:bc_20260227_001:meta:61400000
 }
 ```
 
-## 7. Docker Compose (로컬 Redis 전용)
+## 7. Docker Compose (로컬 Redis + MediaMTX)
 
 - 파일: `docker-compose.yaml`
 - Redis 설정 파일: `infra/redis/redis.conf`
 
-Redis 실행:
+실행:
 
 ```bash
 docker compose up -d
 ```
 
-Redis 확인:
+상태 확인:
 
 ```bash
 docker compose ps
-docker compose logs -f redis
+docker compose logs -f redis mediamtx
 ```
+
+SRT 송출 테스트:
+
+```bash
+ffmpeg -re -f lavfi -i testsrc=size=640x360:rate=30 \
+-c:v libx264 -preset veryfast -tune zerolatency \
+-f mpegts "srt://127.0.0.1:8890?streamid=publish:live/101"
+```
+
+참고: macOS Homebrew 기본 `ffmpeg`에는 SRT가 빠질 수 있습니다. 이 경우 `ffmpeg-full`을 사용하세요.
 
 FastAPI는 로컬에서 직접 실행:
 
