@@ -22,7 +22,7 @@
   - Redis 조회 실패 시 `face_metadata=None`
   - 렌더링 예외 시 `emergency_fallback()`
 
-아직 실제 미디어 처리(PyAV/FFmpeg)와 실제 아바타 합성 로직은 더미 구현입니다.
+RTMP/SRT 입력 디코더(PyAV)는 구현되었고, FFmpeg 출력/실제 아바타 합성은 더미 구현입니다.
 
 ## 2. FastAPI 역할 (R&R)
 
@@ -55,6 +55,8 @@ FastAPI는 외부 클라이언트 API 서버가 아니라 Spring Boot가 제어�
 }
 ```
 
+테스트용으로 `input_url`에 `dummy://stream`을 넣으면 더미 입력 소스를 사용할 수 있습니다.
+
 ### 종료 요청 예시
 
 ```json
@@ -80,7 +82,29 @@ fallback 정책:
 - 렌더링 예외: `emergency_fallback(frame)`
 - 운영 단계에서 블러/원본/마지막 정상 프레임 정책으로 교체 권장
 
-## 5. Redis 계약(현재 기준)
+## 5. 예외 응답 규칙 (focus-server 통일)
+
+실패 응답은 `focus-server`와 동일한 포맷을 사용합니다.
+
+```json
+{
+  "success": false,
+  "message": "존재하지 않는 방송입니다. broadcast_id=bc_20260227_001",
+  "errorTitle": "NotFoundBroadcast",
+  "errorCode": 404
+}
+```
+
+- `errorTitle`: Spring `ErrorTitle` enum 이름과 동일
+- `errorCode`: HTTP 상태 코드
+- 대표 매핑
+  - 요청 검증 실패: `InvalidInputValue` (400)
+  - 잘못된 요청: `BadRequest` (400)
+  - 방송 미존재: `NotFoundBroadcast` (404)
+  - 미정의 엔드포인트: `NotFoundEndpoint` (404)
+  - 내부 오류: `InternalServerError` (500)
+
+## 6. Redis 계약(현재 기준)
 
 - URL: `REDIS_URL`
 - 키 템플릿: `REDIS_METADATA_KEY_TEMPLATE` (기본값: `broadcast:{broadcast_id}:meta:{pts_us}`)
@@ -103,7 +127,7 @@ broadcast:bc_20260227_001:meta:61400000
 }
 ```
 
-## 6. Docker Compose (로컬 Redis 전용)
+## 7. Docker Compose (로컬 Redis 전용)
 
 - 파일: `docker-compose.yaml`
 - Redis 설정 파일: `infra/redis/redis.conf`
@@ -127,25 +151,32 @@ FastAPI는 로컬에서 직접 실행:
 uvicorn main:app --reload
 ```
 
+라이브 RTMP/SRT 입력(PyAV)까지 테스트할 경우:
+
+```bash
+pip install -r requirements.media.txt
+```
+
 Swagger:
 
 - `http://localhost:8000/swagger`
 - `http://localhost:8000/redoc`
 - `http://localhost:8000/openapi.json`
 
-## 7. 로컬 실행
+## 8. 로컬 실행
 
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+# 라이브 입력 테스트 시에만 추가
+# pip install -r requirements.media.txt
 uvicorn main:app --reload
 ```
 
-## 8. 다음 구현 우선순위
+## 9. 다음 구현 우선순위
 
-1. PyAV로 RTMP/SRT 입력 디코더 연결 (`pts_us` 정규화)
-2. Spring 적재 포맷과 Redis 키/필드 완전 일치
-3. 모델러 함수 연결 및 블러 fallback 정책 확정
-4. FFmpeg HLS 출력 + Nginx/S3 저장 전략 확정
-5. 다중 방송 부하 테스트 및 드랍 정책 튜닝
+1. Spring 적재 포맷과 Redis 키/필드 완전 일치
+2. 모델러 함수 연결 및 블러 fallback 정책 확정
+3. FFmpeg HLS 출력 + Nginx/S3 저장 전략 확정
+4. 다중 방송 부하 테스트 및 드랍 정책 튜닝

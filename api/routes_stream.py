@@ -1,9 +1,8 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, status
 
-from schemas.common import ErrorResponse
+from schemas.common import ApiFailureResponse
 from schemas.stream import StreamStartRequest, StreamStatusResponse, StreamStopRequest
 from services.container import get_stream_manager
-from services.errors import StreamAlreadyRunningError, StreamNotFoundError
 from services.stream_manager import StreamManager
 
 router = APIRouter(prefix="/stream", tags=["stream-control"])
@@ -45,12 +44,17 @@ STOP_REQUEST_EXAMPLES = {
     description="Spring Boot가 방송 시작 시 내부 호출하여 FastAPI 워커를 시작합니다.",
     response_description="요청 접수 직후 방송 현재 상태를 반환합니다.",
     responses={
-        status.HTTP_409_CONFLICT: {
-            "model": ErrorResponse,
-            "description": "이미 실행 중인 broadcast_id",
+        status.HTTP_400_BAD_REQUEST: {
+            "model": ApiFailureResponse,
+            "description": "잘못된 요청 또는 이미 실행 중인 방송",
             "content": {
                 "application/json": {
-                    "example": {"detail": "broadcast_id 'bc_20260227_001' is already active"}
+                    "example": {
+                        "success": False,
+                        "message": "이미 실행 중인 방송입니다. broadcast_id=bc_20260227_001",
+                        "errorTitle": "BadRequest",
+                        "errorCode": 400,
+                    }
                 }
             },
         }
@@ -60,10 +64,7 @@ async def start_stream(
     req: StreamStartRequest = Body(..., openapi_examples=START_REQUEST_EXAMPLES),
     manager: StreamManager = Depends(get_stream_manager),
 ) -> StreamStatusResponse:
-    try:
-        return await manager.start_stream(req)
-    except StreamAlreadyRunningError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    return await manager.start_stream(req)
 
 
 @router.post(
@@ -75,11 +76,16 @@ async def start_stream(
     response_description="중지 처리 후 최종 상태를 반환합니다.",
     responses={
         status.HTTP_404_NOT_FOUND: {
-            "model": ErrorResponse,
+            "model": ApiFailureResponse,
             "description": "해당 broadcast_id 미존재",
             "content": {
                 "application/json": {
-                    "example": {"detail": "broadcast_id 'bc_20260227_001' was not found"}
+                    "example": {
+                        "success": False,
+                        "message": "존재하지 않는 방송입니다. broadcast_id=bc_20260227_001",
+                        "errorTitle": "NotFoundBroadcast",
+                        "errorCode": 404,
+                    }
                 }
             },
         }
@@ -89,10 +95,7 @@ async def stop_stream(
     req: StreamStopRequest = Body(..., openapi_examples=STOP_REQUEST_EXAMPLES),
     manager: StreamManager = Depends(get_stream_manager),
 ) -> StreamStatusResponse:
-    try:
-        return await manager.stop_stream(req.broadcast_id)
-    except StreamNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return await manager.stop_stream(req.broadcast_id)
 
 
 @router.get(
@@ -103,11 +106,16 @@ async def stop_stream(
     response_description="현재 방송 워커 상태와 처리 통계를 반환합니다.",
     responses={
         status.HTTP_404_NOT_FOUND: {
-            "model": ErrorResponse,
+            "model": ApiFailureResponse,
             "description": "해당 broadcast_id 미존재",
             "content": {
                 "application/json": {
-                    "example": {"detail": "broadcast_id 'bc_20260227_001' was not found"}
+                    "example": {
+                        "success": False,
+                        "message": "존재하지 않는 방송입니다. broadcast_id=bc_20260227_001",
+                        "errorTitle": "NotFoundBroadcast",
+                        "errorCode": 404,
+                    }
                 }
             },
         }
@@ -117,7 +125,4 @@ async def stream_status(
     broadcast_id: str,
     manager: StreamManager = Depends(get_stream_manager),
 ) -> StreamStatusResponse:
-    try:
-        return await manager.get_status(broadcast_id)
-    except StreamNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    return await manager.get_status(broadcast_id)
