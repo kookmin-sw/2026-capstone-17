@@ -25,6 +25,11 @@ spring:
       host: localhost
       port: 6379
 
+  grpc:
+    server:
+      reflection:
+        enabled: true
+
 jwt:
   common:
     key: ${JWT_SECRET}

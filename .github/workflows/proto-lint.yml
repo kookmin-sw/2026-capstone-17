@@ -1,0 +1,34 @@
+name: Proto Lint
+
+on:
+  pull_request:
+    paths:
+      - "src/main/proto/**"
+      - "buf.yaml"
+      - ".github/workflows/proto-lint.yml"
+  push:
+    paths:
+      - "src/main/proto/**"
+      - "buf.yaml"
+      - ".github/workflows/proto-lint.yml"
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Buf
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+
+      - name: Run buf lint
+        run: buf lint
+
+      - name: Run buf breaking check
+        if: github.event_name == 'pull_request'
+        run: buf breaking --against ".git#branch=origin/${{ github.base_ref }}"
