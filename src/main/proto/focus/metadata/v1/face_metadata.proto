@@ -7,10 +7,10 @@ option java_outer_classname = "FaceMetadataProto";
 option java_package = "com.capstone.focus.grpc.metadata.v1";
 
 service FaceMetadataIngestService {
-  rpc PushFaceMetadata(stream FaceMetadataFrame) returns (IngestSummary);
+  rpc PushFaceMetadata(stream PushFaceMetadataRequest) returns (PushFaceMetadataResponse);
 }
 
-message FaceMetadataFrame {
+message PushFaceMetadataRequest {
   // Broadcast/session identifier created by Spring.
   string session_id = 1;
 
@@ -37,7 +37,7 @@ message Landmark {
   float z = 3;
 }
 
-message IngestSummary {
+message PushFaceMetadataResponse {
   string session_id = 1;
   int64 received_frames = 2;
   int64 accepted_frames = 3;

@@ -3,9 +3,9 @@ package com.capstone.focus.api.grpc
 import com.capstone.focus.common.external.redis.StreamMetadataRedisService
 import com.capstone.focus.common.external.redis.model.FaceMetadataLandmark
 import com.capstone.focus.common.external.redis.model.FaceMetadataRedisPayload
-import com.capstone.focus.grpc.metadata.v1.FaceMetadataFrame
 import com.capstone.focus.grpc.metadata.v1.FaceMetadataIngestServiceGrpc
-import com.capstone.focus.grpc.metadata.v1.IngestSummary
+import com.capstone.focus.grpc.metadata.v1.PushFaceMetadataRequest
+import com.capstone.focus.grpc.metadata.v1.PushFaceMetadataResponse
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 import org.springframework.grpc.server.service.GrpcService
@@ -17,11 +17,11 @@ class FaceMetadataIngestGrpcService(
 
     private val logger = LoggerFactory.getLogger(FaceMetadataIngestGrpcService::class.java)
 
-    override fun pushFaceMetadata(responseObserver: StreamObserver<IngestSummary>): StreamObserver<FaceMetadataFrame> {
-        return object : StreamObserver<FaceMetadataFrame> {
+    override fun pushFaceMetadata(responseObserver: StreamObserver<PushFaceMetadataResponse>): StreamObserver<PushFaceMetadataRequest> {
+        return object : StreamObserver<PushFaceMetadataRequest> {
             private var ingestState = IngestState()
 
-            override fun onNext(frame: FaceMetadataFrame) {
+            override fun onNext(frame: PushFaceMetadataRequest) {
                 ingestState = ingestState.markReceived()
                 if (!isValidFrame(frame)) {
                     ingestState = ingestState.markDropped()
@@ -54,7 +54,7 @@ class FaceMetadataIngestGrpcService(
         }
     }
 
-    private fun createRedisPayload(frame: FaceMetadataFrame): FaceMetadataRedisPayload {
+    private fun createRedisPayload(frame: PushFaceMetadataRequest): FaceMetadataRedisPayload {
         val trackingId = frame.trackingId.takeIf { it.isNotBlank() }
         val confidence = frame.confidence.takeIf { it > MINIMUM_CONFIDENCE }
         val landmarks = frame.landmarksList.map { landmark ->
@@ -77,10 +77,10 @@ class FaceMetadataIngestGrpcService(
         )
     }
 
-    private fun isValidFrame(frame: FaceMetadataFrame): Boolean = frame.sessionId.isNotBlank() && frame.ptsUs >= MINIMUM_VALID_PTS_US
+    private fun isValidFrame(frame: PushFaceMetadataRequest): Boolean = frame.sessionId.isNotBlank() && frame.ptsUs >= MINIMUM_VALID_PTS_US
 
-    private fun buildIngestSummary(ingestState: IngestState): IngestSummary {
-        return IngestSummary.newBuilder()
+    private fun buildIngestSummary(ingestState: IngestState): PushFaceMetadataResponse {
+        return PushFaceMetadataResponse.newBuilder()
             .setSessionId(ingestState.latestSessionId)
             .setReceivedFrames(ingestState.receivedFrameCount)
             .setAcceptedFrames(ingestState.acceptedFrameCount)

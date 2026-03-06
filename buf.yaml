@@ -1,8 +1,12 @@
 version: v1
 
+build:
+  roots:
+    - src/main/proto
+
 lint:
   use:
-    - DEFAULT
+    - STANDARD
 
 breaking:
   use:

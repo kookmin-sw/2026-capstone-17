@@ -1,6 +1,6 @@
 package com.capstone.focus.api.grpc.interceptor
 
-import com.capstone.focus.grpc.metadata.v1.FaceMetadataFrame
+import com.capstone.focus.grpc.metadata.v1.PushFaceMetadataRequest
 import io.grpc.ForwardingServerCall
 import io.grpc.ForwardingServerCallListener
 import io.grpc.Grpc
@@ -68,7 +68,7 @@ class GrpcAccessLogInterceptor : ServerInterceptor {
     }
 
     private fun <ReqT> updateSessionId(callState: CallState, message: ReqT) {
-        if (callState.sessionId != null || message !is FaceMetadataFrame) {
+        if (callState.sessionId != null || message !is PushFaceMetadataRequest) {
             return
         }
         if (message.sessionId.isBlank()) {

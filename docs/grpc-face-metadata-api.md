@@ -5,11 +5,11 @@
 ## 1) Endpoint Contract
 - Package: `focus.metadata.v1`
 - Service: `FaceMetadataIngestService`
-- RPC: `PushFaceMetadata(stream FaceMetadataFrame) returns (IngestSummary)`
+- RPC: `PushFaceMetadata(stream PushFaceMetadataRequest) returns (PushFaceMetadataResponse)`
 - Streaming type: Client Streaming
 
 ## 2) Request Schema
-`FaceMetadataFrame`
+`PushFaceMetadataRequest`
 
 | Field | Type | Required | Description |
 |---|---|---:|---|
@@ -32,7 +32,7 @@
 | `z` | `float` |
 
 ## 3) Response Schema
-`IngestSummary`
+`PushFaceMetadataResponse`
 
 | Field | Type | Description |
 |---|---|---|
