@@ -44,7 +44,7 @@ class MemberController(
         @AuthenticationPrincipal memberDetails: FocusMemberDetails
     ): ResponseEntity<ApiResponse.Success<String>> {
         // 로그아웃 시 Redis에 저장된 해당 유저의 Refresh Token 삭제
-        redisService.deleteRefreshToken(memberDetails.getMemberId())
+        redisService.deleteRefreshTokenByUserId(memberDetails.getMemberId())
         return ResponseUtil.success("로그아웃 성공", "로그아웃이 완료되었습니다.")
     }
 }

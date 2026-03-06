@@ -111,6 +111,13 @@ allOpen {
 	annotation("jakarta.persistence.Embeddable")
 }
 
+sourceSets {
+	named("main") {
+		java.srcDir("build/generated/sources/proto/main/java")
+		java.srcDir("build/generated/sources/proto/main/grpc")
+	}
+}
+
 tasks.withType<Test> {
 	useJUnitPlatform()
 }

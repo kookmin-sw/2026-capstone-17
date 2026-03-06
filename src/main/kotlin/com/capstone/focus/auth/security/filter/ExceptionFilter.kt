@@ -33,8 +33,8 @@ class ExceptionFilter : OncePerRequestFilter() {
         val errorResponse = mapOf(
             "success" to false,
             "message" to e.errorTitle.message,
-            "errorName" to e.errorTitle.errorName,
-            "data" to null
+            "errorTitle" to e.errorTitle.errorName,
+            "errorCode" to e.errorTitle.status.value()
         )
 
         response.writer.write(objectMapper.writeValueAsString(errorResponse))

@@ -35,7 +35,7 @@ class BroadcastController(
     private val broadcastService: BroadcastService
 ) {
 
-    @FocusPostMapping
+    @FocusPostMapping(authenticated = true)
     @SwaggerApiResponse(responseCode = "201", description = "방송 생성 성공")
     @Operation(summary = "방송 생성 API", description = "새로운 방송(방)을 생성하고 스트림 키를 발급받습니다.")
     fun createBroadcast(
@@ -66,7 +66,7 @@ class BroadcastController(
         return ResponseUtil.success("방송 상세 정보를 성공적으로 조회했습니다.", response)
     }
 
-    @FocusPutMapping("/{broadcastId}")
+    @FocusPutMapping("/{broadcastId}", authenticated = true)
     @SwaggerApiResponse(responseCode = "200", description = "방송 정보 수정 성공")
     @Operation(summary = "방송 정보 수정 API", description = "방송 제목 등 정보를 수정합니다. (본인만 가능)")
     fun updateBroadcast(
@@ -78,7 +78,7 @@ class BroadcastController(
         return ResponseUtil.success("방송 정보가 성공적으로 수정되었습니다.", response)
     }
 
-    @FocusDeleteMapping("/{broadcastId}")
+    @FocusDeleteMapping("/{broadcastId}", authenticated = true)
     @SwaggerApiResponse(responseCode = "200", description = "방송 삭제 성공")
     @Operation(summary = "방송 삭제 API", description = "방송을 삭제합니다. (본인만 가능)")
     fun deleteBroadcast(

@@ -27,8 +27,8 @@ class CustomAccessDeniedHandler : AccessDeniedHandler {
         val errorResponse = mapOf(
             "success" to false,
             "message" to errorTitle.message,
-            "errorName" to errorTitle.errorName,
-            "data" to null
+            "errorTitle" to errorTitle.errorName,
+            "errorCode" to errorTitle.status.value()
         )
 
         response.writer.write(objectMapper.writeValueAsString(errorResponse))
