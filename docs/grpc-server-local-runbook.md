@@ -45,15 +45,15 @@ grpcurl -plaintext 127.0.0.1:8080 describe focus.metadata.v1.FaceMetadataIngestS
 ## 6) Streaming Test
 ```bash
 cat <<'EOF' | grpcurl -plaintext -d @ 127.0.0.1:8080 focus.metadata.v1.FaceMetadataIngestService/PushFaceMetadata
-{"sessionId":"bc_20260227_001","ptsUs":61400000,"avatarUrl":"s3://avatars/a.vrm","faceData":{"AU12":0.63,"yaw":0.10},"trackingId":"t-102","isReentry":false,"confidence":0.94,"bbox":[120,80,220,200]}
-{"sessionId":"bc_20260227_001","ptsUs":61433333,"avatarUrl":"s3://avatars/a.vrm","faceData":{"AU12":0.61,"yaw":0.12},"trackingId":"t-102","isReentry":false,"confidence":0.93,"bbox":[121,80,221,200]}
+{"sessionId":"abc-123","ptsUs":0,"faces":[]}
+{"sessionId":"abc-123","ptsUs":133333,"faces":[{"trackingId":0,"bbox":{"x":659,"y":177,"width":49,"height":64},"tdmmRaw":{"coeffs":[0.12,-0.05,0.0,0.03,0.01,0.02]}}]}
 EOF
 ```
 
 ## 7) Redis Verification
 ```bash
-redis-cli GET "broadcast:bc_20260227_001:meta:61433333"
-redis-cli TTL "broadcast:bc_20260227_001:meta:61433333"
+redis-cli GET "broadcast:abc-123:meta:133333"
+redis-cli TTL "broadcast:abc-123:meta:133333"
 ```
 
 ## 8) Troubleshooting

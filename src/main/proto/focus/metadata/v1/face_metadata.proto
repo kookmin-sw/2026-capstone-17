@@ -17,24 +17,25 @@ message PushFaceMetadataRequest {
   // Media PTS in microseconds.
   int64 pts_us = 2;
 
-  // Avatar resource currently used by the client.
-  string avatar_url = 3;
-
-  // Face controls such as pitch/yaw/roll, eyeBlink, jawOpen and AU values.
-  map<string, float> face_data = 4;
-
-  // Optional fields for tracking consistency and debug.
-  string tracking_id = 5;
-  bool is_reentry = 6;
-  float confidence = 7;
-  repeated float bbox = 8;
-  repeated Landmark landmarks = 9;
+  // Faces detected in this frame.
+  repeated FaceFrame faces = 3;
 }
 
-message Landmark {
-  float x = 1;
-  float y = 2;
-  float z = 3;
+message FaceFrame {
+  int64 tracking_id = 1;
+  BoundingBox bbox = 2;
+  TdmmRaw tdmm_raw = 3;
+}
+
+message BoundingBox {
+  int32 x = 1;
+  int32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message TdmmRaw {
+  repeated float coeffs = 1;
 }
 
 message PushFaceMetadataResponse {

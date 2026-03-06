@@ -15,21 +15,30 @@
 |---|---|---:|---|
 | `session_id` | `string` | Y | 방송/세션 식별자 (`broadcast_id`) |
 | `pts_us` | `int64` | Y | 프레임 PTS (microseconds) |
-| `avatar_url` | `string` | N | 현재 아바타 리소스 URL |
-| `face_data` | `map<string, float>` | N | AU, yaw/pitch/roll 등 표정/포즈 값 |
-| `tracking_id` | `string` | N | 얼굴 추적 ID |
-| `is_reentry` | `bool` | N | 재진입 여부 |
-| `confidence` | `float` | N | 신뢰도 |
-| `bbox` | `repeated float` | N | 얼굴 바운딩 박스 좌표 |
-| `landmarks` | `repeated Landmark` | N | 랜드마크 |
+| `faces` | `repeated FaceFrame` | N | 프레임 내 얼굴 목록 |
 
-`Landmark`
+`FaceFrame`
 
 | Field | Type |
 |---|---|
-| `x` | `float` |
-| `y` | `float` |
-| `z` | `float` |
+| `tracking_id` | `int64` |
+| `bbox` | `BoundingBox` |
+| `tdmm_raw` | `TdmmRaw` |
+
+`BoundingBox`
+
+| Field | Type |
+|---|---|
+| `x` | `int32` |
+| `y` | `int32` |
+| `width` | `int32` |
+| `height` | `int32` |
+
+`TdmmRaw`
+
+| Field | Type |
+|---|---|
+| `coeffs` | `repeated float` |
 
 ## 3) Response Schema
 `PushFaceMetadataResponse`
@@ -44,24 +53,26 @@
 
 ## 4) Validation Rules
 - `session_id`가 비어 있으면 해당 프레임은 드롭됩니다.
-- `pts_us`가 `1` 미만이면 해당 프레임은 드롭됩니다.
+- `pts_us`가 `0` 미만이면 해당 프레임은 드롭됩니다.
 
 ## 5) Request Example
 ```json
 {
   "sessionId": "bc_20260227_001",
-  "ptsUs": 61433333,
-  "avatarUrl": "s3://avatars/a.vrm",
-  "faceData": {
-    "AU12": 0.61,
-    "yaw": 0.12
-  },
-  "trackingId": "t-102",
-  "isReentry": false,
-  "confidence": 0.93,
-  "bbox": [121, 80, 221, 200],
-  "landmarks": [
-    { "x": 130.1, "y": 99.8, "z": -0.01 }
+  "ptsUs": 133333,
+  "faces": [
+    {
+      "trackingId": 0,
+      "bbox": {
+        "x": 659,
+        "y": 177,
+        "width": 49,
+        "height": 64
+      },
+      "tdmmRaw": {
+        "coeffs": [0.12, -0.05, 0.0, 0.03, 0.01, 0.02]
+      }
+    }
   ]
 }
 ```

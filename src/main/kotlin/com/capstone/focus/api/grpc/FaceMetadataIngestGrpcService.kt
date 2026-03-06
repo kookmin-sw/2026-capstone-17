@@ -1,11 +1,15 @@
 package com.capstone.focus.api.grpc
 
 import com.capstone.focus.common.external.redis.StreamMetadataRedisService
-import com.capstone.focus.common.external.redis.model.FaceMetadataLandmark
+import com.capstone.focus.common.external.redis.model.BoundingBoxRedisPayload
 import com.capstone.focus.common.external.redis.model.FaceMetadataRedisPayload
+import com.capstone.focus.common.external.redis.model.FrameFaceRedisPayload
+import com.capstone.focus.common.external.redis.model.TdmmRawRedisPayload
+import com.capstone.focus.grpc.metadata.v1.BoundingBox
 import com.capstone.focus.grpc.metadata.v1.FaceMetadataIngestServiceGrpc
 import com.capstone.focus.grpc.metadata.v1.PushFaceMetadataRequest
 import com.capstone.focus.grpc.metadata.v1.PushFaceMetadataResponse
+import com.capstone.focus.grpc.metadata.v1.TdmmRaw
 import io.grpc.stub.StreamObserver
 import org.slf4j.LoggerFactory
 import org.springframework.grpc.server.service.GrpcService
@@ -55,25 +59,32 @@ class FaceMetadataIngestGrpcService(
     }
 
     private fun createRedisPayload(frame: PushFaceMetadataRequest): FaceMetadataRedisPayload {
-        val trackingId = frame.trackingId.takeIf { it.isNotBlank() }
-        val confidence = frame.confidence.takeIf { it > MINIMUM_CONFIDENCE }
-        val landmarks = frame.landmarksList.map { landmark ->
-            FaceMetadataLandmark(
-                x = landmark.x,
-                y = landmark.y,
-                z = landmark.z
+        val faces = frame.facesList.map { face ->
+            FrameFaceRedisPayload(
+                trackingId = face.trackingId,
+                boundingBox = if (face.hasBbox()) mapBoundingBox(face.bbox) else null,
+                tdmmRaw = if (face.hasTdmmRaw()) mapTdmmRaw(face.tdmmRaw) else null
             )
         }
         return FaceMetadataRedisPayload(
             sessionId = frame.sessionId,
             ptsUs = frame.ptsUs,
-            avatarUrl = frame.avatarUrl,
-            faceData = frame.faceDataMap,
-            trackingId = trackingId,
-            isReentry = frame.isReentry,
-            confidence = confidence,
-            boundingBox = frame.bboxList,
-            landmarks = landmarks
+            faces = faces
+        )
+    }
+
+    private fun mapBoundingBox(boundingBox: BoundingBox): BoundingBoxRedisPayload? {
+        return BoundingBoxRedisPayload(
+            x = boundingBox.x,
+            y = boundingBox.y,
+            width = boundingBox.width,
+            height = boundingBox.height
+        )
+    }
+
+    private fun mapTdmmRaw(tdmmRaw: TdmmRaw): TdmmRawRedisPayload {
+        return TdmmRawRedisPayload(
+            coefficients = tdmmRaw.coeffsList
         )
     }
 
@@ -103,7 +114,6 @@ class FaceMetadataIngestGrpcService(
     }
 
     companion object {
-        private const val MINIMUM_VALID_PTS_US = 1L
-        private const val MINIMUM_CONFIDENCE = 0f
+        private const val MINIMUM_VALID_PTS_US = 0L
     }
 }
