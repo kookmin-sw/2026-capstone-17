@@ -72,4 +72,25 @@ class RedisService(
             redisTemplate.delete(tokenToUserKey)
         }
     }
+
+    /**
+     * 범용: ZSET에 데이터 추가 (Score 기준 정렬)
+     */
+    fun addToZSet(key: String, value: String, score: Double) {
+        redisTemplate.opsForZSet().add(key, value, score)
+    }
+
+    /**
+     * 범용: Key의 만료 시간(TTL) 설정
+     */
+    fun expireKey(key: String, timeout: Long, timeUnit: TimeUnit) {
+        redisTemplate.expire(key, timeout, timeUnit)
+    }
+
+    /**
+     * 범용: Key-Value 저장 및 만료 시간 설정
+     */
+    fun setValueWithTTL(key: String, value: String, timeout: Long, timeUnit: TimeUnit) {
+        redisTemplate.opsForValue().set(key, value, timeout, timeUnit)
+    }
 }

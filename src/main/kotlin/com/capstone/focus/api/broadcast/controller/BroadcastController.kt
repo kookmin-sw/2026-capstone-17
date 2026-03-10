@@ -1,6 +1,7 @@
 package com.capstone.focus.api.broadcast.controller
 
 import com.capstone.focus.api.broadcast.dto.request.CreateBroadcastRequest
+import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
 import com.capstone.focus.api.broadcast.service.BroadcastService
@@ -44,6 +45,30 @@ class BroadcastController(
     ): ResponseEntity<ApiResponse.Success<BroadcastResponse>> {
         val response = broadcastService.createBroadcast(details.getMemberId(), request)
         return ResponseUtil.success("방송이 성공적으로 생성되었습니다.", response)
+    }
+
+    @FocusPostMapping("/{broadcastId}/start")
+    @SwaggerApiResponse(responseCode = "200", description = "방송 시작 성공")
+    @Operation(summary = "방송 시작 API", description = "HLS URL을 받아 방송 상태를 ON_AIR로 변경하고 시작 시간을 기록합니다.")
+    fun startBroadcast(
+        @AuthenticationPrincipal details: FocusMemberDetails,
+        @PathVariable broadcastId: String,
+        @RequestBody @Valid request: StartBroadcastRequest // Request Body 추가!
+    ): ResponseEntity<ApiResponse.Success<BroadcastResponse>> {
+
+        val response = broadcastService.startBroadcast(details.getMemberId(), broadcastId, request)
+        return ResponseUtil.success("방송이 성공적으로 시작되었습니다.", response)
+    }
+
+    @FocusPostMapping("/{broadcastId}/stop")
+    @SwaggerApiResponse(responseCode = "200", description = "방송 종료 성공")
+    @Operation(summary = "방송 종료 API", description = "방송 상태를 ENDED로 변경합니다.")
+    fun stopBroadcast(
+        @AuthenticationPrincipal details: FocusMemberDetails,
+        @PathVariable broadcastId: String
+    ): ResponseEntity<ApiResponse.Success<BroadcastResponse>> {
+        val response = broadcastService.stopBroadcast(details.getMemberId(), broadcastId)
+        return ResponseUtil.success("방송이 성공적으로 종료되었습니다.", response)
     }
 
     @FocusGetMapping

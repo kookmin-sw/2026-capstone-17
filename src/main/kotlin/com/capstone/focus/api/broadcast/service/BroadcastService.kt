@@ -1,6 +1,7 @@
 package com.capstone.focus.api.broadcast.service
 
 import com.capstone.focus.api.broadcast.dto.request.CreateBroadcastRequest
+import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
 import com.capstone.focus.common.exception.ApiException
@@ -17,6 +18,8 @@ import java.util.UUID
 
 interface BroadcastService {
     fun createBroadcast(memberId: String, request: CreateBroadcastRequest): BroadcastResponse
+    fun startBroadcast(memberId: String, broadcastId: String, request: StartBroadcastRequest): BroadcastResponse
+    fun stopBroadcast(memberId: String, broadcastId: String): BroadcastResponse
     fun getBroadcastList(pageable: Pageable): Page<BroadcastResponse>
     fun getBroadcastDetail(broadcastId: String): BroadcastResponse
     fun updateBroadcast(memberId: String, broadcastId: String, request: UpdateBroadcastRequest): BroadcastResponse
@@ -45,6 +48,36 @@ class BroadcastServiceImpl(
 
         val savedBroadcast = broadcastRepository.save(broadcast)
         return BroadcastResponse.from(savedBroadcast)
+    }
+
+    // 방송 시작
+    @Transactional
+    override fun startBroadcast(
+        memberId: String,
+        broadcastId: String,
+        request: StartBroadcastRequest
+    ): BroadcastResponse {
+        val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
+            ?: throw ApiException(ErrorTitle.NotFoundBroadcast)
+
+        validateOwnership(broadcast, memberId)
+
+        broadcast.startBroadcast(request.hlsUrl)
+
+        return BroadcastResponse.from(broadcast)
+    }
+
+    // 방송 종료
+    @Transactional
+    override fun stopBroadcast(memberId: String, broadcastId: String): BroadcastResponse {
+        val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
+            ?: throw ApiException(ErrorTitle.NotFoundBroadcast)
+
+        validateOwnership(broadcast, memberId)
+
+        broadcast.endBroadcast()
+
+        return BroadcastResponse.from(broadcast)
     }
 
     // 방송 리스트 조회 (페이징)
