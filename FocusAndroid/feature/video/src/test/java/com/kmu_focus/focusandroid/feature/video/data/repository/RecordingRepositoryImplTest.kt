@@ -1,12 +1,11 @@
 package com.kmu_focus.focusandroid.feature.video.data.repository
 
-import android.view.Surface
 import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.core.media.data.recorder.AudioTrackExtractor
 import com.kmu_focus.focusandroid.core.media.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.video.data.metadata.SourceVideoMetadataReader
 import io.mockk.every
 import io.mockk.mockk
-import io.mockk.slot
 import io.mockk.verify
 import org.junit.Assert.assertNotNull
 import org.junit.Test
@@ -22,11 +21,13 @@ class RecordingRepositoryImplTest {
     private val realTimeRecorder = mockk<RealTimeRecorder>(relaxed = true)
     private val videoLocalDataSource = mockk<VideoLocalDataSource>()
     private val audioExtractorFactory = mockk<AudioTrackExtractor.Factory>()
+    private val sourceVideoMetadataReader = mockk<SourceVideoMetadataReader>()
 
     private val repository = RecordingRepositoryImpl(
         realTimeRecorder = realTimeRecorder,
         videoLocalDataSource = videoLocalDataSource,
         audioExtractorFactory = audioExtractorFactory,
+        sourceVideoMetadataReader = sourceVideoMetadataReader,
     )
 
     @Test
@@ -35,9 +36,11 @@ class RecordingRepositoryImplTest {
         val tempFile = File("/tmp/recording.mp4")
         val sourceUri = "content://media/external/video/1"
         val audioExtractor = mockk<AudioTrackExtractor>(relaxed = true)
+        val sourceBitrate = 3_500_000
 
         every { videoLocalDataSource.createTempOutputFile() } returns tempFile
         every { audioExtractorFactory.create(sourceUri) } returns audioExtractor
+        every { sourceVideoMetadataReader.readVideoBitrate(sourceUri) } returns sourceBitrate
 
         // When
         val result = repository.startRecording(
@@ -53,7 +56,7 @@ class RecordingRepositoryImplTest {
                 width = 1920,
                 height = 1080,
                 outputFile = tempFile,
-                bitRate = any(),
+                bitRate = sourceBitrate,
                 frameRate = any(),
                 audioTrackSource = audioExtractor,
                 audioStartPositionUs = any(),
@@ -70,7 +73,7 @@ class RecordingRepositoryImplTest {
         every { videoLocalDataSource.createTempOutputFile() } returns tempFile
 
         // When
-        val result = repository.startRecording(
+        repository.startRecording(
             width = 1920,
             height = 1080,
             sourceUri = null,
@@ -83,13 +86,14 @@ class RecordingRepositoryImplTest {
                 width = 1920,
                 height = 1080,
                 outputFile = tempFile,
-                bitRate = any(),
+                bitRate = null,
                 frameRate = any(),
                 audioTrackSource = null,
                 audioStartPositionUs = any(),
                 onInputSurfaceReady = any(),
             )
         }
+        verify(exactly = 0) { sourceVideoMetadataReader.readVideoBitrate(any()) }
     }
 
     @Test

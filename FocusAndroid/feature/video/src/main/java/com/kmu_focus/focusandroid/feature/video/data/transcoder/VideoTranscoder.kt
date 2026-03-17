@@ -16,6 +16,7 @@ import com.kmu_focus.focusandroid.core.media.data.gl.OESTextureProgram
 import com.kmu_focus.focusandroid.core.media.data.gl.OffscreenSurface
 import com.kmu_focus.focusandroid.core.media.data.gl.OverlayRenderer
 import com.kmu_focus.focusandroid.core.media.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.domain.usecase.CalculateEncoderBitrateUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.TranscodeProgress
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -28,13 +29,12 @@ import java.util.concurrent.Executors
 
 private const val TAG = "VideoTranscoder"
 private const val TIMEOUT_US = 10_000L
-private const val ENCODER_BITRATE = 10_000_000
-private const val ENCODER_FRAME_RATE = 30
-private const val ENCODER_I_FRAME_INTERVAL = 1
+private const val DEFAULT_ENCODER_FRAME_RATE = 30
 
 class VideoTranscoder(
     private val context: Context,
-    private val frameProcessor: FrameProcessor
+    private val frameProcessor: FrameProcessor,
+    private val calculateEncoderBitrateUseCase: CalculateEncoderBitrateUseCase = CalculateEncoderBitrateUseCase(),
 ) {
     // EGL 컨텍스트는 스레드에 바인딩되므로 단일 전용 스레드에서 실행
     private val transcodeDispatcher = Executors.newSingleThreadExecutor { r ->
@@ -63,6 +63,10 @@ class VideoTranscoder(
         val height = inputFormat.getInteger(MediaFormat.KEY_HEIGHT)
         val durationUs = inputFormat.getLong(MediaFormat.KEY_DURATION)
         val rotation = inputFormat.getIntegerSafe(MediaFormat.KEY_ROTATION, 0)
+        val sourceBitrate = inputFormat.getIntegerOrNull(MediaFormat.KEY_BIT_RATE)?.takeIf { it > 0 }
+        val sourceFrameRate = inputFormat.getIntegerOrNull(MediaFormat.KEY_FRAME_RATE)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ENCODER_FRAME_RATE
 
         // 회전 적용된 실제 프레임 크기
         val (frameWidth, frameHeight) = if (rotation == 90 || rotation == 270) {
@@ -70,15 +74,21 @@ class VideoTranscoder(
         } else {
             width to height
         }
+        val encoderConfig = calculateEncoderBitrateUseCase(
+            width = frameWidth,
+            height = frameHeight,
+            frameRate = sourceFrameRate,
+            sourceBitrate = sourceBitrate,
+        )
 
         Log.i(TAG, "입력: ${width}x${height}, 회전: $rotation, 프레임: ${frameWidth}x${frameHeight}, 길이: ${durationUs / 1_000_000}s")
 
         // --- 인코더 설정 ---
         val encoderFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, frameWidth, frameHeight).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, ENCODER_BITRATE)
-            setInteger(MediaFormat.KEY_FRAME_RATE, ENCODER_FRAME_RATE)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, ENCODER_I_FRAME_INTERVAL)
+            setInteger(MediaFormat.KEY_BIT_RATE, encoderConfig.bitrate)
+            setInteger(MediaFormat.KEY_FRAME_RATE, encoderConfig.frameRate)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, encoderConfig.iFrameIntervalSec)
         }
         val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -452,6 +462,14 @@ class VideoTranscoder(
             getInteger(key)
         } catch (_: Exception) {
             default
+        }
+    }
+
+    private fun MediaFormat.getIntegerOrNull(key: String): Int? {
+        return try {
+            if (containsKey(key)) getInteger(key) else null
+        } catch (_: Exception) {
+            null
         }
     }
 }

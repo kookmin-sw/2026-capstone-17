@@ -6,6 +6,7 @@ import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.util.Log
 import android.view.Surface
+import com.kmu_focus.focusandroid.core.media.domain.usecase.CalculateEncoderBitrateUseCase
 import java.io.File
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicBoolean
@@ -23,6 +24,7 @@ class RealTimeRecorder(
     private val loggerTag: String = "RealTimeRecorder",
     /** 테스트 등에서 백그라운드 drain 스레드를 끄고 싶을 때 false로 설정. */
     private val enableBackgroundDrain: Boolean = true,
+    private val calculateEncoderBitrateUseCase: CalculateEncoderBitrateUseCase = CalculateEncoderBitrateUseCase(),
 ) {
 
     @Volatile
@@ -74,7 +76,7 @@ class RealTimeRecorder(
      *
      * @param width 인코딩 해상도 (픽셀)
      * @param height 인코딩 해상도 (픽셀)
-     * @param bitRate 비트레이트 (bps)
+     * @param bitRate 원본 비트레이트 (bps). null이면 해상도 기반 기본값 계산
      * @param frameRate 목표 프레임레이트 (fps)
      * @param outputFile 출력 MP4 파일
      * @param audioTrackSource 원본 오디오 sample 공급자 (nullable)
@@ -86,7 +88,7 @@ class RealTimeRecorder(
         width: Int,
         height: Int,
         outputFile: File,
-        bitRate: Int = DEFAULT_BITRATE,
+        bitRate: Int? = null,
         frameRate: Int = DEFAULT_FRAME_RATE,
         audioTrackSource: AudioTrackSource? = null,
         audioStartPositionUs: Long = 0L,
@@ -94,11 +96,18 @@ class RealTimeRecorder(
     ) {
         check(!isRecording) { "이미 녹화 중입니다" }
 
+        val encoderConfig = calculateEncoderBitrateUseCase(
+            width = width,
+            height = height,
+            frameRate = frameRate,
+            sourceBitrate = bitRate,
+        )
         val encoder = encoderFactory.create(
             width = width,
             height = height,
-            bitRate = bitRate,
-            frameRate = frameRate,
+            bitRate = encoderConfig.bitrate,
+            frameRate = encoderConfig.frameRate,
+            iFrameIntervalSec = encoderConfig.iFrameIntervalSec,
         )
         val muxer = muxerFactory.create(outputFile)
 
@@ -414,6 +423,7 @@ class RealTimeRecorder(
             height: Int,
             bitRate: Int,
             frameRate: Int,
+            iFrameIntervalSec: Int,
         ): VideoEncoder
     }
 
@@ -435,12 +445,13 @@ class RealTimeRecorder(
             height: Int,
             bitRate: Int,
             frameRate: Int,
+            iFrameIntervalSec: Int,
         ): VideoEncoder {
             val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
                 setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
                 setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
                 setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, DEFAULT_I_FRAME_INTERVAL_SEC)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSec)
             }
 
             val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
@@ -525,9 +536,7 @@ class RealTimeRecorder(
     }
 
     companion object {
-        private const val DEFAULT_BITRATE = 10_000_000
         private const val DEFAULT_FRAME_RATE = 30
-        private const val DEFAULT_I_FRAME_INTERVAL_SEC = 1
         private const val DEQUEUE_TIMEOUT_US = 10_000L
         private const val DRAIN_JOIN_TIMEOUT_MS = 2_000L
         private const val MAX_TRY_AGAIN_AFTER_STOP = 240

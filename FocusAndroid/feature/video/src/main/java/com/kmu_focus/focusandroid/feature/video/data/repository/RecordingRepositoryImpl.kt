@@ -4,6 +4,7 @@ import android.util.Log
 import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.core.media.data.recorder.AudioTrackExtractor
 import com.kmu_focus.focusandroid.core.media.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.video.data.metadata.SourceVideoMetadataReader
 import com.kmu_focus.focusandroid.feature.video.domain.repository.RecordingRepository
 import java.io.File
 import javax.inject.Inject
@@ -12,6 +13,7 @@ class RecordingRepositoryImpl @Inject constructor(
     private val realTimeRecorder: RealTimeRecorder,
     private val videoLocalDataSource: VideoLocalDataSource,
     private val audioExtractorFactory: AudioTrackExtractor.Factory,
+    private val sourceVideoMetadataReader: SourceVideoMetadataReader,
 ) : RecordingRepository {
 
     override fun startRecording(
@@ -22,8 +24,9 @@ class RecordingRepositoryImpl @Inject constructor(
         audioStartPositionMs: Long,
     ): File {
         val file = videoLocalDataSource.createTempOutputFile()
-        val audioTrackSource = sourceUri
-            ?.takeIf { it.isNotBlank() }
+        val normalizedSourceUri = sourceUri?.takeIf { it.isNotBlank() }
+        val sourceBitrate = normalizedSourceUri?.let(sourceVideoMetadataReader::readVideoBitrate)
+        val audioTrackSource = normalizedSourceUri
             ?.let { uri ->
                 runCatching { audioExtractorFactory.create(uri) }
                     .onFailure { error -> Log.w(TAG, "오디오 추출기 생성 실패: $uri", error) }
@@ -35,6 +38,7 @@ class RecordingRepositoryImpl @Inject constructor(
                 width = width,
                 height = height,
                 outputFile = file,
+                bitRate = sourceBitrate,
                 audioTrackSource = audioTrackSource,
                 audioStartPositionUs = audioStartPositionMs.coerceAtLeast(0L) * MILLIS_TO_MICROS,
                 onInputSurfaceReady = { surface ->

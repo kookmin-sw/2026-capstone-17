@@ -55,7 +55,7 @@ class RealTimeRecorderRealtimeAudioAndroidTest {
         )
 
         val recorder = RealTimeRecorder(
-            encoderFactory = RealTimeRecorder.VideoEncoderFactory { _, _, _, _ -> fakeEncoder },
+            encoderFactory = RealTimeRecorder.VideoEncoderFactory { _, _, _, _, _ -> fakeEncoder },
             enableBackgroundDrain = true,
         )
 

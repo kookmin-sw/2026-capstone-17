@@ -8,7 +8,6 @@ import io.mockk.every
 import io.mockk.mockk
 import io.mockk.mockkStatic
 import io.mockk.verify
-import io.mockk.verifyOrder
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -55,6 +54,7 @@ class RealTimeRecorderTest {
                 height = any(),
                 bitRate = any(),
                 frameRate = any(),
+                iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
@@ -77,6 +77,7 @@ class RealTimeRecorderTest {
                 height = 1080,
                 bitRate = any(),
                 frameRate = any(),
+                iFrameIntervalSec = any(),
             )
         }
         verify(exactly = 1) { muxerFactory.create(output) }
@@ -94,6 +95,7 @@ class RealTimeRecorderTest {
                 height = any(),
                 bitRate = any(),
                 frameRate = any(),
+                iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
@@ -127,7 +129,7 @@ class RealTimeRecorderTest {
 
         every {
             encoderFactory.create(
-                width = any(), height = any(), bitRate = any(), frameRate = any(),
+                width = any(), height = any(), bitRate = any(), frameRate = any(), iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
@@ -159,7 +161,7 @@ class RealTimeRecorderTest {
         val output = File("/tmp/out.mp4")
         every {
             encoderFactory.create(
-                width = any(), height = any(), bitRate = any(), frameRate = any(),
+                width = any(), height = any(), bitRate = any(), frameRate = any(), iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
@@ -187,7 +189,7 @@ class RealTimeRecorderTest {
 
         every {
             encoderFactory.create(
-                width = any(), height = any(), bitRate = any(), frameRate = any(),
+                width = any(), height = any(), bitRate = any(), frameRate = any(), iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
@@ -224,7 +226,7 @@ class RealTimeRecorderTest {
 
         every {
             encoderFactory.create(
-                width = any(), height = any(), bitRate = any(), frameRate = any(),
+                width = any(), height = any(), bitRate = any(), frameRate = any(), iFrameIntervalSec = any(),
             )
         } returns encoder
         every { muxerFactory.create(output) } returns muxer
