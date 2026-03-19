@@ -39,8 +39,5 @@ out/
 ### Kotlin ###
 .kotlin
 
-### git ###
-.env
-
 ### gemini ###
 GEMINI.md

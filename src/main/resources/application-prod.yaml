@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: focus-prod
+
+  datasource:
+    url: jdbc:postgresql://${RDS_HOSTNAME}:5432/focus_avatar
+    username: ${RDS_USERNAME}
+    password: ${RDS_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    open-in-view: false
+    show-sql: true
+    hibernate:
+      ddl-auto: update
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      ssl:
+        enabled: true
+
+jwt:
+  common:
+    key: ${JWT_SECRET}
+
+kakao:
+  oauth:
+    client-id: ${KAKAO_CLIENT_ID}
+    client-secret: ${KAKAO_CLIENT_SECRET}
+    redirect-uri: http://54.66.60.252:8080/oauth/kakao
+    authorization-uri: https://kauth.kakao.com/oauth/authorize
+    token-uri: https://kauth.kakao.com/oauth/token
+    user-info-uri: https://kapi.kakao.com/v2/user/me
+
+logging:
+  level:
+    org.hibernate.SQL: info
