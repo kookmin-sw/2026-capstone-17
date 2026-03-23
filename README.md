@@ -14,15 +14,19 @@
 - 방송 단위 백그라운드 워커 관리
   - 중복 시작 방지
   - 상태 추적 (`starting`, `running`, `stopping`, `stopped`, `failed`)
-- 파이프라인 루프 뼈대
-  - 프레임 수신 -> Redis 메타데이터 조회 -> 모델 렌더링 -> 출력
+- 파이프라인 루프 핵심 로직
+  - **프레임 수신:** PyAV를 이용한 SRT/RTMP 라이브 디코딩 (또는 더미 소스)
+  - **메타데이터 동기화 (Jitter Buffer):** 네트워크 지연을 고려해 10ms 단위로 최대 3회(30ms) 메타데이터를 기다려주는 지터 버퍼링 적용
+  - **모델 렌더링:** `AvatarRenderer` 인터페이스를 통한 프레임 합성
+  - **FFmpeg 송출:** 합성된 원시(Raw) 프레임을 FFmpeg 프로세스(stdin)로 파이프라이닝하여 HLS 파일 생성 또는 RTMP/SRT로 실시간 재송출 (`zerolatency` 적용)
+  - **메모리 최적화:** OOM 방지를 위해 Redis에서 읽어온 메타데이터는 즉각 삭제 처리
 - 지연 프레임 드랍 정책
   - `MAX_FRAME_LAG_MS` 초과 시 과거 프레임 drop
 - 장애 내성 기본 처리
-  - Redis 조회 실패 시 `face_metadata=None`
-  - 렌더링 예외 시 `emergency_fallback()`
+  - Redis 조회 실패/타임아웃 시 `face_metadata=None`으로 진행
+  - 렌더링 예외 시 `emergency_fallback()` (블러 또는 원본 통과)
 
-RTMP/SRT 입력 디코더(PyAV)는 구현되었고, FFmpeg 출력/실제 아바타 합성은 더미 구현입니다.
+RTMP/SRT 입력 디코더(PyAV)와 FFmpeg HLS/RTMP 출력 파이프라인은 모두 구현 완료되었으며, 실제 아바타 합성을 위한 AI 모델만 `model/renderer.py`에 이식하면 됩니다.
 
 ## 2. FastAPI 역할 (R&R)
 
@@ -186,7 +190,7 @@ uvicorn main:app --reload
 
 ## 9. 다음 구현 우선순위
 
-1. Spring 적재 포맷과 Redis 키/필드 완전 일치
-2. 모델러 함수 연결 및 블러 fallback 정책 확정
-3. FFmpeg HLS 출력 + Nginx/S3 저장 전략 확정
-4. 다중 방송 부하 테스트 및 드랍 정책 튜닝
+1. **AI 모델 이식:** `model/renderer.py`에 실제 얼굴 검출 및 아바타 합성 로직 이식 및 최적화 (GPU 연동 포함)
+2. **배포 환경 구성:** 생성된 HLS 파일을 Nginx 볼륨 마운트로 서빙하거나, Fluentd/데몬을 통한 AWS S3 동기화 및 CDN 연동 아키텍처 확정
+3. **부하 테스트:** 다중 방송 동시 처리 시 프레임 드랍 정책(`max_frame_lag_ms`) 및 지터 버퍼 값 튜닝
+4. **로깅 및 모니터링:** Prometheus/Grafana 등과 연동하여 워커 파이프라인의 실시간 FPS 및 지연 메트릭 수집

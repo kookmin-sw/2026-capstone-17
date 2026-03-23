@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
-from adapters.frame_sink import DummyHlsSink, FrameSink
+from adapters.frame_sink import FrameSink, create_frame_sink
 from adapters.media_source import MediaSource, create_media_source
 from adapters.metadata_store import MetadataStore
 from model.renderer import AvatarRenderer
@@ -51,7 +51,7 @@ class StreamPipeline:
         self._max_frame_lag_us = max_frame_lag_ms * 1_000
         self._metadata_store = metadata_store
         self._media_source = media_source or create_media_source(input_url=input_url, fps=fps)
-        self._frame_sink = frame_sink or DummyHlsSink(output_path=output_path)
+        self._frame_sink = frame_sink or create_frame_sink(output_path=output_path, fps=fps)
         self._renderer = renderer or AvatarRenderer()
 
         self._task: asyncio.Task[None] | None = None
@@ -110,17 +110,32 @@ class StreamPipeline:
                     self._stats.dropped_frames += 1
                     continue
 
-                try:
-                    face_metadata = await self._metadata_store.get_face_metadata(
-                        self.broadcast_id, frame.pts_us
-                    )
-                except Exception:  # pragma: no cover
-                    logger.warning(
-                        "metadata_lookup_failed broadcast_id=%s pts_us=%s",
+                face_metadata = None
+                retry_count = 3
+                retry_delay_s = 0.01  # 10ms wait per retry
+
+                for attempt in range(retry_count):
+                    try:
+                        face_metadata = await self._metadata_store.get_face_metadata(
+                            self.broadcast_id, frame.pts_us
+                        )
+                        if face_metadata is not None:
+                            break  # Found metadata!
+                        await asyncio.sleep(retry_delay_s)
+                    except Exception:  # pragma: no cover
+                        logger.warning(
+                            "metadata_lookup_error broadcast_id=%s pts_us=%s",
+                            self.broadcast_id,
+                            frame.pts_us,
+                        )
+                        break
+
+                if face_metadata is None:
+                    logger.debug(
+                        "metadata_not_found (timeout) broadcast_id=%s pts_us=%s",
                         self.broadcast_id,
                         frame.pts_us,
                     )
-                    face_metadata = None
 
                 try:
                     rendered = await self._renderer.render(frame, face_metadata, self.avatar_id)
