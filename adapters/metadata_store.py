@@ -42,9 +42,13 @@ class RedisMetadataStore:
             return None
 
         key = self._build_key(broadcast_id=broadcast_id, pts_us=pts_us)
+        # Use a transaction to get and delete the key atomically, or just get then delete.
         payload = await client.get(key)
         if not payload:
             return None
+
+        # Clean up immediately after reading to prevent Redis memory bloat
+        await client.delete(key)
 
         try:
             return json.loads(payload)
