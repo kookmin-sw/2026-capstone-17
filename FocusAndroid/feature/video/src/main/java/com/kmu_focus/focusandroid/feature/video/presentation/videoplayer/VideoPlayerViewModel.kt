@@ -6,12 +6,12 @@ import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import androidx.lifecycle.viewModelScope
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RegisterOwnerDuringPlaybackUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RecordingUseCase
-import com.kmu_focus.focusandroid.feature.video.di.IoDispatcher
+import com.kmu_focus.focusandroid.core.media.di.IoDispatcher
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -125,6 +125,18 @@ class VideoPlayerViewModel @Inject constructor(
         )
     }
 
+    fun stopPlaybackAndGetRecordingFileOrNull(): File? {
+        stopPlayback()
+        val finishedFile = currentRecordingFile
+        val sampleCount = recordingUseCase.lastRecordingSampleCount
+        val isValid = finishedFile != null &&
+            finishedFile.exists() &&
+            finishedFile.length() > 0L &&
+            sampleCount > 0
+        currentRecordingFile = null
+        return if (isValid) finishedFile else null
+    }
+
     fun toggleControlMenu() {
         _uiState.value = _uiState.value.copy(
             isControlMenuExpanded = !_uiState.value.isControlMenuExpanded,
@@ -178,14 +190,22 @@ class VideoPlayerViewModel @Inject constructor(
     private fun startRecording() {
         val w = if (_uiState.value.videoWidth > 0) _uiState.value.videoWidth else 1280
         val h = if (_uiState.value.videoHeight > 0) _uiState.value.videoHeight else 720
+        val sourceUri = _uiState.value.videoUri.takeIf { it.isNotBlank() }
+        val startPositionMs = latestPositionMs.coerceAtLeast(0L)
 
-        recordingUseCase.startRecording(w, h) { encoderSurface, width, height ->
-            currentEncoderSurface = encoderSurface as? Surface
-            currentEncoderWidth = width
-            currentEncoderHeight = height
-            Log.w(TAG, "onInputSurfaceReady: dispatcherNull=${encoderSurfaceDispatcher == null}, size=${width}x$height")
-            encoderSurfaceDispatcher?.invoke(currentEncoderSurface, width, height)
-        }.fold(
+        recordingUseCase.startRecording(
+            width = w,
+            height = h,
+            sourceUri = sourceUri,
+            audioStartPositionMs = startPositionMs,
+            onSurfaceReady = { encoderSurface, width, height ->
+                currentEncoderSurface = encoderSurface as? Surface
+                currentEncoderWidth = width
+                currentEncoderHeight = height
+                Log.w(TAG, "onInputSurfaceReady: dispatcherNull=${encoderSurfaceDispatcher == null}, size=${width}x$height")
+                encoderSurfaceDispatcher?.invoke(currentEncoderSurface, width, height)
+            },
+        ).fold(
             onSuccess = { file ->
                 currentRecordingFile = file
             },
@@ -320,6 +340,10 @@ class VideoPlayerViewModel @Inject constructor(
             uri = _uiState.value.videoUri,
         )
         return result.copy(faceLabels = mergedLabels)
+    }
+
+    fun clearProcessingThreadCache() {
+        playbackAnalysisUseCase.clearProcessingThreadCache()
     }
 
     private fun tryRegisterPendingOwners(

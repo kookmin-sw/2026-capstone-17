@@ -1,6 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.data.repository
 
-import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
+import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import io.mockk.coEvery
 import io.mockk.mockk

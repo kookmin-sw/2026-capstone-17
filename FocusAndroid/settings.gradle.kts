@@ -22,5 +22,7 @@ dependencyResolutionManagement {
 rootProject.name = "FocusAndroid"
 include(":app")
 include(":feature:video")
+include(":feature:camera")
 include(":core:ai")
 include(":core:metadata")
+include(":core:media")

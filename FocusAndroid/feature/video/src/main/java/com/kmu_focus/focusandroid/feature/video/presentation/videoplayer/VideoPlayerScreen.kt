@@ -21,8 +21,10 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.media3.exoplayer.ExoPlayer
 import coil.compose.AsyncImage
-import com.kmu_focus.focusandroid.feature.video.data.gl.VideoGLSurfaceView
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.data.gl.VideoGLSurfaceView
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.presentation.overlay.FaceDetectionOverlay
+import com.kmu_focus.focusandroid.core.media.presentation.overlay.FaceTouchOverlay
 import kotlinx.coroutines.delay
 import android.util.Log
 import androidx.compose.ui.platform.LocalContext
@@ -45,8 +47,8 @@ fun VideoPlayerScreen(
         uriString = videoUri,
         isPlaying = uiState.isPlaying,
         onPlaybackEnded = {
-            viewModel.stopPlayback()
-            onPlaybackEnded(viewModel.currentRecordingFile)
+            val recordedFile = viewModel.stopPlaybackAndGetRecordingFileOrNull()
+            onPlaybackEnded(recordedFile)
         }
     )
 
@@ -100,6 +102,9 @@ fun VideoPlayerScreen(
                 exoPlayer = exoPlayer,
                 onFrameCaptured = { buffer, width, height ->
                     viewModel.processFrameSync(buffer, width, height)
+                },
+                onRendererReleased = {
+                    viewModel.clearProcessingThreadCache()
                 },
                 videoWidth = uiState.videoWidth,
                 videoHeight = uiState.videoHeight,
@@ -232,6 +237,7 @@ fun VideoPlayerScreen(
 private fun ExoPlayerGLView(
     exoPlayer: ExoPlayer,
     onFrameCaptured: (java.nio.ByteBuffer, Int, Int) -> ProcessedFrame,
+    onRendererReleased: (() -> Unit)? = null,
     videoWidth: Int = 0,
     videoHeight: Int = 0,
     onGlSurfaceViewChanged: (VideoGLSurfaceView?) -> Unit = {},
@@ -244,7 +250,8 @@ private fun ExoPlayerGLView(
                 onSurfaceReady = { surface: Surface ->
                     exoPlayer.setVideoSurface(surface)
                 },
-                onFrameCaptured = onFrameCaptured
+                onFrameCaptured = onFrameCaptured,
+                onRendererReleased = onRendererReleased,
             ).also { glView ->
                 onGlSurfaceViewChanged(glView)
             }

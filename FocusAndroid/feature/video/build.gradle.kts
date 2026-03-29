@@ -12,6 +12,7 @@ android {
 
     defaultConfig {
         minSdk = 35
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
 
@@ -59,6 +60,7 @@ dependencies {
 
     // Feature Module
     implementation(project(":core:ai"))
+    implementation(project(":core:media"))
     implementation(project(":core:metadata"))
 
     // OpenCV (ByteBuffer→Mat 변환, GL 프레임 처리)
@@ -77,5 +79,7 @@ dependencies {
     testImplementation(libs.kotlinx.coroutines.test)
     testImplementation(libs.mockk)
     testImplementation(libs.org.json)
+    androidTestImplementation(libs.androidx.junit)
+    androidTestImplementation(libs.androidx.espresso.core)
     debugImplementation(libs.androidx.ui.tooling)
 }

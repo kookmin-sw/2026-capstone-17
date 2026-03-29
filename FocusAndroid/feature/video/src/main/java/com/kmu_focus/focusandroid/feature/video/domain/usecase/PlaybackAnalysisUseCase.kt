@@ -1,6 +1,6 @@
 package com.kmu_focus.focusandroid.feature.video.domain.usecase
 
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
 import java.nio.ByteBuffer
 import javax.inject.Inject
@@ -28,6 +28,9 @@ class PlaybackAnalysisUseCase @Inject constructor(
 
     fun getVideoDimensions(uri: String): Pair<Int, Int>? =
         playbackAnalysisRepository.getVideoDimensions(uri)
+
+    fun clearProcessingThreadCache() =
+        playbackAnalysisRepository.clearProcessingThreadCache()
 
     suspend fun closeMetadataSession() =
         playbackAnalysisRepository.closeMetadataSession()

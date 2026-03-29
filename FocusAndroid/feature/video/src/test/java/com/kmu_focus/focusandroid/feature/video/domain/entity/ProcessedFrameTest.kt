@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.feature.video.domain.entity
+package com.kmu_focus.focusandroid.core.media.domain.entity
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
 import org.junit.Assert.*

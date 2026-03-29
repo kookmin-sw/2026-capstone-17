@@ -1,4 +1,4 @@
-package com.kmu_focus.focusandroid.feature.video.domain.entity
+package com.kmu_focus.focusandroid.core.media.domain.entity
 
 import org.junit.Assert.*
 import org.junit.Test

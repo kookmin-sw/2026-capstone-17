@@ -1,7 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.domain.usecase
 
 import com.kmu_focus.focusandroid.core.ai.domain.detector.recognition.OwnerAdder
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
 import javax.inject.Inject
 

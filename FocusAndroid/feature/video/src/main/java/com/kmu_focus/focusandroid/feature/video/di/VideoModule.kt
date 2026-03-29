@@ -3,14 +3,12 @@ package com.kmu_focus.focusandroid.feature.video.di
 import android.content.Context
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoder
 import com.kmu_focus.focusandroid.feature.video.data.decoder.VideoFrameDecoderImpl
-import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
-import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSourceImpl
-import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.data.processor.FrameProcessor
 import com.kmu_focus.focusandroid.feature.video.data.repository.ImageRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.PlaybackAnalysisRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.RecordingRepositoryImpl
 import com.kmu_focus.focusandroid.feature.video.data.repository.VideoRepositoryImpl
-import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.core.media.data.recorder.AudioTrackExtractor
 import com.kmu_focus.focusandroid.feature.video.data.transcoder.VideoTranscoder
 import com.kmu_focus.focusandroid.feature.video.domain.repository.ImageRepository
 import com.kmu_focus.focusandroid.feature.video.domain.repository.PlaybackAnalysisRepository
@@ -22,8 +20,6 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
-import kotlinx.coroutines.CoroutineDispatcher
-import kotlinx.coroutines.Dispatchers
 import javax.inject.Singleton
 
 @Module
@@ -48,19 +44,9 @@ abstract class VideoModule {
 
     @Binds
     @Singleton
-    abstract fun bindVideoLocalDataSource(impl: VideoLocalDataSourceImpl): VideoLocalDataSource
-
-    @Binds
-    @Singleton
     abstract fun bindVideoFrameDecoder(impl: VideoFrameDecoderImpl): VideoFrameDecoder
 
     companion object {
-        @Provides
-        @Singleton
-        @IoDispatcher
-        @JvmStatic
-        fun provideIoDispatcher(): CoroutineDispatcher = Dispatchers.IO
-
         @Provides
         @Singleton
         @JvmStatic
@@ -72,8 +58,10 @@ abstract class VideoModule {
         @Provides
         @Singleton
         @JvmStatic
-        fun provideRealTimeRecorder(): RealTimeRecorder = RealTimeRecorder(
-            enableBackgroundDrain = System.getProperty("focus.test.mode") != "true",
-        )
+        fun provideAudioTrackExtractorFactory(
+            @ApplicationContext context: Context,
+        ): AudioTrackExtractor.Factory = AudioTrackExtractor.Factory { sourceUri ->
+            AudioTrackExtractor.create(sourceUri, context)
+        }
     }
 }

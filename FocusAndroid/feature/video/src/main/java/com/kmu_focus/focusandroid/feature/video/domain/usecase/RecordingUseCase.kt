@@ -11,8 +11,16 @@ class RecordingUseCase @Inject constructor(
         width: Int,
         height: Int,
         onSurfaceReady: (encoderSurface: Any, width: Int, height: Int) -> Unit,
+        sourceUri: String? = null,
+        audioStartPositionMs: Long = 0L,
     ): Result<File> = runCatching {
-        recordingRepository.startRecording(width, height, onSurfaceReady)
+        recordingRepository.startRecording(
+            width = width,
+            height = height,
+            onSurfaceReady = onSurfaceReady,
+            sourceUri = sourceUri,
+            audioStartPositionMs = audioStartPositionMs,
+        )
     }
 
     fun stopRecording() {

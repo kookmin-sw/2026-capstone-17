@@ -56,7 +56,9 @@ android {
 dependencies {
     // Feature Modules
     implementation(project(":feature:video"))
+    implementation(project(":feature:camera"))
     implementation(project(":core:ai"))
+    implementation(project(":core:media"))
     implementation(project(":core:metadata"))
 
     // Core & UI

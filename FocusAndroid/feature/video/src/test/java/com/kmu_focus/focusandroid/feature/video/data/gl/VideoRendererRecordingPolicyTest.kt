@@ -1,7 +1,7 @@
-package com.kmu_focus.focusandroid.feature.video.data.gl
+package com.kmu_focus.focusandroid.core.media.data.gl
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue

@@ -1,7 +1,7 @@
 package com.kmu_focus.focusandroid.feature.video.presentation.videoplayer
 
 import com.kmu_focus.focusandroid.core.ai.domain.entity.DetectedFace
-import com.kmu_focus.focusandroid.feature.video.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.AddOwnerFromUriUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.PlaybackAnalysisUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.RegisterOwnerDuringPlaybackUseCase
@@ -44,7 +44,15 @@ class VideoPlayerViewModelTest {
     fun setUp() {
         Dispatchers.setMain(testDispatcher)
         every { playbackAnalysisUseCase.getVideoDimensions(any()) } returns null
-        every { recordingUseCase.startRecording(any(), any(), any()) } returns Result.success(File.createTempFile("test", ".mp4"))
+        every {
+            recordingUseCase.startRecording(
+                width = any(),
+                height = any(),
+                onSurfaceReady = any(),
+                sourceUri = any(),
+                audioStartPositionMs = any(),
+            )
+        } returns Result.success(File.createTempFile("test", ".mp4"))
         viewModel = VideoPlayerViewModel(
             recordingUseCase,
             playbackAnalysisUseCase,

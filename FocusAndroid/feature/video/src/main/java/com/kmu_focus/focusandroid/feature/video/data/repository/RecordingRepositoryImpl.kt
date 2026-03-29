@@ -1,8 +1,10 @@
 package com.kmu_focus.focusandroid.feature.video.data.repository
 
 import android.util.Log
-import com.kmu_focus.focusandroid.feature.video.data.local.VideoLocalDataSource
-import com.kmu_focus.focusandroid.feature.video.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
+import com.kmu_focus.focusandroid.core.media.data.recorder.AudioTrackExtractor
+import com.kmu_focus.focusandroid.core.media.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.video.data.metadata.SourceVideoMetadataReader
 import com.kmu_focus.focusandroid.feature.video.domain.repository.RecordingRepository
 import java.io.File
 import javax.inject.Inject
@@ -10,22 +12,43 @@ import javax.inject.Inject
 class RecordingRepositoryImpl @Inject constructor(
     private val realTimeRecorder: RealTimeRecorder,
     private val videoLocalDataSource: VideoLocalDataSource,
+    private val audioExtractorFactory: AudioTrackExtractor.Factory,
+    private val sourceVideoMetadataReader: SourceVideoMetadataReader,
 ) : RecordingRepository {
 
     override fun startRecording(
         width: Int,
         height: Int,
         onSurfaceReady: (encoderSurface: Any, width: Int, height: Int) -> Unit,
+        sourceUri: String?,
+        audioStartPositionMs: Long,
     ): File {
         val file = videoLocalDataSource.createTempOutputFile()
-        realTimeRecorder.start(
-            width = width,
-            height = height,
-            outputFile = file,
-            onInputSurfaceReady = { surface ->
-                onSurfaceReady(surface, width, height)
-            },
-        )
+        val normalizedSourceUri = sourceUri?.takeIf { it.isNotBlank() }
+        val sourceBitrate = normalizedSourceUri?.let(sourceVideoMetadataReader::readVideoBitrate)
+        val audioTrackSource = normalizedSourceUri
+            ?.let { uri ->
+                runCatching { audioExtractorFactory.create(uri) }
+                    .onFailure { error -> Log.w(TAG, "오디오 추출기 생성 실패: $uri", error) }
+                    .getOrNull()
+            }
+
+        try {
+            realTimeRecorder.start(
+                width = width,
+                height = height,
+                outputFile = file,
+                bitRate = sourceBitrate,
+                audioTrackSource = audioTrackSource,
+                audioStartPositionUs = audioStartPositionMs.coerceAtLeast(0L) * MILLIS_TO_MICROS,
+                onInputSurfaceReady = { surface ->
+                    onSurfaceReady(surface, width, height)
+                },
+            )
+        } catch (error: Exception) {
+            runCatching { audioTrackSource?.release() }
+            throw error
+        }
         return file
     }
 
@@ -42,5 +65,6 @@ class RecordingRepositoryImpl @Inject constructor(
 
     private companion object {
         private const val TAG = "RecordingRepository"
+        private const val MILLIS_TO_MICROS = 1_000L
     }
 }

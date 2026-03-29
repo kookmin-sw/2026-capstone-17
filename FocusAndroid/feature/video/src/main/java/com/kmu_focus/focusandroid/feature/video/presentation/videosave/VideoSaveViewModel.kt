@@ -37,13 +37,12 @@ class VideoSaveViewModel @Inject constructor(
         saveVideoInternal(sourceUri) { saveVideoUseCase.invokeToGallery(sourceUri) }
     }
 
-    fun saveRecording(file: java.io.File, sourceUri: String) {
+    fun saveRecording(file: java.io.File, _sourceUri: String) {
         _uiState.value = VideoSaveUiState(isSaving = true)
         viewModelScope.launch {
             try {
-                saveVideoUseCase.invokeRecordingWithSourceAudioToGallery(
+                saveVideoUseCase.invokeRecordingToGallery(
                     recordingFilePath = file.absolutePath,
-                    sourceUri = sourceUri
                 )
                     .onSuccess { path ->
                         _uiState.value = _uiState.value.copy(

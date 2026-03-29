@@ -11,11 +11,12 @@ import android.net.Uri
 import android.opengl.GLES11Ext
 import android.opengl.GLES30
 import android.util.Log
-import com.kmu_focus.focusandroid.feature.video.data.gl.EglCore
-import com.kmu_focus.focusandroid.feature.video.data.gl.OESTextureProgram
-import com.kmu_focus.focusandroid.feature.video.data.gl.OffscreenSurface
-import com.kmu_focus.focusandroid.feature.video.data.gl.OverlayRenderer
-import com.kmu_focus.focusandroid.feature.video.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.data.gl.EglCore
+import com.kmu_focus.focusandroid.core.media.data.gl.OESTextureProgram
+import com.kmu_focus.focusandroid.core.media.data.gl.OffscreenSurface
+import com.kmu_focus.focusandroid.core.media.data.gl.OverlayRenderer
+import com.kmu_focus.focusandroid.core.media.data.processor.FrameProcessor
+import com.kmu_focus.focusandroid.core.media.domain.usecase.CalculateEncoderBitrateUseCase
 import com.kmu_focus.focusandroid.feature.video.domain.usecase.TranscodeProgress
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.flow.Flow
@@ -28,13 +29,12 @@ import java.util.concurrent.Executors
 
 private const val TAG = "VideoTranscoder"
 private const val TIMEOUT_US = 10_000L
-private const val ENCODER_BITRATE = 10_000_000
-private const val ENCODER_FRAME_RATE = 30
-private const val ENCODER_I_FRAME_INTERVAL = 1
+private const val DEFAULT_ENCODER_FRAME_RATE = 30
 
 class VideoTranscoder(
     private val context: Context,
-    private val frameProcessor: FrameProcessor
+    private val frameProcessor: FrameProcessor,
+    private val calculateEncoderBitrateUseCase: CalculateEncoderBitrateUseCase = CalculateEncoderBitrateUseCase(),
 ) {
     // EGL 컨텍스트는 스레드에 바인딩되므로 단일 전용 스레드에서 실행
     private val transcodeDispatcher = Executors.newSingleThreadExecutor { r ->
@@ -63,6 +63,10 @@ class VideoTranscoder(
         val height = inputFormat.getInteger(MediaFormat.KEY_HEIGHT)
         val durationUs = inputFormat.getLong(MediaFormat.KEY_DURATION)
         val rotation = inputFormat.getIntegerSafe(MediaFormat.KEY_ROTATION, 0)
+        val sourceBitrate = inputFormat.getIntegerOrNull(MediaFormat.KEY_BIT_RATE)?.takeIf { it > 0 }
+        val sourceFrameRate = inputFormat.getIntegerOrNull(MediaFormat.KEY_FRAME_RATE)
+            ?.coerceAtLeast(1)
+            ?: DEFAULT_ENCODER_FRAME_RATE
 
         // 회전 적용된 실제 프레임 크기
         val (frameWidth, frameHeight) = if (rotation == 90 || rotation == 270) {
@@ -70,15 +74,21 @@ class VideoTranscoder(
         } else {
             width to height
         }
+        val encoderConfig = calculateEncoderBitrateUseCase(
+            width = frameWidth,
+            height = frameHeight,
+            frameRate = sourceFrameRate,
+            sourceBitrate = sourceBitrate,
+        )
 
         Log.i(TAG, "입력: ${width}x${height}, 회전: $rotation, 프레임: ${frameWidth}x${frameHeight}, 길이: ${durationUs / 1_000_000}s")
 
         // --- 인코더 설정 ---
         val encoderFormat = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, frameWidth, frameHeight).apply {
             setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-            setInteger(MediaFormat.KEY_BIT_RATE, ENCODER_BITRATE)
-            setInteger(MediaFormat.KEY_FRAME_RATE, ENCODER_FRAME_RATE)
-            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, ENCODER_I_FRAME_INTERVAL)
+            setInteger(MediaFormat.KEY_BIT_RATE, encoderConfig.bitrate)
+            setInteger(MediaFormat.KEY_FRAME_RATE, encoderConfig.frameRate)
+            setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, encoderConfig.iFrameIntervalSec)
         }
         val encoder = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
         encoder.configure(encoderFormat, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
@@ -332,59 +342,9 @@ class VideoTranscoder(
             } catch (e: Exception) {
                 Log.w(TAG, "eglCore.release 실패", e)
             }
+            frameProcessor.clearThreadLocalCache()
         }
     }.flowOn(transcodeDispatcher)
-
-    /**
-     * 실시간 녹화된 비디오 트랙(recordingFile)에 원본(sourceUri)의 오디오 트랙을 붙여 outputFile로 저장한다.
-     * sourceUri에 오디오가 없으면 비디오 트랙만 복사한다.
-     */
-    fun muxSourceAudioToRecordedVideo(
-        recordingFile: File,
-        sourceUri: String,
-        outputFile: File
-    ) {
-        require(recordingFile.exists()) { "녹화 파일이 존재하지 않습니다: ${recordingFile.absolutePath}" }
-
-        val videoExtractor = MediaExtractor()
-        val audioExtractor = MediaExtractor()
-        var muxer: MediaMuxer? = null
-        var muxerStarted = false
-        try {
-            videoExtractor.setDataSource(recordingFile.absolutePath)
-            val videoTrackIndex = findTrack(videoExtractor, "video/")
-            require(videoTrackIndex >= 0) { "녹화 파일에서 비디오 트랙을 찾을 수 없습니다" }
-            videoExtractor.selectTrack(videoTrackIndex)
-
-            audioExtractor.setDataSource(context, Uri.parse(sourceUri), null)
-            val audioTrackIndex = findTrack(audioExtractor, "audio/")
-            if (audioTrackIndex >= 0) {
-                audioExtractor.selectTrack(audioTrackIndex)
-            }
-
-            muxer = MediaMuxer(outputFile.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-            val muxerVideoTrackIndex = muxer.addTrack(videoExtractor.getTrackFormat(videoTrackIndex))
-            val muxerAudioTrackIndex = if (audioTrackIndex >= 0) {
-                muxer.addTrack(audioExtractor.getTrackFormat(audioTrackIndex))
-            } else {
-                -1
-            }
-            muxer.start()
-            muxerStarted = true
-
-            copyTrackSamples(videoExtractor, muxer, muxerVideoTrackIndex)
-            if (muxerAudioTrackIndex >= 0) {
-                copyTrackSamples(audioExtractor, muxer, muxerAudioTrackIndex)
-            }
-        } finally {
-            if (muxerStarted) {
-                runCatching { muxer?.stop() }
-            }
-            runCatching { muxer?.release() }
-            runCatching { videoExtractor.release() }
-            runCatching { audioExtractor.release() }
-        }
-    }
 
     private fun drainEncoder(
         encoder: MediaCodec,
@@ -478,28 +438,6 @@ class VideoTranscoder(
         }
     }
 
-    private fun copyTrackSamples(
-        extractor: MediaExtractor,
-        muxer: MediaMuxer,
-        muxerTrackIndex: Int
-    ) {
-        val bufferSize = 1024 * 1024
-        val buffer = ByteBuffer.allocate(bufferSize)
-        val info = MediaCodec.BufferInfo()
-
-        extractor.seekTo(0, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
-        while (true) {
-            val sampleSize = extractor.readSampleData(buffer, 0)
-            if (sampleSize < 0) break
-            info.offset = 0
-            info.size = sampleSize
-            info.presentationTimeUs = extractor.sampleTime
-            info.flags = extractor.sampleFlags
-            muxer.writeSampleData(muxerTrackIndex, buffer, info)
-            extractor.advance()
-        }
-    }
-
     private fun findTrack(extractor: MediaExtractor, mimePrefix: String): Int {
         for (i in 0 until extractor.trackCount) {
             val mime = extractor.getTrackFormat(i).getString(MediaFormat.KEY_MIME) ?: continue
@@ -524,6 +462,14 @@ class VideoTranscoder(
             getInteger(key)
         } catch (_: Exception) {
             default
+        }
+    }
+
+    private fun MediaFormat.getIntegerOrNull(key: String): Int? {
+        return try {
+            if (containsKey(key)) getInteger(key) else null
+        } catch (_: Exception) {
+            null
         }
     }
 }
