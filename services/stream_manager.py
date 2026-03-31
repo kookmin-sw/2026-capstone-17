@@ -1,4 +1,5 @@
 import asyncio
+from urllib.parse import quote
 
 from adapters.metadata_store import RedisMetadataStore
 from core.config import Settings
@@ -30,11 +31,16 @@ class StreamManager:
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
             )
+            input_url = req.input_url or self._build_input_url(req.stream_key)
+            output_path = req.output_path or self._build_output_path(req.broadcast_id)
+            hls_url = self._build_hls_url(req.broadcast_id)
             try:
                 pipeline = StreamPipeline(
                     broadcast_id=req.broadcast_id,
-                    input_url=req.input_url,
-                    output_path=req.output_path,
+                    stream_key=req.stream_key,
+                    input_url=input_url,
+                    output_path=output_path,
+                    hls_url=hls_url,
                     avatar_id=req.avatar_id,
                     fps=self._settings.pipeline_fps,
                     max_frame_lag_ms=self._settings.max_frame_lag_ms,
@@ -71,3 +77,14 @@ class StreamManager:
             )
 
         return pipeline.snapshot()
+
+    def _build_input_url(self, stream_key: str) -> str:
+        sanitized_stream_key = quote(stream_key, safe="")
+        prefix = self._settings.mediamtx_path_prefix.strip("/")
+        return f"{self._settings.mediamtx_rtsp_read_base_url.rstrip('/')}/{prefix}/{sanitized_stream_key}"
+
+    def _build_output_path(self, broadcast_id: str) -> str:
+        return f"{self._settings.hls_output_root.rstrip('/')}/{broadcast_id}/index.m3u8"
+
+    def _build_hls_url(self, broadcast_id: str) -> str:
+        return f"{self._settings.hls_public_base_url.rstrip('/')}/{broadcast_id}/index.m3u8"

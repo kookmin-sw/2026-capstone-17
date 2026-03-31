@@ -12,8 +12,7 @@ START_REQUEST_EXAMPLES = {
         "summary": "SRT 입력 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_001",
-            "input_url": "srt://mediamtx:8890/live/101",
-            "output_path": "/var/www/hls/bc_20260227_001",
+            "stream_key": "live_101_stream_key",
             "avatar_id": "avatar-a",
         },
     },
@@ -21,9 +20,18 @@ START_REQUEST_EXAMPLES = {
         "summary": "RTMP 폴백 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_002",
-            "input_url": "rtmp://mediamtx:1935/live/102",
-            "output_path": "/var/www/hls/bc_20260227_002",
+            "stream_key": "live_102_stream_key",
             "avatar_id": "avatar-b",
+        },
+    },
+    "manual_override": {
+        "summary": "디버그용 입력/출력 경로 오버라이드",
+        "value": {
+            "broadcast_id": "bc_debug_001",
+            "stream_key": "ignored_when_manual_override",
+            "input_url": "rtsp://127.0.0.1:8554/live/debug-stream",
+            "output_path": "/tmp/hls/bc_debug_001/index.m3u8",
+            "avatar_id": "avatar-debug",
         },
     },
 }

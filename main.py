@@ -1,5 +1,8 @@
+import os
+
 import uvicorn
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 
 from api.exception_handlers import register_exception_handlers
 from api.routes_health import router as health_router
@@ -32,6 +35,7 @@ TAGS_METADATA = [
 def create_app() -> FastAPI:
     settings = get_settings()
     configure_logging(settings.log_level)
+    os.makedirs(settings.hls_output_root, exist_ok=True)
 
     app = FastAPI(
         title=settings.app_name,
@@ -43,6 +47,7 @@ def create_app() -> FastAPI:
         openapi_url=settings.api_openapi_url,
     )
     register_exception_handlers(app)
+    app.mount("/hls", StaticFiles(directory=settings.hls_output_root, check_dir=False), name="hls")
     app.include_router(health_router)
     app.include_router(stream_router, prefix="/api")
     return app

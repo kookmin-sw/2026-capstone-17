@@ -33,8 +33,10 @@ class StreamPipeline:
     def __init__(
         self,
         broadcast_id: str,
+        stream_key: str,
         input_url: str,
         output_path: str,
+        hls_url: str,
         avatar_id: str | None,
         fps: int,
         max_frame_lag_ms: int,
@@ -44,8 +46,10 @@ class StreamPipeline:
         renderer: AvatarRenderer | None = None,
     ) -> None:
         self.broadcast_id = broadcast_id
+        self.stream_key = stream_key
         self.input_url = input_url
         self.output_path = output_path
+        self.hls_url = hls_url
         self.avatar_id = avatar_id
 
         self._max_frame_lag_us = max_frame_lag_ms * 1_000
@@ -89,10 +93,14 @@ class StreamPipeline:
     def snapshot(self) -> StreamStatusResponse:
         return StreamStatusResponse(
             broadcast_id=self.broadcast_id,
+            stream_key=self.stream_key,
             state=self._state.value,
             processed_frames=self._stats.processed_frames,
             dropped_frames=self._stats.dropped_frames,
             last_pts_us=self._stats.last_pts_us,
+            input_url=self.input_url,
+            output_path=self.output_path,
+            hls_url=self.hls_url,
             detail=self._detail,
         )
 

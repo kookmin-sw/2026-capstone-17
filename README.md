@@ -33,7 +33,7 @@ RTMP/SRT 입력 디코더(PyAV)와 FFmpeg HLS/RTMP 출력 파이프라인은 모
 FastAPI는 외부 클라이언트 API 서버가 아니라 Spring Boot가 제어하는 내부 영상 워커입니다.
 
 - Spring Boot의 시작/중지 명령 수신
-- MediaMTX 입력(RTMP/SRT)을 프레임 단위 처리
+- MediaMTX 입력(SRT publish, RTSP pull)을 프레임 단위 처리
 - Redis에서 `broadcast_id + pts_us` 기준 메타데이터 조회
 - 모델러 함수로 프레임 합성
 - HLS(.m3u8/.ts) 생성/저장
@@ -48,18 +48,29 @@ FastAPI는 외부 클라이언트 API 서버가 아니라 Spring Boot가 제어�
 4. 방송 종료: Spring Boot -> `POST /api/stream/stop`
 5. FastAPI가 워커 종료
 
+Spring이 넘겨야 하는 최소 정보:
+
+- `broadcast_id`
+- `stream_key`
+- `avatar_id` (선택)
+
 ### 시작 요청 예시
 
 ```json
 {
   "broadcast_id": "bc_20260227_001",
-  "input_url": "srt://mediamtx:8890/live/101",
-  "output_path": "/var/www/hls/bc_20260227_001",
+  "stream_key": "live_101_stream_key",
   "avatar_id": "avatar-a"
 }
 ```
 
-테스트용으로 `input_url`에 `dummy://stream`을 넣으면 더미 입력 소스를 사용할 수 있습니다.
+기본 동작:
+
+- 입력 URL: `rtsp://localhost:8554/live/{stream_key}`
+- HLS 출력 파일: `/tmp/hls/{broadcast_id}/index.m3u8`
+- HLS 접근 URL: `http://localhost:8000/hls/{broadcast_id}/index.m3u8`
+
+디버그용으로만 `input_url`과 `output_path`를 직접 오버라이드할 수 있습니다. `input_url`에 `dummy://stream`을 넣으면 더미 입력 소스를 사용할 수 있습니다.
 
 ### 종료 요청 예시
 

@@ -18,8 +18,10 @@ class Settings(BaseSettings):
     pipeline_fps: int = 30
     max_frame_lag_ms: int = 250
 
-    mediamtx_input_base_url: str = "srt://localhost:8890"
+    mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
+    mediamtx_path_prefix: str = "live"
     hls_output_root: str = "/tmp/hls"
+    hls_public_base_url: str = "http://localhost:8000/hls"
 
     model_config = SettingsConfigDict(
         env_file=".env",
