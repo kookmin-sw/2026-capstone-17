@@ -49,11 +49,11 @@ class BroadcastController(
 
     @FocusPostMapping("/{broadcastId}/start")
     @SwaggerApiResponse(responseCode = "200", description = "방송 시작 성공")
-    @Operation(summary = "방송 시작 API", description = "HLS URL을 받아 방송 상태를 ON_AIR로 변경하고 시작 시간을 기록합니다.")
+    @Operation(summary = "방송 시작 API", description = "FastAPI 워커를 시작하고 반환된 HLS URL로 방송 상태를 ON_AIR로 변경합니다.")
     fun startBroadcast(
         @AuthenticationPrincipal details: FocusMemberDetails,
         @PathVariable broadcastId: String,
-        @RequestBody @Valid request: StartBroadcastRequest // Request Body 추가!
+        @RequestBody @Valid request: StartBroadcastRequest
     ): ResponseEntity<ApiResponse.Success<BroadcastResponse>> {
 
         val response = broadcastService.startBroadcast(details.getMemberId(), broadcastId, request)

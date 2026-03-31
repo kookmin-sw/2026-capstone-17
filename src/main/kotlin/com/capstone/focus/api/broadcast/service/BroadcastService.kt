@@ -6,6 +6,7 @@ import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
+import com.capstone.focus.common.external.fastapi.FastApiStreamClient
 import com.capstone.focus.domain.MemberRepository
 import com.capstone.focus.domain.entity.Broadcast
 import com.capstone.focus.domain.repository.BroadcastRepository
@@ -29,7 +30,8 @@ interface BroadcastService {
 @Service
 class BroadcastServiceImpl(
     private val broadcastRepository: BroadcastRepository,
-    private val memberRepository: MemberRepository
+    private val memberRepository: MemberRepository,
+    private val fastApiStreamClient: FastApiStreamClient
 ) : BroadcastService {
 
     // 방송 생성
@@ -62,7 +64,13 @@ class BroadcastServiceImpl(
 
         validateOwnership(broadcast, memberId)
 
-        broadcast.startBroadcast(request.hlsUrl)
+        val worker = fastApiStreamClient.startBroadcast(
+            broadcastId = broadcast.id,
+            streamKey = broadcast.streamKey,
+            avatarId = request.avatarId
+        )
+
+        broadcast.startBroadcast(worker.hlsUrl)
 
         return BroadcastResponse.from(broadcast)
     }
@@ -75,6 +83,7 @@ class BroadcastServiceImpl(
 
         validateOwnership(broadcast, memberId)
 
+        fastApiStreamClient.stopBroadcast(broadcast.id)
         broadcast.endBroadcast()
 
         return BroadcastResponse.from(broadcast)

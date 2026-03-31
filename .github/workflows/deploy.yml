@@ -67,6 +67,7 @@ jobs:
             echo "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" >> .env
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
             echo "EC2_HOST=${{ secrets.EC2_HOST }}" >> .env
+            echo "FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}" >> .env
 
             sudo docker pull ${{ secrets.DOCKER_USERNAME }}/focus:latest
             

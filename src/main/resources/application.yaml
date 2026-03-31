@@ -49,6 +49,8 @@ focus:
     redis:
       key-template: broadcast:{broadcast_id}:meta:{pts_us}
       ttl-seconds: 60
+  fastapi:
+    base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
 
 springdoc:
   api-docs:

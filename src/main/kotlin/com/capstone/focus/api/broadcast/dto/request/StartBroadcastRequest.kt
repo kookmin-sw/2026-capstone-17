@@ -1,8 +1,8 @@
 package com.capstone.focus.api.broadcast.dto.request
 
-import jakarta.validation.constraints.NotBlank
+import io.swagger.v3.oas.annotations.media.Schema
 
 data class StartBroadcastRequest(
-    @field:NotBlank(message = "HLS URL은 필수 입력 값입니다.")
-    val hlsUrl: String
+    @Schema(description = "선택된 아바타 ID", example = "avatar-a")
+    val avatarId: String? = null
 )
