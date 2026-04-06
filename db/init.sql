@@ -1,6 +1,7 @@
 DROP TABLE IF EXISTS tracking_session CASCADE;
 DROP TABLE IF EXISTS broadcast CASCADE;
 DROP TABLE IF EXISTS avatar CASCADE;
+DROP TABLE IF EXISTS member_image CASCADE;
 DROP TABLE IF EXISTS member CASCADE;
 
 CREATE TABLE member (
@@ -16,6 +17,20 @@ CREATE TABLE member (
 
 CREATE INDEX idx_member_email ON member(email);
 CREATE INDEX idx_member_nickname ON member(nickname);
+
+CREATE TABLE member_image (
+                        image_id            VARCHAR(26) NOT NULL PRIMARY KEY,
+                        member_id           VARCHAR(26) NOT NULL,
+                        image_url           VARCHAR(255) NOT NULL,
+                        object_key          VARCHAR(255) NOT NULL UNIQUE,
+                        original_filename   VARCHAR(255),
+                        content_type        VARCHAR(100),
+                        size_bytes          BIGINT NOT NULL,
+                        created_at          TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT fk_member_image_member FOREIGN KEY (member_id) REFERENCES member(member_id)
+);
+
+CREATE INDEX idx_member_image_member_id ON member_image(member_id);
 
 CREATE TABLE avatar (
                         avatar_id       VARCHAR(26) NOT NULL PRIMARY KEY,

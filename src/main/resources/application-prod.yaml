@@ -25,6 +25,11 @@ spring:
       ssl:
         enabled: false
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 10MB
+
 jwt:
   common:
     key: ${JWT_SECRET}
@@ -37,6 +42,15 @@ kakao:
     authorization-uri: https://kauth.kakao.com/oauth/authorize
     token-uri: https://kauth.kakao.com/oauth/token
     user-info-uri: https://kapi.kakao.com/v2/user/me
+
+aws:
+  s3:
+    bucket: ${AWS_S3_BUCKET}
+    region: ${AWS_REGION}
+    access-key: ${AWS_ACCESS_KEY_ID:}
+    secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    endpoint: ${AWS_S3_ENDPOINT:}
+    public-base-url: ${AWS_S3_PUBLIC_BASE_URL:}
 
 focus:
   metadata:

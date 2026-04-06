@@ -53,6 +53,7 @@ dependencies {
     implementation("org.springframework.boot:spring-boot-starter-data-redis")
     runtimeOnly("org.postgresql:postgresql")
     implementation("com.github.f4b6a3:ulid-creator:5.2.3")
+    implementation("software.amazon.awssdk:s3:2.34.0")
 
     // JWT
     implementation("io.jsonwebtoken:jjwt-api:0.12.6")
