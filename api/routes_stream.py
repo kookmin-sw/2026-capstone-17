@@ -8,27 +8,33 @@ from services.stream_manager import StreamManager
 router = APIRouter(prefix="/stream", tags=["stream-control"])
 
 START_REQUEST_EXAMPLES = {
-    "srt_live": {
-        "summary": "SRT 입력 방송 시작",
+    "chzzk_live": {
+        "summary": "치지직 RTMP 출력 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_001",
-            "stream_key": "live_101_stream_key",
+            "input_stream_key": "live_101_stream_key",
             "avatar_id": "avatar-a",
+            "output_mode": "CHZZK_RTMP",
+            "output_url": "rtmp://live.example/app/live-key",
+            "watch_url": "https://chzzk.naver.com/channel-id",
         },
     },
-    "rtmp_fallback": {
-        "summary": "RTMP 폴백 방송 시작",
+    "hls_debug": {
+        "summary": "로컬 HLS 디버그 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_002",
-            "stream_key": "live_102_stream_key",
+            "input_stream_key": "live_102_stream_key",
             "avatar_id": "avatar-b",
+            "output_mode": "HLS",
+            "output_url": "/tmp/hls/bc_20260227_002/index.m3u8",
+            "watch_url": "http://localhost:8000/hls/bc_20260227_002/index.m3u8",
         },
     },
     "manual_override": {
         "summary": "디버그용 입력/출력 경로 오버라이드",
         "value": {
             "broadcast_id": "bc_debug_001",
-            "stream_key": "ignored_when_manual_override",
+            "input_stream_key": "debug-stream",
             "input_url": "rtsp://127.0.0.1:8554/live/debug-stream",
             "output_path": "/tmp/hls/bc_debug_001/index.m3u8",
             "avatar_id": "avatar-debug",
