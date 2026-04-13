@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package focus.metadata.v1;
+
+option java_multiple_files = true;
+option java_outer_classname = "FaceMetadataProto";
+option java_package = "com.capstone.focus.grpc.metadata.v1";
+
+service FaceMetadataIngestService {
+  rpc PushFaceMetadata(stream PushFaceMetadataRequest) returns (PushFaceMetadataResponse);
+}
+
+message PushFaceMetadataRequest {
+  // Broadcast/session identifier created by Spring.
+  string session_id = 1;
+
+  // Media PTS in microseconds.
+  int64 pts_us = 2;
+
+  // Faces detected in this frame.
+  repeated FaceFrame faces = 3;
+}
+
+message FaceFrame {
+  int64 tracking_id = 1;
+  BoundingBox bbox = 2;
+  TdmmRaw tdmm_raw = 3;
+}
+
+message BoundingBox {
+  int32 x = 1;
+  int32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message TdmmRaw {
+  repeated float coeffs = 1;
+}
+
+message PushFaceMetadataResponse {
+  string session_id = 1;
+  int64 received_frames = 2;
+  int64 accepted_frames = 3;
+  int64 dropped_frames = 4;
+  int64 last_pts_us = 5;
+}
