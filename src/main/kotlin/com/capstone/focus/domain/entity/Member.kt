@@ -30,7 +30,6 @@ class Member(
     faceEmbedding: List<Double>? = null
 ) : UlidPrimaryKeyEntity() {
 
-
     @Column(name = "kakao_id", nullable = false, unique = true)
     var kakaoId: Long = kakaoId
         protected set

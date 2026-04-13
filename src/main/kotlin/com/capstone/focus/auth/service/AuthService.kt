@@ -2,21 +2,19 @@ package com.capstone.focus.auth.service
 
 import com.capstone.focus.auth.dto.request.KakaoLoginRequest
 import com.capstone.focus.auth.dto.request.RefreshTokenRequest
-import com.capstone.focus.auth.dto.response.AuthUrlResponse
 import com.capstone.focus.auth.dto.response.TokenResponse
-import com.capstone.focus.domain.entity.Member
+import com.capstone.focus.auth.jwt.JwtService
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
-import com.capstone.focus.auth.jwt.JwtService
 import com.capstone.focus.common.external.kakao.KakaoOAuthClient
 import com.capstone.focus.common.external.redis.RedisService
 import com.capstone.focus.domain.MemberService
+import com.capstone.focus.domain.entity.Member
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.util.concurrent.TimeUnit
 
 interface AuthService {
-    fun getKakaoAuthUrl(): AuthUrlResponse
     fun kakaoLogin(request: KakaoLoginRequest): TokenResponse
     fun refresh(request: RefreshTokenRequest): TokenResponse
 }
@@ -29,28 +27,22 @@ class AuthServiceImpl(
     private val kakaoOAuthClient: KakaoOAuthClient
 ) : AuthService {
 
-    override fun getKakaoAuthUrl(): AuthUrlResponse {
-        val authUrl = kakaoOAuthClient.getAuthorizationUrl()
-        return AuthUrlResponse(authUrl)
-    }
-
     @Transactional
     override fun kakaoLogin(request: KakaoLoginRequest): TokenResponse {
-        val kakaoTokenResponse = kakaoOAuthClient.getAccessToken(request.code)
+        val kakaoAccessToken = request.accessToken.takeIf { it.isNotBlank() }
+            ?: throw ApiException(ErrorTitle.InvalidInputValue, "카카오 로그인에는 access token이 필요합니다.")
 
-        val kakaoUserInfo = kakaoOAuthClient.getUserInfo(kakaoTokenResponse.accessToken)
+        val kakaoUserInfo = kakaoOAuthClient.getUserInfo(kakaoAccessToken)
 
         val kakaoId = kakaoUserInfo.id
         val nickname = kakaoUserInfo.kakaoAccount?.profile?.nickname
             ?: kakaoUserInfo.properties?.nickname
-            ?: "Focus사용자"
+            ?: "FocusUser"
         val email = kakaoUserInfo.kakaoAccount?.email
-
         val profileImageUrl = kakaoUserInfo.kakaoAccount?.profile?.profileImageUrl
             ?: kakaoUserInfo.properties?.profileImage
 
         val member = memberService.createOrUpdateKakaoMember(kakaoId, nickname, email, profileImageUrl)
-
         return handleTokenCreation(member)
     }
 
@@ -59,7 +51,6 @@ class AuthServiceImpl(
             ?: throw ApiException(ErrorTitle.InvalidToken)
 
         val member = memberService.getMemberById(memberId)
-
         redisService.deleteRefreshToken(request.refreshToken)
 
         return handleTokenCreation(member)
@@ -84,7 +75,6 @@ class AuthServiceImpl(
 
     private fun createAndSaveRefreshToken(memberId: String): String {
         val refreshToken = jwtService.createRefreshToken()
-
         redisService.saveRefreshToken(memberId, refreshToken, 14L, TimeUnit.DAYS)
         return refreshToken
     }

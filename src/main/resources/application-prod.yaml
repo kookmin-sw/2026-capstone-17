@@ -58,7 +58,7 @@ focus:
       key-template: broadcast:{broadcast_id}:meta:{pts_us}
       ttl-seconds: 60
   fastapi:
-    base-url: http://172.31.38.193:8000
+    base-url: ${FASTAPI_BASE_URL:http://172.31.38.193:8000}
 
 logging:
   level:
