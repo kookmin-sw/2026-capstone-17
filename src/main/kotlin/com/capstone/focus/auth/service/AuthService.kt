@@ -29,6 +29,9 @@ class AuthServiceImpl(
 
     @Transactional
     override fun kakaoLogin(request: KakaoLoginRequest): TokenResponse {
+        val kakaoAccessToken = request.accessToken.takeIf { it.isNotBlank() }
+            ?: throw ApiException(ErrorTitle.InvalidInputValue, "카카오 로그인에는 access token이 필요합니다.")
+            
         val kakaoUserInfo = kakaoOAuthClient.getUserInfo(kakaoAccessToken)
 
         val kakaoId = kakaoUserInfo.id
