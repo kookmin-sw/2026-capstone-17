@@ -4,7 +4,7 @@ from urllib.parse import quote
 from adapters.metadata_store import RedisMetadataStore
 from core.config import Settings
 from core.exceptions import ApiException, ErrorTitle
-from schemas.stream import StreamStartRequest, StreamStatusResponse
+from schemas.stream import OutputMode, StreamStartRequest, StreamStatusResponse
 from workers.pipeline import PipelineState, StreamPipeline
 
 
@@ -31,20 +31,39 @@ class StreamManager:
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
             )
-            input_url = req.input_url or self._build_input_url(req.stream_key)
-            output_path = req.output_path or self._build_output_path(req.broadcast_id)
-            hls_url = self._build_hls_url(req.broadcast_id)
+            input_stream_key = req.input_stream_key or req.stream_key
+            if input_stream_key is None:
+                raise ApiException(ErrorTitle.BadRequest, "input_stream_key 또는 stream_key 가 필요합니다.")
+
+            output_mode = req.output_mode or self._default_output_mode()
+            input_url = req.input_url or self._build_input_url(input_stream_key)
+            output_url = req.output_url or req.output_path or self._build_output_url(
+                broadcast_id=req.broadcast_id,
+                output_mode=output_mode,
+            )
+            watch_url = req.watch_url or (
+                self._build_hls_url(req.broadcast_id) if output_mode == OutputMode.HLS else None
+            )
             try:
                 pipeline = StreamPipeline(
                     broadcast_id=req.broadcast_id,
-                    stream_key=req.stream_key,
+                    input_stream_key=input_stream_key,
                     input_url=input_url,
-                    output_path=output_path,
-                    hls_url=hls_url,
+                    output_mode=output_mode,
+                    output_url=output_url,
+                    watch_url=watch_url,
                     avatar_id=req.avatar_id,
                     fps=self._settings.pipeline_fps,
                     max_frame_lag_ms=self._settings.max_frame_lag_ms,
+                    output_retry_count=self._settings.output_retry_count,
+                    output_retry_backoff_ms=self._settings.output_retry_backoff_ms,
                     metadata_store=metadata_store,
+                    ffmpeg_log_level=self._settings.ffmpeg_log_level,
+                    output_video_bitrate_kbps=self._settings.output_video_bitrate_kbps,
+                    output_audio_bitrate_kbps=self._settings.output_audio_bitrate_kbps,
+                    output_audio_sample_rate=self._settings.output_audio_sample_rate,
+                    output_audio_channels=self._settings.output_audio_channels,
+                    output_keyframe_interval_seconds=self._settings.output_keyframe_interval_seconds,
                 )
             except RuntimeError as exc:
                 raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc
@@ -78,13 +97,24 @@ class StreamManager:
 
         return pipeline.snapshot()
 
-    def _build_input_url(self, stream_key: str) -> str:
-        sanitized_stream_key = quote(stream_key, safe="")
+    def _build_input_url(self, input_stream_key: str) -> str:
+        sanitized_stream_key = quote(input_stream_key, safe="")
         prefix = self._settings.mediamtx_path_prefix.strip("/")
         return f"{self._settings.mediamtx_rtsp_read_base_url.rstrip('/')}/{prefix}/{sanitized_stream_key}"
 
-    def _build_output_path(self, broadcast_id: str) -> str:
-        return f"{self._settings.hls_output_root.rstrip('/')}/{broadcast_id}/index.m3u8"
+    def _build_output_url(self, broadcast_id: str, output_mode: OutputMode) -> str:
+        if output_mode == OutputMode.HLS:
+            return f"{self._settings.hls_output_root.rstrip('/')}/{broadcast_id}/index.m3u8"
+        raise ApiException(
+            ErrorTitle.BadRequest,
+            f"output_url is required when output_mode={output_mode.value}",
+        )
 
     def _build_hls_url(self, broadcast_id: str) -> str:
         return f"{self._settings.hls_public_base_url.rstrip('/')}/{broadcast_id}/index.m3u8"
+
+    def _default_output_mode(self) -> OutputMode:
+        try:
+            return OutputMode(self._settings.default_output_mode)
+        except ValueError:
+            return OutputMode.HLS
