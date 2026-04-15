@@ -75,6 +75,10 @@ jobs:
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
             echo "EC2_HOST=${{ secrets.EC2_HOST }}" >> .env
             echo "FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}" >> .env
+            echo "CHZZK_CLIENT_ID=${{ secrets.CHZZK_CLIENT_ID }}" >> .env
+            echo "CHZZK_CLIENT_SECRET=${{ secrets.CHZZK_CLIENT_SECRET }}" >> .env
+            echo "CHZZK_REDIRECT_URI=${{ secrets.CHZZK_REDIRECT_URI }}" >> .env
+            echo "CHZZK_STREAM_PUBLISH_URL_TEMPLATE=${{ secrets.CHZZK_STREAM_PUBLISH_URL_TEMPLATE }}" >> .env
 
             set -a
             . ./.env

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus Auth & Member"
+  short_description: "Kakao auth, JWT, member identity, and Redis session flows"
+  default_prompt: "Use $focus-auth-member to update or debug the Kakao login, JWT, refresh token, or authenticated member flow in focus-server."

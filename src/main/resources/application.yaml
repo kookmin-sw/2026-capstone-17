@@ -37,7 +37,7 @@ spring:
 
 jwt:
   common:
-    key: ${JWT_SECRET}
+    key: ${JWT_SECRET:dasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djias}
 
 
 kakao:
@@ -60,12 +60,23 @@ focus:
 aws:
   s3:
     bucket: ${AWS_S3_BUCKET}
-    region: ${AWS_REGION}
     access-key: ${AWS_ACCESS_KEY_ID:}
     secret-key: ${AWS_SECRET_ACCESS_KEY:}
+    region: ${AWS_REGION:ap-northeast-2}
     endpoint: ${AWS_S3_ENDPOINT:}
     public-base-url: ${AWS_S3_PUBLIC_BASE_URL:}
 
+naver:
+  chzzk:
+    client-id: ${CHZZK_CLIENT_ID}
+    client-secret: ${CHZZK_CLIENT_SECRET}
+    redirect-uri: http://localhost:8080/api/v1/platforms/chzzk/callback
+    authorization-uri: https://chzzk.naver.com/account-interlock
+    open-api-base-url: https://openapi.chzzk.naver.com
+    watch-url-template: https://chzzk.naver.com/{channelId}
+    publish-url-template: ${CHZZK_STREAM_PUBLISH_URL_TEMPLATE:rtmp://global-rtmp.lip2.navercorp.com:8080/relay/{streamKey}}
+    oauth-state-ttl-seconds: 600
+    token-refresh-buffer-seconds: 60
 springdoc:
   api-docs:
     path: /v3/api-docs

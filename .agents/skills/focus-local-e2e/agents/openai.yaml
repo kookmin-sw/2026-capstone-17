@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus Local E2E"
+  short_description: "Bring up and debug the full local stack across Spring, FastAPI, and infra"
+  default_prompt: "Use $focus-local-e2e to reproduce, verify, or debug a focus-server issue in the full local environment."

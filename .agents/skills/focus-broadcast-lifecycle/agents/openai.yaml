@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus Broadcast Lifecycle"
+  short_description: "Broadcast CRUD, ownership checks, and FastAPI worker orchestration"
+  default_prompt: "Use $focus-broadcast-lifecycle to update or debug broadcast creation, start, stop, or related worker orchestration in focus-server."

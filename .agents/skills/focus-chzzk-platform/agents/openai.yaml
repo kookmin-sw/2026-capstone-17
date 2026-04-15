@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus CHZZK Platform"
+  short_description: "CHZZK OAuth, token lifecycle, and streaming target preparation"
+  default_prompt: "Use $focus-chzzk-platform to work on CHZZK OAuth, token refresh, connection persistence, or stream target preparation in focus-server."

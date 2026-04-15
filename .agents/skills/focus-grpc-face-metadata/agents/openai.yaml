@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus gRPC Metadata"
+  short_description: "Proto, servlet gRPC, Redis payload mapping, and grpcurl verification"
+  default_prompt: "Use $focus-grpc-face-metadata to update or debug the face metadata gRPC contract, ingestion service, or Redis payload path in focus-server."

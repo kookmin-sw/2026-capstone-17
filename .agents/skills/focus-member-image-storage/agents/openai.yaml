@@ -1,0 +1,4 @@
+interface:
+  display_name: "Focus Member Images"
+  short_description: "Member image upload, S3 storage, and image metadata persistence"
+  default_prompt: "Use $focus-member-image-storage to work on member image upload, list, delete, or S3-backed storage behavior in focus-server."

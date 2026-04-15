@@ -1,4 +1,5 @@
 DROP TABLE IF EXISTS tracking_session CASCADE;
+DROP TABLE IF EXISTS streaming_platform_connection CASCADE;
 DROP TABLE IF EXISTS broadcast CASCADE;
 DROP TABLE IF EXISTS avatar CASCADE;
 DROP TABLE IF EXISTS member_image CASCADE;
@@ -50,13 +51,38 @@ CREATE TABLE broadcast (
                            stream_key      VARCHAR(100) NOT NULL UNIQUE,
                            title           VARCHAR(200),
                            status          VARCHAR(20) DEFAULT 'READY',
+                           platform        VARCHAR(20) DEFAULT 'CHZZK',
+                           output_mode     VARCHAR(20) DEFAULT 'CHZZK_RTMP',
+                           platform_channel_id VARCHAR(100),
+                           watch_url       VARCHAR(255),
                            hls_url         VARCHAR(255),
+                           last_start_failure_reason VARCHAR(500),
                            started_at      TIMESTAMP WITH TIME ZONE,
                            ended_at        TIMESTAMP WITH TIME ZONE,
                            created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                            deleted_at TIMESTAMP WITH TIME ZONE,
                            CONSTRAINT fk_broadcast_member FOREIGN KEY (member_id) REFERENCES member(member_id)
 );
+
+CREATE TABLE streaming_platform_connection (
+                           connection_id              VARCHAR(26) NOT NULL PRIMARY KEY,
+                           member_id                  VARCHAR(26) NOT NULL,
+                           platform                   VARCHAR(20) NOT NULL,
+                           platform_user_id           VARCHAR(100) NOT NULL,
+                           platform_channel_id        VARCHAR(100) NOT NULL,
+                           platform_channel_name      VARCHAR(100),
+                           access_token               TEXT NOT NULL,
+                           refresh_token              TEXT NOT NULL,
+                           access_token_expires_at    TIMESTAMP WITH TIME ZONE NOT NULL,
+                           connected_at               TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                           revoked_at                 TIMESTAMP WITH TIME ZONE,
+                           created_at                 TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                           CONSTRAINT fk_streaming_platform_connection_member FOREIGN KEY (member_id) REFERENCES member(member_id),
+                           CONSTRAINT uk_streaming_platform_connection_member_platform UNIQUE (member_id, platform)
+);
+
+CREATE INDEX idx_streaming_platform_connection_member_id ON streaming_platform_connection(member_id);
+CREATE INDEX idx_streaming_platform_connection_platform_channel_id ON streaming_platform_connection(platform_channel_id);
 
 CREATE TABLE tracking_session (
                                   tracking_session_id VARCHAR(26) NOT NULL PRIMARY KEY,
