@@ -1,6 +1,8 @@
 # Focus — 클라이언트 연동 가이드
 
-> **Base URL:** `http://<SERVER_IP>:8080`
+> **Spring API Base URL:** `http://3.35.202.126:8080`
+>
+> **Media ingest (SRT/RTMP) host:** `13.125.126.120`
 >
 > **인증:** `Authorization: Bearer <accessToken>` 헤더
 
@@ -21,7 +23,7 @@
 ### 영상 경로
 
 ```
-모바일 카메라 ──SRT/RTMP──▶ MediaMTX ──RTSP──▶ FastAPI ──RTMP──▶ 치지직
+모바일 카메라 ──SRT/RTMP──▶ MediaMTX(FASTAPI_INGEST_IP) ──RTSP──▶ FastAPI ──RTMP──▶ 치지직
 ```
 
 > 클라이언트는 **카메라 영상 송출 + REST API 호출**만 하면 됩니다.
@@ -177,12 +179,15 @@ DELETE /api/v1/broadcasts/{broadcastId}
 
 ## 5. 카메라 영상 송출
 
-### 송출 URL
+### 송출 URL (중요)
 
 | 프로토콜 | URL | 비고 |
 |----------|-----|------|
-| **SRT** (기본) | `srt://<SERVER_IP>:8890?streamid=publish:/live/<streamKey>` | UDP, 낮은 지연, 패킷 손실 복구 |
-| **RTMP** (폴백) | `rtmp://<SERVER_IP>:1935/live/<streamKey>` | TCP, UDP 차단 환경용 |
+| **SRT** (기본) | `srt://13.125.126.120:8890?streamid=publish:live/<streamKey>` | UDP, 낮은 지연, 패킷 손실 복구 |
+| **RTMP** (폴백) | `rtmp://13.125.126.120:1935/live/<streamKey>` | TCP, UDP 차단 환경용 |
+
+> SRT `streamid`는 반드시 `publish:live/<streamKey>` 형식이어야 합니다.
+> `publish:/live/<streamKey>`처럼 `/`로 시작하면 MediaMTX가 연결을 거절합니다.
 
 ### 영상 스펙
 
@@ -203,13 +208,13 @@ DELETE /api/v1/broadcasts/{broadcastId}
 ### 타이밍 (중요)
 
 ```
-방송 생성 API → streamKey 획득
+방송 생성 API (Spring) → streamKey 획득
          ↓
-카메라 SRT/RTMP 송출 시작
+카메라 SRT/RTMP 송출 시작 (FASTAPI_INGEST_IP로 송출)
          ↓
 연결 성공 확인 (콜백)
          ↓
-방송 시작 API 호출 ← 반드시 송출 성공 후!
+방송 시작 API 호출 (Spring) ← 반드시 송출 성공 후!
          ↓
 watchUrl 수신 → 시청자 공유
 ```
@@ -254,4 +259,6 @@ DELETE /api/members/images/{imageId}
 | `GET` | `/api/v1/platforms/chzzk/status` | O | 치지직 연동 상태 |
 | `DELETE` | `/api/v1/platforms/chzzk/connection` | O | 치지직 연동 해제 |
 
-> Swagger UI: `http://<SERVER_IP>:8080/swagger-ui.html`
+> Spring Swagger UI: `http://3.35.202.126:8080/swagger-ui.html`
+>
+> FastAPI health check: `http://13.125.126.120:8000/healthz`
