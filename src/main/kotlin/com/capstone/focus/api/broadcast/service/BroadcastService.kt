@@ -4,13 +4,11 @@ import com.capstone.focus.api.broadcast.dto.request.CreateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
-import com.capstone.focus.api.platform.service.ChzzkPlatformService
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
 import com.capstone.focus.common.external.fastapi.FastApiStreamClient
 import com.capstone.focus.domain.MemberRepository
 import com.capstone.focus.domain.entity.Broadcast
-import com.capstone.focus.domain.entity.enum.BroadcastOutputMode
 import com.capstone.focus.domain.repository.BroadcastRepository
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
@@ -33,8 +31,7 @@ interface BroadcastService {
 class BroadcastServiceImpl(
     private val broadcastRepository: BroadcastRepository,
     private val memberRepository: MemberRepository,
-    private val fastApiStreamClient: FastApiStreamClient,
-    private val chzzkPlatformService: ChzzkPlatformService
+    private val fastApiStreamClient: FastApiStreamClient
 ) : BroadcastService {
 
     // 방송 생성
@@ -56,7 +53,7 @@ class BroadcastServiceImpl(
     }
 
     // 방송 시작
-    @Transactional(noRollbackFor = [ApiException::class])
+    @Transactional
     override fun startBroadcast(
         memberId: String,
         broadcastId: String,
@@ -67,30 +64,15 @@ class BroadcastServiceImpl(
 
         validateOwnership(broadcast, memberId)
 
-        return try {
-            val chzzkTarget = chzzkPlatformService.prepareBroadcastTarget(memberId, broadcast)
+        val worker = fastApiStreamClient.startBroadcast(
+            broadcastId = broadcast.id,
+            streamKey = broadcast.streamKey,
+            avatarId = request.avatarId
+        )
 
-            val worker = fastApiStreamClient.startBroadcast(
-                broadcastId = broadcast.id,
-                inputStreamKey = broadcast.streamKey,
-                avatarId = request.avatarId,
-                outputMode = BroadcastOutputMode.CHZZK_RTMP.name,
-                outputUrl = chzzkTarget.outputUrl,
-                watchUrl = chzzkTarget.watchUrl
-            )
+        broadcast.startBroadcast(worker.hlsUrl)
 
-            broadcast.startBroadcast(
-                platformChannelId = chzzkTarget.platformChannelId,
-                watchUrl = worker.watchUrl ?: chzzkTarget.watchUrl,
-                outputMode = BroadcastOutputMode.CHZZK_RTMP,
-                hlsUrl = null
-            )
-
-            BroadcastResponse.from(broadcast)
-        } catch (exception: ApiException) {
-            broadcast.markStartFailure(exception.message)
-            throw exception
-        }
+        return BroadcastResponse.from(broadcast)
     }
 
     // 방송 종료
