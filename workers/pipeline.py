@@ -1,14 +1,10 @@
 import asyncio
 import logging
-import time
+import os
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
-from adapters.frame_sink import FrameSink, create_frame_sink
-from adapters.media_source import MediaSource, create_media_source
 from adapters.metadata_store import MetadataStore
-from model.renderer import AvatarRenderer
 from schemas.stream import StreamStatusResponse
 
 logger = logging.getLogger(__name__)
@@ -30,6 +26,8 @@ class PipelineStats:
 
 
 class StreamPipeline:
+    """RTSP → HLS relay via ffmpeg subprocess (no Python frame decode)."""
+
     def __init__(
         self,
         broadcast_id: str,
@@ -41,9 +39,7 @@ class StreamPipeline:
         fps: int,
         max_frame_lag_ms: int,
         metadata_store: MetadataStore,
-        media_source: MediaSource | None = None,
-        frame_sink: FrameSink | None = None,
-        renderer: AvatarRenderer | None = None,
+        **_kwargs,
     ) -> None:
         self.broadcast_id = broadcast_id
         self.stream_key = stream_key
@@ -51,21 +47,15 @@ class StreamPipeline:
         self.output_path = output_path
         self.hls_url = hls_url
         self.avatar_id = avatar_id
-
-        self._max_frame_lag_us = max_frame_lag_ms * 1_000
+        self._fps = fps
         self._metadata_store = metadata_store
-        self._media_source = media_source or create_media_source(input_url=input_url, fps=fps)
-        self._frame_sink = frame_sink or create_frame_sink(output_path=output_path, fps=fps)
-        self._renderer = renderer or AvatarRenderer()
 
         self._task: asyncio.Task[None] | None = None
+        self._ffmpeg_proc: asyncio.subprocess.Process | None = None
         self._stop_event = asyncio.Event()
         self._state = PipelineState.STOPPED
         self._detail: str | None = None
         self._stats = PipelineStats()
-
-        self._anchor_pts_us: int | None = None
-        self._anchor_clock_us: int | None = None
 
     @property
     def state(self) -> PipelineState:
@@ -106,91 +96,67 @@ class StreamPipeline:
 
     async def _run(self) -> None:
         self._state = PipelineState.RUNNING
-        logger.info("pipeline_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
+        logger.info("pipeline_relay_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
+
+        output_dir = os.path.dirname(self.output_path)
+        if output_dir:
+            os.makedirs(output_dir, exist_ok=True)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-rtsp_transport", "tcp",
+            "-i", self.input_url,
+            "-c:v", "libx264",
+            "-preset", "veryfast",
+            "-tune", "zerolatency",
+            "-pix_fmt", "yuv420p",
+            "-r", str(self._fps),
+            "-f", "hls",
+            "-hls_time", "2",
+            "-hls_list_size", "10",
+            "-hls_flags", "delete_segments",
+            self.output_path,
+        ]
 
         try:
+            self._ffmpeg_proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            logger.info("ffmpeg_relay_spawned broadcast_id=%s pid=%s", self.broadcast_id, self._ffmpeg_proc.pid)
+
             while not self._stop_event.is_set():
-                frame = await self._media_source.read_frame()
-                if frame is None:
-                    continue
+                if self._ffmpeg_proc.returncode is not None:
+                    stderr_out = await self._ffmpeg_proc.stderr.read() if self._ffmpeg_proc.stderr else b""
+                    msg = stderr_out.decode(errors="replace")[-500:]
+                    raise RuntimeError(f"ffmpeg exited with code {self._ffmpeg_proc.returncode}: {msg}")
 
-                if self._should_drop_frame(frame.pts_us):
-                    self._stats.dropped_frames += 1
-                    continue
-
-                face_metadata = None
-                retry_count = 3
-                retry_delay_s = 0.01
-
-                for _ in range(retry_count):
-                    try:
-                        face_metadata = await self._metadata_store.get_face_metadata(
-                            self.broadcast_id, frame.pts_us
-                        )
-                        if face_metadata is not None:
-                            break
-                        await asyncio.sleep(retry_delay_s)
-                    except Exception:
-                        logger.warning(
-                            "metadata_lookup_error broadcast_id=%s pts_us=%s",
-                            self.broadcast_id,
-                            frame.pts_us,
-                        )
-                        break
-
-                if face_metadata is None:
-                    logger.debug(
-                        "metadata_not_found (timeout) broadcast_id=%s pts_us=%s",
-                        self.broadcast_id,
-                        frame.pts_us,
-                    )
-
-                try:
-                    rendered = await self._renderer.render(frame, face_metadata, self.avatar_id)
-                except Exception:
-                    logger.exception(
-                        "render_failed broadcast_id=%s pts_us=%s",
-                        self.broadcast_id,
-                        frame.pts_us,
-                    )
-                    rendered = await self._renderer.emergency_fallback(frame)
-
-                await self._frame_sink.write_frame(rendered)
                 self._stats.processed_frames += 1
-                self._stats.last_pts_us = frame.pts_us
+                await asyncio.sleep(0.5)
+
         except Exception as exc:
             self._state = PipelineState.FAILED
             self._detail = str(exc)
             logger.exception("pipeline_failed broadcast_id=%s", self.broadcast_id)
         finally:
-            await self._close_components()
+            await self._kill_ffmpeg()
+            try:
+                await self._metadata_store.close()
+            except Exception:
+                pass
             if self._state != PipelineState.FAILED:
                 self._state = PipelineState.STOPPED
             logger.info("pipeline_finished broadcast_id=%s state=%s", self.broadcast_id, self._state.value)
 
-    def _should_drop_frame(self, pts_us: int) -> bool:
-        now_us = int(time.monotonic() * 1_000_000)
-        if self._anchor_pts_us is None or self._anchor_clock_us is None:
-            self._anchor_pts_us = pts_us
-            self._anchor_clock_us = now_us
-            return False
-
-        media_elapsed_us = pts_us - self._anchor_pts_us
-        wall_elapsed_us = now_us - self._anchor_clock_us
-        lag_us = wall_elapsed_us - media_elapsed_us
-        return lag_us > self._max_frame_lag_us
-
-    async def _close_components(self) -> None:
-        await self._safe_close(self._frame_sink, "frame_sink")
-        await self._safe_close(self._media_source, "media_source")
-        await self._safe_close(self._metadata_store, "metadata_store")
-
-    async def _safe_close(self, resource: Any, name: str) -> None:
+    async def _kill_ffmpeg(self) -> None:
+        proc = self._ffmpeg_proc
+        if proc is None or proc.returncode is not None:
+            return
+        proc.terminate()
         try:
-            await resource.close()
-        except Exception:
-            logger.warning(
-                "resource_close_failed broadcast_id=%s resource=%s",
-                self.broadcast_id,
-                name,
-            )
+            await asyncio.wait_for(proc.wait(), timeout=5)
+        except asyncio.TimeoutError:
+            proc.kill()
+            await proc.wait()
+        logger.info("ffmpeg_relay_stopped broadcast_id=%s", self.broadcast_id)
