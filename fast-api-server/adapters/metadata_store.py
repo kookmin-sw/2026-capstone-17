@@ -1,0 +1,61 @@
+import json
+from typing import Any, Protocol
+
+try:
+    import redis.asyncio as redis
+except ImportError:  # pragma: no cover
+    redis = None
+
+
+class MetadataStore(Protocol):
+    async def get_face_metadata(self, broadcast_id: str, pts_us: int) -> dict[str, Any] | None:
+        ...
+
+    async def close(self) -> None:
+        ...
+
+
+class RedisMetadataStore:
+    def __init__(self, redis_url: str, key_template: str) -> None:
+        self._redis_url = redis_url
+        self._key_template = key_template
+        self._client = None
+
+    async def _ensure_client(self):
+        if self._client is not None:
+            return self._client
+        if redis is None:
+            return None
+        self._client = redis.from_url(self._redis_url, decode_responses=True)
+        return self._client
+
+    def _build_key(self, broadcast_id: str, pts_us: int) -> str:
+        try:
+            return self._key_template.format(broadcast_id=broadcast_id, pts_us=pts_us)
+        except KeyError:
+            # Backward compatibility with old template: stream:{stream_id}:meta:{pts_us}
+            return self._key_template.format(stream_id=broadcast_id, pts_us=pts_us)
+
+    async def get_face_metadata(self, broadcast_id: str, pts_us: int) -> dict[str, Any] | None:
+        client = await self._ensure_client()
+        if client is None:
+            return None
+
+        key = self._build_key(broadcast_id=broadcast_id, pts_us=pts_us)
+        # Use a transaction to get and delete the key atomically, or just get then delete.
+        payload = await client.get(key)
+        if not payload:
+            return None
+
+        # Clean up immediately after reading to prevent Redis memory bloat
+        await client.delete(key)
+
+        try:
+            return json.loads(payload)
+        except json.JSONDecodeError:
+            return None
+
+    async def close(self) -> None:
+        if self._client is not None:
+            await self._client.aclose()
+            self._client = None

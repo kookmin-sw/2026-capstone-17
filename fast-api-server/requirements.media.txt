@@ -1,0 +1,3 @@
+# Optional media ingest dependency (RTMP/SRT decode via PyAV)
+# Python 3.13/ffmpeg-full 환경 호환을 위해 최신 major 허용
+av>=15.0,<17.0
