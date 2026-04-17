@@ -45,6 +45,14 @@ class StreamManager:
                     fps=self._settings.pipeline_fps,
                     max_frame_lag_ms=self._settings.max_frame_lag_ms,
                     metadata_store=metadata_store,
+                    ffmpeg_log_level=self._settings.ffmpeg_log_level,
+                    gop_seconds=self._settings.pipeline_gop_seconds,
+                    video_bitrate=self._settings.pipeline_video_bitrate,
+                    maxrate=self._settings.pipeline_maxrate,
+                    bufsize=self._settings.pipeline_bufsize,
+                    hls_time=self._settings.hls_time,
+                    hls_list_size=self._settings.hls_list_size,
+                    hls_flags=self._settings.hls_flags,
                 )
             except RuntimeError as exc:
                 raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc

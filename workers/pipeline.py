@@ -39,6 +39,14 @@ class StreamPipeline:
         fps: int,
         max_frame_lag_ms: int,
         metadata_store: MetadataStore,
+        ffmpeg_log_level: str = "warning",
+        gop_seconds: int = 1,
+        video_bitrate: str = "2500k",
+        maxrate: str = "2500k",
+        bufsize: str = "5000k",
+        hls_time: float = 1.0,
+        hls_list_size: int = 6,
+        hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist",
         **_kwargs,
     ) -> None:
         self.broadcast_id = broadcast_id
@@ -49,6 +57,14 @@ class StreamPipeline:
         self.avatar_id = avatar_id
         self._fps = fps
         self._metadata_store = metadata_store
+        self._ffmpeg_log_level = ffmpeg_log_level
+        self._gop_seconds = max(gop_seconds, 1)
+        self._video_bitrate = video_bitrate
+        self._maxrate = maxrate
+        self._bufsize = bufsize
+        self._hls_time = max(hls_time, 0.5)
+        self._hls_list_size = max(hls_list_size, 3)
+        self._hls_flags = hls_flags
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -102,8 +118,14 @@ class StreamPipeline:
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
 
+        gop = max(self._fps * self._gop_seconds, 1)
         cmd = [
             "ffmpeg", "-y",
+            "-loglevel", self._ffmpeg_log_level,
+            "-fflags", "nobuffer",
+            "-flags", "low_delay",
+            "-analyzeduration", "0",
+            "-probesize", "32k",
             "-rtsp_transport", "tcp",
             "-i", self.input_url,
             "-c:v", "libx264",
@@ -111,10 +133,17 @@ class StreamPipeline:
             "-tune", "zerolatency",
             "-pix_fmt", "yuv420p",
             "-r", str(self._fps),
+            "-g", str(gop),
+            "-keyint_min", str(gop),
+            "-sc_threshold", "0",
+            "-force_key_frames", f"expr:gte(t,n_forced*{self._gop_seconds})",
+            "-b:v", self._video_bitrate,
+            "-maxrate", self._maxrate,
+            "-bufsize", self._bufsize,
             "-f", "hls",
-            "-hls_time", "2",
-            "-hls_list_size", "10",
-            "-hls_flags", "delete_segments",
+            "-hls_time", str(self._hls_time),
+            "-hls_list_size", str(self._hls_list_size),
+            "-hls_flags", self._hls_flags,
             self.output_path,
         ]
 

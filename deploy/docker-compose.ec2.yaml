@@ -24,6 +24,14 @@ services:
       HLS_PUBLIC_BASE_URL: ${HLS_PUBLIC_BASE_URL}
       PIPELINE_FPS: 30
       MAX_FRAME_LAG_MS: 250
+      FFMPEG_LOG_LEVEL: ${FFMPEG_LOG_LEVEL:-warning}
+      PIPELINE_GOP_SECONDS: ${PIPELINE_GOP_SECONDS:-1}
+      PIPELINE_VIDEO_BITRATE: ${PIPELINE_VIDEO_BITRATE:-2500k}
+      PIPELINE_MAXRATE: ${PIPELINE_MAXRATE:-2500k}
+      PIPELINE_BUFSIZE: ${PIPELINE_BUFSIZE:-5000k}
+      HLS_TIME: ${HLS_TIME:-1}
+      HLS_LIST_SIZE: ${HLS_LIST_SIZE:-6}
+      HLS_FLAGS: ${HLS_FLAGS:-delete_segments+independent_segments+append_list+omit_endlist}
       LOG_LEVEL: INFO
     depends_on:
       - mediamtx

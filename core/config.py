@@ -17,6 +17,14 @@ class Settings(BaseSettings):
 
     pipeline_fps: int = 30
     max_frame_lag_ms: int = 250
+    ffmpeg_log_level: str = "warning"
+    pipeline_gop_seconds: int = 1
+    pipeline_video_bitrate: str = "2500k"
+    pipeline_maxrate: str = "2500k"
+    pipeline_bufsize: str = "5000k"
+    hls_time: float = 1.0
+    hls_list_size: int = 6
+    hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist"
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
     mediamtx_path_prefix: str = "live"
