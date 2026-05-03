@@ -47,6 +47,7 @@ class StreamPipeline:
         hls_time: float = 1.0,
         hls_list_size: int = 6,
         hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist",
+        analysis_output_path: str | None = None,
         **_kwargs,
     ) -> None:
         self.broadcast_id = broadcast_id
@@ -65,6 +66,7 @@ class StreamPipeline:
         self._hls_time = max(hls_time, 0.5)
         self._hls_list_size = max(hls_list_size, 3)
         self._hls_flags = hls_flags
+        self.analysis_output_path = analysis_output_path
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -117,10 +119,13 @@ class StreamPipeline:
         output_dir = os.path.dirname(self.output_path)
         if output_dir:
             os.makedirs(output_dir, exist_ok=True)
+        if self.analysis_output_path:
+            os.makedirs(os.path.dirname(self.analysis_output_path), exist_ok=True)
 
         gop = max(self._fps * self._gop_seconds, 1)
-        cmd = [
-            "ffmpeg", "-y",
+        input_args = [
+            "ffmpeg",
+            "-y",
             "-loglevel", self._ffmpeg_log_level,
             "-fflags", "nobuffer",
             "-flags", "low_delay",
@@ -128,6 +133,9 @@ class StreamPipeline:
             "-probesize", "32k",
             "-rtsp_transport", "tcp",
             "-i", self.input_url,
+        ]
+        encoded_video_args = [
+            "-map", "0:v:0",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-tune", "zerolatency",
@@ -140,16 +148,29 @@ class StreamPipeline:
             "-b:v", self._video_bitrate,
             "-maxrate", self._maxrate,
             "-bufsize", self._bufsize,
+            "-an",
+        ]
+        hls_output_args = [
             "-f", "hls",
             "-hls_time", str(self._hls_time),
             "-hls_list_size", str(self._hls_list_size),
             "-hls_flags", self._hls_flags,
             self.output_path,
         ]
+        cmd = input_args + encoded_video_args + hls_output_args
+        if self.analysis_output_path:
+            cmd += (
+                encoded_video_args
+                + [
+                    "-movflags", "+faststart",
+                    self.analysis_output_path,
+                ]
+            )
 
         try:
             self._ffmpeg_proc = await asyncio.create_subprocess_exec(
                 *cmd,
+                stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.DEVNULL,
                 stderr=asyncio.subprocess.PIPE,
             )
@@ -182,6 +203,16 @@ class StreamPipeline:
         proc = self._ffmpeg_proc
         if proc is None or proc.returncode is not None:
             return
+        if proc.stdin:
+            try:
+                proc.stdin.write(b"q")
+                await proc.stdin.drain()
+                proc.stdin.close()
+                await asyncio.wait_for(proc.wait(), timeout=5)
+                logger.info("ffmpeg_relay_stopped broadcast_id=%s", self.broadcast_id)
+                return
+            except Exception:
+                logger.warning("ffmpeg_graceful_stop_failed broadcast_id=%s", self.broadcast_id)
         proc.terminate()
         try:
             await asyncio.wait_for(proc.wait(), timeout=5)

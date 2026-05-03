@@ -66,6 +66,16 @@ jobs:
             FULL_IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/focus-fast-api:${{ github.sha }}
             REDIS_URL=${{ secrets.REDIS_URL }}
             HLS_PUBLIC_BASE_URL=${{ secrets.HLS_PUBLIC_BASE_URL }}
+            ANALYSIS_ENABLED=${{ secrets.ANALYSIS_ENABLED }}
+            S3_BUCKET=${{ secrets.S3_BUCKET }}
+            S3_REGION=${{ secrets.S3_REGION }}
+            S3_PUBLIC_BASE_URL=${{ secrets.S3_PUBLIC_BASE_URL }}
+            AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
+            GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
+            GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
+            SPRING_INTERNAL_BASE_URL=${{ secrets.SPRING_INTERNAL_BASE_URL }}
+            INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
             EOF
 
             docker pull ${{ secrets.DOCKER_USERNAME }}/focus-fast-api:${{ github.sha }}
