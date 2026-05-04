@@ -1,17 +1,25 @@
 import asyncio
+import logging
 from urllib.parse import quote
 
 from adapters.metadata_store import RedisMetadataStore
 from core.config import Settings
 from core.exceptions import ApiException, ErrorTitle
+from services.analysis_archive import AnalysisArchiveService
+from services.analysis_workflow import AnalysisWorkflow
 from schemas.stream import StreamStartRequest, StreamStatusResponse
 from workers.pipeline import PipelineState, StreamPipeline
+
+logger = logging.getLogger(__name__)
 
 
 class StreamManager:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._pipelines: dict[str, StreamPipeline] = {}
+        self._analysis_tasks: dict[str, asyncio.Task[None]] = {}
+        self._analysis_archive = AnalysisArchiveService(settings)
+        self._analysis_workflow = AnalysisWorkflow(settings)
         self._lock = asyncio.Lock()
 
     async def start_stream(self, req: StreamStartRequest) -> StreamStatusResponse:
@@ -34,6 +42,7 @@ class StreamManager:
             input_url = req.input_url or self._build_input_url(req.stream_key)
             output_path = req.output_path or self._build_output_path(req.broadcast_id)
             hls_url = self._build_hls_url(req.broadcast_id)
+            analysis_output_path = self._analysis_archive.build_analysis_path(req.broadcast_id)
             try:
                 pipeline = StreamPipeline(
                     broadcast_id=req.broadcast_id,
@@ -53,6 +62,7 @@ class StreamManager:
                     hls_time=self._settings.hls_time,
                     hls_list_size=self._settings.hls_list_size,
                     hls_flags=self._settings.hls_flags,
+                    analysis_output_path=analysis_output_path,
                 )
             except RuntimeError as exc:
                 raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc
@@ -72,6 +82,7 @@ class StreamManager:
             )
 
         await pipeline.stop()
+        self._schedule_analysis(pipeline)
         return pipeline.snapshot()
 
     async def get_status(self, broadcast_id: str) -> StreamStatusResponse:
@@ -96,3 +107,19 @@ class StreamManager:
 
     def _build_hls_url(self, broadcast_id: str) -> str:
         return f"{self._settings.hls_public_base_url.rstrip('/')}/{broadcast_id}/index.m3u8"
+
+    def _schedule_analysis(self, pipeline: StreamPipeline) -> None:
+        if not self._settings.analysis_enabled:
+            return
+
+        existing = self._analysis_tasks.get(pipeline.broadcast_id)
+        if existing and not existing.done():
+            logger.info("analysis_task_already_running broadcast_id=%s", pipeline.broadcast_id)
+            return
+
+        task = asyncio.create_task(
+            self._analysis_workflow.run_for_pipeline(pipeline),
+            name=f"analysis:{pipeline.broadcast_id}",
+        )
+        self._analysis_tasks[pipeline.broadcast_id] = task
+        task.add_done_callback(lambda _: self._analysis_tasks.pop(pipeline.broadcast_id, None))

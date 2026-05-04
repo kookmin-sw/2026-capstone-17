@@ -31,6 +31,25 @@ class Settings(BaseSettings):
     hls_output_root: str = "/tmp/hls"
     hls_public_base_url: str = "http://localhost:8000/hls"
 
+    analysis_enabled: bool = False
+    analysis_skip_s3: bool = False
+    analysis_output_filename: str = "analysis.mp4"
+    analysis_ffmpeg_timeout_sec: int = 300
+    analysis_retry_attempts: int = 3
+    analysis_retry_backoff_sec: float = 2.0
+
+    s3_bucket: str | None = None
+    s3_region: str = "ap-northeast-2"
+    s3_public_base_url: str | None = None
+
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_file_processing_timeout_sec: int = 600
+
+    spring_internal_base_url: str | None = None
+    internal_api_key: str | None = None
+    spring_internal_timeout_sec: float = 10.0
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
