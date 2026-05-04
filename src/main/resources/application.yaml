@@ -56,6 +56,8 @@ focus:
       ttl-seconds: 60
   fastapi:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
+  internal-api:
+    key: ${INTERNAL_API_KEY:}
 
 aws:
   s3:
@@ -77,6 +79,13 @@ naver:
     publish-url-template: ${CHZZK_STREAM_PUBLISH_URL_TEMPLATE:rtmp://global-rtmp.lip2.navercorp.com:8080/relay/{streamKey}}
     oauth-state-ttl-seconds: 600
     token-refresh-buffer-seconds: 60
+
+google:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
+
 springdoc:
   api-docs:
     path: /v3/api-docs

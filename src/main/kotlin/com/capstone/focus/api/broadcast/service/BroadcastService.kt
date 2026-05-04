@@ -1,5 +1,6 @@
 package com.capstone.focus.api.broadcast.service
 
+import com.capstone.focus.api.analysis.service.BroadcastAnalysisService
 import com.capstone.focus.api.broadcast.dto.request.CreateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
@@ -31,10 +32,10 @@ interface BroadcastService {
 class BroadcastServiceImpl(
     private val broadcastRepository: BroadcastRepository,
     private val memberRepository: MemberRepository,
-    private val fastApiStreamClient: FastApiStreamClient
+    private val fastApiStreamClient: FastApiStreamClient,
+    private val broadcastAnalysisService: BroadcastAnalysisService
 ) : BroadcastService {
 
-    // 방송 생성
     @Transactional
     override fun createBroadcast(memberId: String, request: CreateBroadcastRequest): BroadcastResponse {
         val member = memberRepository.findByIdOrNull(memberId)
@@ -52,7 +53,6 @@ class BroadcastServiceImpl(
         return BroadcastResponse.from(savedBroadcast)
     }
 
-    // 방송 시작
     @Transactional
     override fun startBroadcast(
         memberId: String,
@@ -75,7 +75,6 @@ class BroadcastServiceImpl(
         return BroadcastResponse.from(broadcast)
     }
 
-    // 방송 종료
     @Transactional
     override fun stopBroadcast(memberId: String, broadcastId: String): BroadcastResponse {
         val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
@@ -85,18 +84,17 @@ class BroadcastServiceImpl(
 
         fastApiStreamClient.stopBroadcast(broadcast.id)
         broadcast.endBroadcast()
+        broadcastAnalysisService.queuePostStreamSummary(memberId, broadcast.id)
 
         return BroadcastResponse.from(broadcast)
     }
 
-    // 방송 리스트 조회 (페이징)
     @Transactional(readOnly = true)
     override fun getBroadcastList(pageable: Pageable): Page<BroadcastResponse> {
         return broadcastRepository.findAllByDeletedAtIsNull(pageable)
             .map { BroadcastResponse.from(it) }
     }
 
-    // 방송 상세 조회
     @Transactional(readOnly = true)
     override fun getBroadcastDetail(broadcastId: String): BroadcastResponse {
         val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
@@ -105,7 +103,6 @@ class BroadcastServiceImpl(
         return BroadcastResponse.from(broadcast)
     }
 
-    // 방송 정보 수정- 소유자 확인 필수
     @Transactional
     override fun updateBroadcast(
         memberId: String,
@@ -115,27 +112,21 @@ class BroadcastServiceImpl(
         val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
             ?: throw ApiException(ErrorTitle.NotFoundBroadcast)
 
-        // 소유권 검증
         validateOwnership(broadcast, memberId)
-
-        // 엔티티 메서드 호출
         broadcast.updateTitle(request.title)
 
         return BroadcastResponse.from(broadcast)
     }
 
-    // 방송 삭제 - 소유자 확인 필수
     @Transactional
     override fun deleteBroadcast(memberId: String, broadcastId: String) {
         val broadcast = broadcastRepository.findByIdAndDeletedAtIsNull(broadcastId)
             ?: throw ApiException(ErrorTitle.NotFoundBroadcast)
 
         validateOwnership(broadcast, memberId)
-
         broadcastRepository.delete(broadcast)
     }
 
-    // 내부 검증 로직: 방송 주인인지 확인
     private fun validateOwnership(broadcast: Broadcast, memberId: String) {
         if (broadcast.member.id != memberId) {
             throw ApiException(ErrorTitle.Forbidden)
