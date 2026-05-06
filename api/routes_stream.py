@@ -8,27 +8,31 @@ from services.stream_manager import StreamManager
 router = APIRouter(prefix="/stream", tags=["stream-control"])
 
 START_REQUEST_EXAMPLES = {
-    "srt_live": {
-        "summary": "SRT 입력 방송 시작",
+    "chzzk_live": {
+        "summary": "치지직 RTMP 출력 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_001",
-            "stream_key": "live_101_stream_key",
+            "input_stream_key": "live_101_stream_key",
             "avatar_id": "avatar-a",
+            "output_mode": "CHZZK_RTMP",
+            "output_url": "rtmp://live.example/app/live-key",
+            "watch_url": "https://chzzk.naver.com/channel-id",
         },
     },
-    "rtmp_fallback": {
-        "summary": "RTMP 폴백 방송 시작",
+    "hls_debug": {
+        "summary": "로컬 HLS fallback 방송 시작",
         "value": {
             "broadcast_id": "bc_20260227_002",
-            "stream_key": "live_102_stream_key",
+            "input_stream_key": "live_102_stream_key",
             "avatar_id": "avatar-b",
+            "output_mode": "HLS",
         },
     },
     "manual_override": {
         "summary": "디버그용 입력/출력 경로 오버라이드",
         "value": {
             "broadcast_id": "bc_debug_001",
-            "stream_key": "ignored_when_manual_override",
+            "input_stream_key": "debug-stream",
             "input_url": "rtsp://127.0.0.1:8554/live/debug-stream",
             "output_path": "/tmp/hls/bc_debug_001/index.m3u8",
             "avatar_id": "avatar-debug",
@@ -110,26 +114,9 @@ async def stop_stream(
     "/{broadcast_id}/status",
     response_model=StreamStatusResponse,
     summary="방송 워커 상태 조회",
-    description="Spring Boot가 운영 상태 모니터링 용도로 내부 호출합니다.",
-    response_description="현재 방송 워커 상태와 처리 통계를 반환합니다.",
-    responses={
-        status.HTTP_404_NOT_FOUND: {
-            "model": ApiFailureResponse,
-            "description": "해당 broadcast_id 미존재",
-            "content": {
-                "application/json": {
-                    "example": {
-                        "success": False,
-                        "message": "존재하지 않는 방송입니다. broadcast_id=bc_20260227_001",
-                        "errorTitle": "NotFoundBroadcast",
-                        "errorCode": 404,
-                    }
-                }
-            },
-        }
-    },
+    description="broadcast_id 기준으로 현재 워커 상태를 조회합니다.",
 )
-async def stream_status(
+async def get_stream_status(
     broadcast_id: str,
     manager: StreamManager = Depends(get_stream_manager),
 ) -> StreamStatusResponse:
