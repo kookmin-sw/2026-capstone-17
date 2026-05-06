@@ -5,12 +5,17 @@ import com.capstone.focus.api.broadcast.dto.request.CreateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
+import com.capstone.focus.api.platform.service.ChzzkPlatformService
+import com.capstone.focus.common.config.BroadcastOutputProperties
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
 import com.capstone.focus.common.external.fastapi.FastApiStreamClient
 import com.capstone.focus.domain.MemberRepository
 import com.capstone.focus.domain.entity.Broadcast
+import com.capstone.focus.domain.entity.enum.BroadcastOutputMode
+import com.capstone.focus.domain.entity.enum.StreamingPlatform
 import com.capstone.focus.domain.repository.BroadcastRepository
+import org.slf4j.LoggerFactory
 import org.springframework.data.domain.Page
 import org.springframework.data.domain.Pageable
 import org.springframework.data.repository.findByIdOrNull
@@ -33,27 +38,30 @@ class BroadcastServiceImpl(
     private val broadcastRepository: BroadcastRepository,
     private val memberRepository: MemberRepository,
     private val fastApiStreamClient: FastApiStreamClient,
-    private val broadcastAnalysisService: BroadcastAnalysisService
+    private val broadcastAnalysisService: BroadcastAnalysisService,
+    private val chzzkPlatformService: ChzzkPlatformService,
+    private val broadcastOutputProperties: BroadcastOutputProperties
 ) : BroadcastService {
+    private val logger = LoggerFactory.getLogger(BroadcastServiceImpl::class.java)
 
     @Transactional
     override fun createBroadcast(memberId: String, request: CreateBroadcastRequest): BroadcastResponse {
         val member = memberRepository.findByIdOrNull(memberId)
             ?: throw ApiException(ErrorTitle.NotFoundUser)
 
-        val streamKey = UUID.randomUUID().toString()
-
         val broadcast = Broadcast(
             member = member,
-            streamKey = streamKey,
-            title = request.title
+            streamKey = UUID.randomUUID().toString(),
+            title = request.title,
+            platform = StreamingPlatform.CHZZK,
+            outputMode = broadcastOutputProperties.outputMode
         )
 
         val savedBroadcast = broadcastRepository.save(broadcast)
         return BroadcastResponse.from(savedBroadcast)
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = [ApiException::class])
     override fun startBroadcast(
         memberId: String,
         broadcastId: String,
@@ -64,14 +72,80 @@ class BroadcastServiceImpl(
 
         validateOwnership(broadcast, memberId)
 
+        return if (broadcastOutputProperties.outputMode == BroadcastOutputMode.HLS) {
+            startHlsBroadcast(broadcast, request, null)
+        } else {
+            startPlatformBroadcast(memberId, broadcast, request)
+        }
+    }
+
+    private fun startPlatformBroadcast(
+        memberId: String,
+        broadcast: Broadcast,
+        request: StartBroadcastRequest
+    ): BroadcastResponse {
+        return try {
+            when (broadcastOutputProperties.outputMode) {
+                BroadcastOutputMode.CHZZK_RTMP -> startChzzkBroadcast(memberId, broadcast, request)
+                BroadcastOutputMode.HLS -> startHlsBroadcast(broadcast, request, null)
+            }
+        } catch (exception: ApiException) {
+            broadcast.markStartFailure(exception.message)
+            if (!broadcastOutputProperties.fallbackToHls) {
+                throw exception
+            }
+            logger.warn("Platform broadcast start failed. Falling back to HLS. broadcastId={}", broadcast.id, exception)
+            startHlsBroadcast(broadcast, request, exception.message)
+        }
+    }
+
+    private fun startChzzkBroadcast(
+        memberId: String,
+        broadcast: Broadcast,
+        request: StartBroadcastRequest
+    ): BroadcastResponse {
+        val chzzkTarget = chzzkPlatformService.prepareBroadcastTarget(memberId, broadcast)
         val worker = fastApiStreamClient.startBroadcast(
             broadcastId = broadcast.id,
-            streamKey = broadcast.streamKey,
-            avatarId = request.avatarId
+            inputStreamKey = broadcast.streamKey,
+            avatarId = request.avatarId,
+            outputMode = BroadcastOutputMode.CHZZK_RTMP.name,
+            outputUrl = chzzkTarget.outputUrl,
+            watchUrl = chzzkTarget.watchUrl
         )
+        broadcast.startBroadcast(
+            platform = StreamingPlatform.CHZZK,
+            platformChannelId = chzzkTarget.platformChannelId,
+            watchUrl = worker.watchUrl ?: chzzkTarget.watchUrl,
+            outputMode = BroadcastOutputMode.CHZZK_RTMP,
+            hlsUrl = null
+        )
+        return BroadcastResponse.from(broadcast)
+    }
 
-        broadcast.startBroadcast(worker.hlsUrl)
-
+    private fun startHlsBroadcast(
+        broadcast: Broadcast,
+        request: StartBroadcastRequest,
+        fallbackReason: String?
+    ): BroadcastResponse {
+        val worker = fastApiStreamClient.startBroadcast(
+            broadcastId = broadcast.id,
+            inputStreamKey = broadcast.streamKey,
+            avatarId = request.avatarId,
+            outputMode = BroadcastOutputMode.HLS.name,
+            outputUrl = null,
+            watchUrl = null
+        )
+        broadcast.startBroadcast(
+            platform = StreamingPlatform.CHZZK,
+            platformChannelId = null,
+            watchUrl = worker.watchUrl,
+            outputMode = BroadcastOutputMode.HLS,
+            hlsUrl = worker.watchUrl ?: worker.outputUrl
+        )
+        if (fallbackReason != null) {
+            broadcast.markStartFailure("Platform start failed, HLS fallback started: $fallbackReason")
+        }
         return BroadcastResponse.from(broadcast)
     }
 

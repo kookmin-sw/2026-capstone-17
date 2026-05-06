@@ -59,6 +59,11 @@ focus:
       ttl-seconds: 60
   fastapi:
     base-url: ${FASTAPI_BASE_URL:http://172.31.38.193:8000}
+  internal-api:
+    key: ${INTERNAL_API_KEY:}
+  broadcast:
+    output-mode: ${BROADCAST_OUTPUT_MODE:CHZZK_RTMP}
+    fallback-to-hls: ${BROADCAST_FALLBACK_TO_HLS:true}
 
 naver:
   chzzk:
@@ -71,6 +76,12 @@ naver:
     publish-url-template: ${CHZZK_STREAM_PUBLISH_URL_TEMPLATE:rtmp://global-rtmp.lip2.navercorp.com:8080/relay/{streamKey}}
     oauth-state-ttl-seconds: ${CHZZK_OAUTH_STATE_TTL_SECONDS:600}
     token-refresh-buffer-seconds: ${CHZZK_TOKEN_REFRESH_BUFFER_SECONDS:60}
+
+google:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
 
 logging:
   level:

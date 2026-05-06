@@ -1,7 +1,9 @@
 package com.capstone.focus.domain.entity
 
 import com.capstone.focus.domain.base.UlidPrimaryKeyEntity
+import com.capstone.focus.domain.entity.enum.BroadcastOutputMode
 import com.capstone.focus.domain.entity.enum.BroadcastStatus
+import com.capstone.focus.domain.entity.enum.StreamingPlatform
 import jakarta.persistence.AttributeOverride
 import jakarta.persistence.Column
 import jakarta.persistence.Entity
@@ -27,7 +29,9 @@ import java.time.LocalDateTime
 class Broadcast(
     member: Member,
     streamKey: String,
-    title: String? = null
+    title: String? = null,
+    platform: StreamingPlatform = StreamingPlatform.CHZZK,
+    outputMode: BroadcastOutputMode = BroadcastOutputMode.CHZZK_RTMP
 ) : UlidPrimaryKeyEntity() {
 
     @ManyToOne(fetch = FetchType.LAZY)
@@ -48,8 +52,30 @@ class Broadcast(
     var status: BroadcastStatus = BroadcastStatus.READY
         protected set
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "platform", nullable = false, length = 20)
+    var platform: StreamingPlatform = platform
+        protected set
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "output_mode", nullable = false, length = 20)
+    var outputMode: BroadcastOutputMode = outputMode
+        protected set
+
+    @Column(name = "platform_channel_id", length = 100)
+    var platformChannelId: String? = null
+        protected set
+
+    @Column(name = "watch_url", length = 255)
+    var watchUrl: String? = null
+        protected set
+
     @Column(name = "hls_url", length = 255)
     var hlsUrl: String? = null
+        protected set
+
+    @Column(name = "last_start_failure_reason", length = 500)
+    var lastStartFailureReason: String? = null
         protected set
 
     @Column(name = "started_at")
@@ -68,10 +94,26 @@ class Broadcast(
         this.title = newTitle
     }
 
-    fun startBroadcast(hlsUrl: String) {
+    fun startBroadcast(
+        platform: StreamingPlatform,
+        platformChannelId: String?,
+        watchUrl: String?,
+        outputMode: BroadcastOutputMode,
+        hlsUrl: String? = null
+    ) {
         this.status = BroadcastStatus.ON_AIR
         this.startedAt = LocalDateTime.now()
+        this.endedAt = null
+        this.platform = platform
+        this.platformChannelId = platformChannelId
+        this.watchUrl = watchUrl
+        this.outputMode = outputMode
         this.hlsUrl = hlsUrl
+        this.lastStartFailureReason = null
+    }
+
+    fun markStartFailure(reason: String) {
+        this.lastStartFailureReason = reason
     }
 
     fun endBroadcast() {
