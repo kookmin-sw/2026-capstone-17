@@ -16,21 +16,27 @@ class FastApiStreamClient(
 
     fun startBroadcast(
         broadcastId: String,
-        streamKey: String,
-        avatarId: String?
+        inputStreamKey: String,
+        avatarId: String?,
+        outputMode: String,
+        outputUrl: String?,
+        watchUrl: String?
     ): FastApiStreamResponse {
         return try {
             fastApiStreamFeignClient.startStream(
                 FastApiStartStreamRequest(
                     broadcastId = broadcastId,
-                    streamKey = streamKey,
-                    avatarId = avatarId
+                    inputStreamKey = inputStreamKey,
+                    avatarId = avatarId,
+                    outputMode = outputMode,
+                    outputUrl = outputUrl,
+                    watchUrl = watchUrl
                 )
             )
         } catch (exception: IllegalArgumentException) {
             throw ApiException(ErrorTitle.BadRequest, exception.message ?: ErrorTitle.BadRequest.message)
         } catch (exception: Exception) {
-            logger.error("FastAPI start call failed. broadcastId={}, streamKey={}", broadcastId, streamKey, exception)
+            logger.error("FastAPI start call failed. broadcastId={}, inputStreamKey={}", broadcastId, inputStreamKey, exception)
             throw ApiException(ErrorTitle.FeignClientError, "FastAPI 방송 시작 호출에 실패했습니다.")
         }
     }

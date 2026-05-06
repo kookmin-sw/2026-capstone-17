@@ -58,7 +58,30 @@ focus:
       key-template: broadcast:{broadcast_id}:meta:{pts_us}
       ttl-seconds: 60
   fastapi:
-    base-url: http://172.31.38.193:8000
+    base-url: ${FASTAPI_BASE_URL:http://172.31.38.193:8000}
+  internal-api:
+    key: ${INTERNAL_API_KEY:}
+  broadcast:
+    output-mode: ${BROADCAST_OUTPUT_MODE:CHZZK_RTMP}
+    fallback-to-hls: ${BROADCAST_FALLBACK_TO_HLS:true}
+
+naver:
+  chzzk:
+    client-id: ${CHZZK_CLIENT_ID}
+    client-secret: ${CHZZK_CLIENT_SECRET}
+    redirect-uri: ${CHZZK_REDIRECT_URI}
+    authorization-uri: ${CHZZK_AUTHORIZATION_URI:https://chzzk.naver.com/account-interlock}
+    open-api-base-url: ${CHZZK_OPEN_API_BASE_URL:https://openapi.chzzk.naver.com}
+    watch-url-template: ${CHZZK_WATCH_URL_TEMPLATE:https://chzzk.naver.com/{channelId}}
+    publish-url-template: ${CHZZK_STREAM_PUBLISH_URL_TEMPLATE:rtmp://global-rtmp.lip2.navercorp.com:8080/relay/{streamKey}}
+    oauth-state-ttl-seconds: ${CHZZK_OAUTH_STATE_TTL_SECONDS:600}
+    token-refresh-buffer-seconds: ${CHZZK_TOKEN_REFRESH_BUFFER_SECONDS:60}
+
+google:
+  gemini:
+    api-key: ${GEMINI_API_KEY:}
+    model: ${GEMINI_MODEL:gemini-2.5-flash-lite}
+    base-url: ${GEMINI_BASE_URL:https://generativelanguage.googleapis.com}
 
 logging:
   level:

@@ -1,4 +1,4 @@
-name: 🚀 Deploy Focus API to AWS EC2
+name: Deploy Focus API to AWS EC2
 
 on:
   push:
@@ -10,16 +10,16 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: 📥 Checkout code
+      - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: ☕ Set up JDK 25
+      - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
-          distribution: 'zulu'
-          java-version: '25'
+          distribution: zulu
+          java-version: "25"
 
-      - name: 📦 Cache Gradle dependencies
+      - name: Cache Gradle dependencies
         uses: actions/cache@v3
         with:
           path: |
@@ -29,27 +29,27 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      - name: 🔨 Build with Gradle
+      - name: Build with Gradle
         run: |
           chmod +x ./gradlew
           ./gradlew clean bootJar -x test
 
-      - name: 🐳 Build and Push Docker Image
+      - name: Build and Push Docker Image
         run: |
           echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
           docker build -t ${{ secrets.DOCKER_USERNAME }}/focus:latest .
           docker push ${{ secrets.DOCKER_USERNAME }}/focus:latest
 
-      - name: 📂 Copy docker-compose.yaml to EC2
+      - name: Copy deployment files to EC2
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yaml"
+          source: "docker-compose.yaml,db/google-login-migration.sql"
           target: "~/"
 
-      - name: 🚀 Deploy to EC2 via SSH
+      - name: Deploy to EC2 via SSH
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.EC2_HOST }}
@@ -57,21 +57,44 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             echo "${{ secrets.DOCKER_PASSWORD }}" | sudo docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-            
+
             rm -f .env
             echo "FULL_IMAGE_NAME=${{ secrets.DOCKER_USERNAME }}/focus:latest" >> .env
             echo "RDS_HOSTNAME=${{ secrets.RDS_HOSTNAME }}" >> .env
             echo "RDS_USERNAME=${{ secrets.RDS_USERNAME }}" >> .env
             echo "RDS_PASSWORD=${{ secrets.RDS_PASSWORD }}" >> .env
+            echo "AWS_S3_BUCKET=${{ secrets.AWS_S3_BUCKET }}" >> .env
+            echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
             echo "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" >> .env
             echo "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" >> .env
+            echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
+            echo "GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}" >> .env
+            echo "GOOGLE_REDIRECT_URI=${{ secrets.GOOGLE_REDIRECT_URI }}" >> .env
             echo "JWT_SECRET=${{ secrets.JWT_SECRET }}" >> .env
             echo "EC2_HOST=${{ secrets.EC2_HOST }}" >> .env
             echo "FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}" >> .env
+            echo "INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}" >> .env
+            echo "BROADCAST_OUTPUT_MODE=${{ secrets.BROADCAST_OUTPUT_MODE }}" >> .env
+            echo "BROADCAST_FALLBACK_TO_HLS=${{ secrets.BROADCAST_FALLBACK_TO_HLS }}" >> .env
+            echo "CHZZK_CLIENT_ID=${{ secrets.CHZZK_CLIENT_ID }}" >> .env
+            echo "CHZZK_CLIENT_SECRET=${{ secrets.CHZZK_CLIENT_SECRET }}" >> .env
+            echo "CHZZK_REDIRECT_URI=${{ secrets.CHZZK_REDIRECT_URI }}" >> .env
+            echo "CHZZK_STREAM_PUBLISH_URL_TEMPLATE=${{ secrets.CHZZK_STREAM_PUBLISH_URL_TEMPLATE }}" >> .env
+
+            set -a
+            . ./.env
+            set +a
+
+            sudo docker run --rm \
+              -v "$HOME/db:/work/db" \
+              postgres:16-alpine \
+              sh -c 'PGPASSWORD="$RDS_PASSWORD" psql -h "$RDS_HOSTNAME" -U "$RDS_USERNAME" -d focus_avatar -f /work/db/google-login-migration.sql'
 
             sudo docker pull ${{ secrets.DOCKER_USERNAME }}/focus:latest
-            
+
             sudo docker-compose down || true
             sudo docker-compose up -d
-            
+
             sudo docker image prune -f

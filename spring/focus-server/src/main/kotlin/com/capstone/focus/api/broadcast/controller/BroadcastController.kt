@@ -49,7 +49,7 @@ class BroadcastController(
 
     @FocusPostMapping("/{broadcastId}/start")
     @SwaggerApiResponse(responseCode = "200", description = "방송 시작 성공")
-    @Operation(summary = "방송 시작 API", description = "FastAPI 워커를 시작하고 반환된 HLS URL로 방송 상태를 ON_AIR로 변경합니다.")
+    @Operation(summary = "방송 시작 API", description = "FastAPI 워커를 시작하고 설정된 출력 모드에 따라 CHZZK RTMP 또는 HLS fallback으로 방송 상태를 ON_AIR로 변경합니다.")
     fun startBroadcast(
         @AuthenticationPrincipal details: FocusMemberDetails,
         @PathVariable broadcastId: String,

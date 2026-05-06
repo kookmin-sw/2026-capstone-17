@@ -93,4 +93,12 @@ class RedisService(
     fun setValueWithTTL(key: String, value: String, timeout: Long, timeUnit: TimeUnit) {
         redisTemplate.opsForValue().set(key, value, timeout, timeUnit)
     }
+
+    fun getValue(key: String): String? {
+        return redisTemplate.opsForValue().get(key)
+    }
+
+    fun deleteKey(key: String) {
+        redisTemplate.delete(key)
+    }
 }
