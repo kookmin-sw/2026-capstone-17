@@ -1,0 +1,33 @@
+from pydantic import BaseModel, Field
+
+
+class ViewerPeakInsight(BaseModel):
+    peakViewerCount: int | None = Field(default=None, ge=0)
+    occurredAt: str | None = None
+    sceneDescription: str = ""
+
+
+class FaceStatistics(BaseModel):
+    totalReplacedFaceCount: int = Field(default=0, ge=0)
+    maxSimultaneousCrowdCount: int = Field(default=0, ge=0)
+
+
+class ContentRatio(BaseModel):
+    contentType: str
+    percentage: float = Field(ge=0, le=100)
+    durationSec: int = Field(ge=0)
+
+
+class GeminiAnalysisResult(BaseModel):
+    summary: str
+    strengths: list[str] = Field(default_factory=list)
+    weaknesses: list[str] = Field(default_factory=list)
+    actionItems: list[str] = Field(default_factory=list)
+    viewerPeakInsight: ViewerPeakInsight = Field(default_factory=ViewerPeakInsight)
+    faceStatistics: FaceStatistics = Field(default_factory=FaceStatistics)
+    contentRatios: list[ContentRatio] = Field(default_factory=list)
+
+
+class SpringAnalysisCompletePayload(GeminiAnalysisResult):
+    storageUrl: str
+    durationSec: int = Field(ge=0)

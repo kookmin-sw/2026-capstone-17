@@ -17,11 +17,44 @@ class Settings(BaseSettings):
 
     pipeline_fps: int = 30
     max_frame_lag_ms: int = 250
+    ffmpeg_log_level: str = "warning"
+    pipeline_gop_seconds: int = 1
+    pipeline_video_bitrate: str = "2500k"
+    pipeline_maxrate: str = "2500k"
+    pipeline_bufsize: str = "5000k"
+    hls_time: float = 1.0
+    hls_list_size: int = 6
+    hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist"
+    default_output_mode: str = "HLS"
+    input_open_retry_count: int = 5
+    input_open_retry_backoff_ms: int = 1000
+    output_audio_bitrate: str = "128k"
+    output_audio_sample_rate: int = 44100
+    output_audio_channels: int = 2
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
     mediamtx_path_prefix: str = "live"
     hls_output_root: str = "/tmp/hls"
     hls_public_base_url: str = "http://localhost:8000/hls"
+
+    analysis_enabled: bool = False
+    analysis_skip_s3: bool = False
+    analysis_output_filename: str = "analysis.mp4"
+    analysis_ffmpeg_timeout_sec: int = 300
+    analysis_retry_attempts: int = 3
+    analysis_retry_backoff_sec: float = 2.0
+
+    s3_bucket: str | None = None
+    s3_region: str = "ap-northeast-2"
+    s3_public_base_url: str | None = None
+
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-2.5-flash"
+    gemini_file_processing_timeout_sec: int = 600
+
+    spring_internal_base_url: str | None = None
+    internal_api_key: str | None = None
+    spring_internal_timeout_sec: float = 10.0
 
     model_config = SettingsConfigDict(
         env_file=".env",
