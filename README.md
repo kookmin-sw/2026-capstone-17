@@ -37,28 +37,33 @@ FOCUS는 라이브 스트리밍 환경에서 발생할 수 있는 초상권 침�
 - Gemini API
 
 ## Repository Structure
-.
-├── android/               # Android app
-├── fast-api-server/       # AI / analysis server
-├── spring/focus-server/   # Spring backend
-├── index.html             # GitHub Pages intro page
-└── ...
-Team
-이지상 — 팀장, AOS 개발
-이동언 — iOS 개발
-이제준 — FastAPI
-민승호 — Spring
-신윤솔 — OpenCV
-Project Goal
-FOCUS는 단순한 얼굴 모자이크 앱이 아니라,
+
+- `android/` : Android app
+- `fast-api-server/` : AI / analysis server
+- `spring/focus-server/` : Spring backend
+- `index.html` : GitHub Pages intro page
+
+## Team
+
+- 이지상 — 팀장, AOS 개발
+- 이동언 — iOS 개발
+- 이제준 — FastAPI
+- 민승호 — Spring
+- 신윤솔 — OpenCV
+
+## Project Goal
+
+FOCUS는 단순한 얼굴 모자이크 앱이 아니라,  
 스트리머가 더 안전하게 방송하고, 방송 이후에는 더 나은 콘텐츠를 준비할 수 있도록 돕는 것을 목표로 합니다.
 
-GitHub Pages
-프로젝트 소개 페이지:
-FOCUS Intro Page
+## GitHub Pages
 
-Future Work
-SOOPLIVE 연동 확장
-시청자 수 기반 방송 피크 분석
-모션캡처 기반 자동 원본 클립 저장
-방송 회고 리포트 고도화
+프로젝트 소개 페이지:  
+[FOCUS Intro Page](여기에-깃허브-페이지-링크-넣기)
+
+## Future Work
+
+- SOOPLIVE 연동 확장
+- 시청자 수 기반 방송 피크 분석
+- 모션캡처 기반 자동 원본 클립 저장
+- 방송 회고 리포트 고도화
