@@ -59,7 +59,7 @@ FOCUS는 단순한 얼굴 모자이크 앱이 아니라,
 ## GitHub Pages
 
 프로젝트 소개 페이지:  
-[FOCUS Intro Page](여기에-깃허브-페이지-링크-넣기)
+[FOCUS Intro Page](https://kookmin-sw.github.io/2026-capstone-17/)
 
 ## Future Work
 
