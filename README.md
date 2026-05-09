@@ -1,77 +1,64 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/Lvs6kcL8)
-# Welcome to GitHub
+# FOCUS
 
-캡스톤 팀 생성을 축하합니다.
+실시간 스트리밍 중 스트리머와 주변 인물을 구분하여, 비대상 인물의 얼굴을 자동으로 보호하고  
+방송 종료 후에는 AI 기반 회고 리포트까지 제공하는 스트리밍 지원 서비스입니다.
 
-## 팀소개 및 페이지를 꾸며주세요.
+## Overview
 
-- 프로젝트 소개
-  - 프로젝트 설치방법 및 데모, 사용방법, 프리뷰등을 readme.md에 작성.
-  - Api나 사용방법등 내용이 많을경우 wiki에 꾸미고 링크 추가.
+FOCUS는 라이브 스트리밍 환경에서 발생할 수 있는 초상권 침해 문제를 줄이기 위해 기획된 프로젝트입니다.  
+방송 중에는 실시간 얼굴 인식과 선택적 보호 처리를 제공하고,  
+방송 종료 후에는 AI 분석을 통해 방송 요약, 하이라이트, 개선 포인트를 제공합니다.
 
-- 팀페이지 꾸미기
-  - 프로젝트 소개 및 팀원 소개
-  - index.md 예시보고 수정.
+## Key Features
 
-- GitHub Pages 리파지토리 Settings > Options > GitHub Pages 
-  - Source를 marster branch
-  - Theme Chooser에서 태마선택
-  - 수정후 팀페이지 확인하여 점검.
+- 실시간 Owner / Other 구분
+- 비대상 인물 얼굴 보호 처리
+- 얼굴 트래킹 및 재진입 추적
+- 방송 종료 후 AI 회고 리포트
+- 날짜별 방송 회고록 조회
+- 원본 클립 저장 기능
 
-**팀페이지 주소** -> https://kookmin-sw.github.io/ '{{자신의 리파지토리 아이디}}'
+## Tech Stack
 
-**예시)** 2023년 0조  https://kookmin-sw.github.io/capstone-2023-00/
+### Mobile
+- iOS (Swift)
+- Android (Kotlin)
 
+### Backend
+- Spring Boot
+- FastAPI
+- Redis
 
-## 내용에 아래와 같은 내용들을 추가하세요.
+### Vision / AI
+- OpenCV
+- YuNet
+- ArcFace
+- 3DMM
+- Gemini API
 
-### 1. 프로잭트 소개
+## Repository Structure
+.
+├── android/               # Android app
+├── fast-api-server/       # AI / analysis server
+├── spring/focus-server/   # Spring backend
+├── index.html             # GitHub Pages intro page
+└── ...
+Team
+이지상 — 팀장, AOS 개발
+이동언 — iOS 개발
+이제준 — FastAPI
+민승호 — Spring
+신윤솔 — OpenCV
+Project Goal
+FOCUS는 단순한 얼굴 모자이크 앱이 아니라,
+스트리머가 더 안전하게 방송하고, 방송 이후에는 더 나은 콘텐츠를 준비할 수 있도록 돕는 것을 목표로 합니다.
 
-프로젝트
+GitHub Pages
+프로젝트 소개 페이지:
+FOCUS Intro Page
 
-### 2. 소개 영상
-
-프로젝트 소개하는 영상을 추가하세요
-
-### 3. 팀 소개
-
-팀을 소개하세요.
-
-팀원정보 및 담당이나 사진 및 SNS를 이용하여 소개하세요.
-
-### 4. 사용법
-
-소스코드제출시 설치법이나 사용법을 작성하세요.
-
-### 5. 기타
-
-추가적인 내용은 자유롭게 작성하세요.
-
-
-## Markdown을 사용하여 내용꾸미기
-
-Markdown은 작문을 스타일링하기위한 가볍고 사용하기 쉬운 구문입니다. 여기에는 다음을위한 규칙이 포함됩니다.
-
-```markdown
-Syntax highlighted code block
-
-# Header 1
-## Header 2
-### Header 3
-
-- Bulleted
-- List
-
-1. Numbered
-2. List
-
-**Bold** and _Italic_ and `Code` text
-
-[Link](url) and ![Image](src)
-```
-
-자세한 내용은 [GitHub Flavored Markdown](https://guides.github.com/features/mastering-markdown/).
-
-### Support or Contact
-
-readme 파일 생성에 추가적인 도움이 필요하면 [도움말](https://help.github.com/articles/about-readmes/) 이나 [contact support](https://github.com/contact) 을 이용하세요.
+Future Work
+SOOPLIVE 연동 확장
+시청자 수 기반 방송 피크 분석
+모션캡처 기반 자동 원본 클립 저장
+방송 회고 리포트 고도화
