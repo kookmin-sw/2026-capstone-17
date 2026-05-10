@@ -49,12 +49,23 @@ class MosaicProgramTest {
     }
 
     @Test
-    fun `blockSize 픽셀 값이 뷰 크기 기준으로 정규화된다`() {
-        val normalizedX = MosaicProgram.normalizeBlockSizeX(blockPixels = 16f, viewWidth = 1920)
-        val normalizedY = MosaicProgram.normalizeBlockSizeY(blockPixels = 16f, viewHeight = 1080)
+    fun `빈 목록을 전달하면 faceCount가 0이 되고 이전 데이터가 초기화된다`() {
+        val program = MosaicProgram()
+        program.updateUniformData(
+            listOf(EllipseParams(0.1f, 0.2f, 0.3f, 0.4f, 0.5f))
+        )
 
-        assertEquals(16f / 1920f, normalizedX, EPSILON)
-        assertEquals(16f / 1080f, normalizedY, EPSILON)
+        val faceCount = program.updateUniformData(emptyList())
+        val centers = program.getUniformCentersForTest()
+        val radii = program.getUniformRadiiForTest()
+        val angles = program.getUniformAnglesForTest()
+
+        assertEquals(0, faceCount)
+        assertEquals(0f, centers[0], EPSILON)
+        assertEquals(0f, centers[1], EPSILON)
+        assertEquals(0f, radii[0], EPSILON)
+        assertEquals(0f, radii[1], EPSILON)
+        assertEquals(0f, angles[0], EPSILON)
     }
 
     @Test

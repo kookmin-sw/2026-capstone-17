@@ -93,6 +93,7 @@ class RealTimeRecorder(
         audioTrackSource: AudioTrackSource? = null,
         audioStartPositionUs: Long = 0L,
         onInputSurfaceReady: (Surface) -> Unit,
+        muxerFactory: VideoMuxerFactory = this.muxerFactory,
     ) {
         check(!isRecording) { "이미 녹화 중입니다" }
 
@@ -447,15 +448,13 @@ class RealTimeRecorder(
             frameRate: Int,
             iFrameIntervalSec: Int,
         ): VideoEncoder {
-            val format = MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
-                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
-                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
-                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
-                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSec)
-            }
-
-            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            val codec = createConfiguredCodec(
+                width = width,
+                height = height,
+                bitRate = bitRate,
+                frameRate = frameRate,
+                iFrameIntervalSec = iFrameIntervalSec,
+            )
             val inputSurface = codec.createInputSurface()
             codec.start()
 
@@ -491,6 +490,106 @@ class RealTimeRecorder(
                             runCatching { inputSurface.release() }
                         }
                     }
+                }
+            }
+        }
+
+        private fun createConfiguredCodec(
+            width: Int,
+            height: Int,
+            bitRate: Int,
+            frameRate: Int,
+            iFrameIntervalSec: Int,
+        ): MediaCodec {
+            val configuredWithVbr = tryConfigureCodec(
+                width = width,
+                height = height,
+                bitRate = bitRate,
+                frameRate = frameRate,
+                iFrameIntervalSec = iFrameIntervalSec,
+                allowVbr = true,
+            )
+            if (configuredWithVbr != null) {
+                return configuredWithVbr
+            }
+            return tryConfigureCodec(
+                width = width,
+                height = height,
+                bitRate = bitRate,
+                frameRate = frameRate,
+                iFrameIntervalSec = iFrameIntervalSec,
+                allowVbr = false,
+            ) ?: error("codec configure retry returned null")
+        }
+
+        private fun tryConfigureCodec(
+            width: Int,
+            height: Int,
+            bitRate: Int,
+            frameRate: Int,
+            iFrameIntervalSec: Int,
+            allowVbr: Boolean,
+        ): MediaCodec? {
+            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_VIDEO_AVC)
+            val useVbr = allowVbr && supportsBitrateMode(
+                codec = codec,
+                mimeType = MediaFormat.MIMETYPE_VIDEO_AVC,
+                bitrateMode = MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR,
+            )
+            val format = createVideoFormat(
+                width = width,
+                height = height,
+                bitRate = bitRate,
+                frameRate = frameRate,
+                iFrameIntervalSec = iFrameIntervalSec,
+                useVbr = useVbr,
+            )
+
+            return try {
+                codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+                codec
+            } catch (error: Exception) {
+                codec.release()
+                if (useVbr) {
+                    Log.w("RealTimeRecorder", "VBR configure 실패, 기본 bitrate mode로 재시도합니다.", error)
+                    null
+                } else {
+                    throw error
+                }
+            }
+        }
+
+        private fun supportsBitrateMode(
+            codec: MediaCodec,
+            mimeType: String,
+            bitrateMode: Int,
+        ): Boolean {
+            return runCatching {
+                codec.codecInfo
+                    .getCapabilitiesForType(mimeType)
+                    .encoderCapabilities
+                    ?.isBitrateModeSupported(bitrateMode) == true
+            }.getOrDefault(false)
+        }
+
+        private fun createVideoFormat(
+            width: Int,
+            height: Int,
+            bitRate: Int,
+            frameRate: Int,
+            iFrameIntervalSec: Int,
+            useVbr: Boolean,
+        ): MediaFormat {
+            return MediaFormat.createVideoFormat(MediaFormat.MIMETYPE_VIDEO_AVC, width, height).apply {
+                setInteger(MediaFormat.KEY_COLOR_FORMAT, MediaCodecInfo.CodecCapabilities.COLOR_FormatSurface)
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                setInteger(MediaFormat.KEY_FRAME_RATE, frameRate)
+                setInteger(MediaFormat.KEY_I_FRAME_INTERVAL, iFrameIntervalSec)
+                if (useVbr) {
+                    setInteger(
+                        MediaFormat.KEY_BITRATE_MODE,
+                        MediaCodecInfo.EncoderCapabilities.BITRATE_MODE_VBR,
+                    )
                 }
             }
         }

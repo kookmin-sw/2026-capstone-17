@@ -3,6 +3,7 @@ package com.kmu_focus.focusandroid.feature.camera.domain.usecase
 import com.kmu_focus.focusandroid.feature.camera.domain.entity.OwnerRegistrationResult
 import com.kmu_focus.focusandroid.feature.camera.domain.repository.CameraAnalysisRepository
 import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import java.nio.ByteBuffer
 import javax.inject.Inject
 
@@ -41,6 +42,20 @@ class CameraAnalysisUseCase @Inject constructor(
 
     fun startMetadataSession() {
         cameraAnalysisRepository.startMetadataSession()
+    }
+
+    fun startMetadataSession(repository: MetadataRepository) {
+        cameraAnalysisRepository.startMetadataSession(repository)
+    }
+
+    fun startMetadataSession(
+        repository: MetadataRepository,
+        sessionId: String,
+    ) {
+        cameraAnalysisRepository.startMetadataSession(
+            repository = repository,
+            sessionId = sessionId,
+        )
     }
 
     suspend fun closeMetadataSession() {

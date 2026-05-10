@@ -145,10 +145,32 @@ class CameraAnalysisRepositoryImpl @Inject constructor(
     }
 
     override fun startMetadataSession() {
+        beginMetadataSession(repository = null, sessionId = null)
+    }
+
+    override fun startMetadataSession(repository: MetadataRepository) {
+        beginMetadataSession(repository = repository, sessionId = null)
+    }
+
+    override fun startMetadataSession(
+        repository: MetadataRepository,
+        sessionId: String,
+    ) {
+        beginMetadataSession(
+            repository = repository,
+            sessionId = sessionId,
+        )
+    }
+
+    private fun beginMetadataSession(
+        repository: MetadataRepository?,
+        sessionId: String?,
+    ) {
         synchronized(metadataStateLock) {
             metadataEnabled = true
             metadataFrameIndex = 0
-            metadataSessionId = null
+            metadataSessionId = sessionId
+            metadataRepository = repository
         }
     }
 

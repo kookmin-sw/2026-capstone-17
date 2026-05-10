@@ -1,6 +1,5 @@
 package com.kmu_focus.focusandroid.presentation.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -12,33 +11,55 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Purple80,
-    secondary = PurpleGrey80,
-    tertiary = Pink80
+    primary = FocusBlueDark,
+    onPrimary = FocusInk,
+    primaryContainer = FocusBlueContainerDark,
+    onPrimaryContainer = FocusBlueDark,
+    secondary = FocusTealDark,
+    onSecondary = FocusInk,
+    secondaryContainer = FocusTealContainerDark,
+    onSecondaryContainer = FocusTealDark,
+    tertiary = FocusAmberDark,
+    onTertiary = FocusInk,
+    tertiaryContainer = FocusAmberContainerDark,
+    onTertiaryContainer = FocusAmberDark,
+    background = FocusCanvasDark,
+    onBackground = FocusInkDark,
+    surface = FocusSurfaceDark,
+    onSurface = FocusInkDark,
+    surfaceVariant = FocusSurfaceVariantDark,
+    onSurfaceVariant = FocusMutedDark,
+    outline = FocusOutlineDark,
 )
 
 private val LightColorScheme = lightColorScheme(
-    primary = Purple40,
-    secondary = PurpleGrey40,
-    tertiary = Pink40
-
-    /* Other default colors to override
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onTertiary = Color.White,
-    onBackground = Color(0xFF1C1B1F),
-    onSurface = Color(0xFF1C1B1F),
-    */
+    primary = FocusBlue,
+    onPrimary = FocusSurface,
+    primaryContainer = FocusBlueContainer,
+    onPrimaryContainer = FocusBlueContainerDark,
+    secondary = FocusTeal,
+    onSecondary = FocusSurface,
+    secondaryContainer = FocusTealContainer,
+    onSecondaryContainer = FocusTealContainerDark,
+    tertiary = FocusAmber,
+    onTertiary = FocusSurface,
+    tertiaryContainer = FocusAmberContainer,
+    onTertiaryContainer = FocusAmberContainerDark,
+    background = FocusCanvas,
+    onBackground = FocusInk,
+    surface = FocusSurface,
+    onSurface = FocusInk,
+    surfaceVariant = FocusSurfaceVariant,
+    onSurfaceVariant = FocusMuted,
+    outline = FocusOutline,
 )
 
 @Composable
 fun FocusAndroidTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
-    dynamicColor: Boolean = true,
-    content: @Composable () -> Unit
+    dynamicColor: Boolean = false,
+    content: @Composable () -> Unit,
 ) {
     val colorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
@@ -53,6 +74,7 @@ fun FocusAndroidTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography,
-        content = content
+        shapes = FocusShapes,
+        content = content,
     )
 }

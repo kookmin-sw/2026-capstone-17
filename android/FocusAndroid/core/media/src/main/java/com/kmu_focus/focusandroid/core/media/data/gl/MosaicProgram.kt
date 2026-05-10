@@ -7,59 +7,105 @@ import java.nio.ByteOrder
 
 class MosaicProgram {
 
-    private var programId = 0
+    private var copyProgramId = 0
+    private var kawaseProgramId = 0
+    private var compositeProgramId = 0
     private var vaoId = 0
     private var vboId = 0
 
-    private var textureLoc = 0
-    private var faceCountLoc = 0
-    private var ellipseCenterLoc = 0
-    private var ellipseRadiusLoc = 0
-    private var ellipseAngleLoc = 0
-    private var blockSizeLoc = 0
+    private var copyTextureLoc = 0
+    private var copySourceRectLoc = 0
+    private var kawaseTextureLoc = 0
+    private var kawaseTexelSizeLoc = 0
+    private var kawaseOffsetLoc = 0
+    private var compositeTextureLoc = 0
+    private var compositeFaceCountLoc = 0
+    private var compositeEllipseCenterLoc = 0
+    private var compositeEllipseRadiusLoc = 0
+    private var compositeEllipseAngleLoc = 0
+    private var compositeRegionRectLoc = 0
     private val uniformCenters = FloatArray(MAX_FACES * 2)
     private val uniformRadii = FloatArray(MAX_FACES * 2)
     private val uniformAngles = FloatArray(MAX_FACES)
     private var previousFaceCount = 0
 
     fun init() {
-        programId = createProgram(VERTEX_SHADER, FRAGMENT_SHADER)
-        textureLoc = GLES30.glGetUniformLocation(programId, "uTexture")
-        faceCountLoc = GLES30.glGetUniformLocation(programId, "uFaceCount")
-        ellipseCenterLoc = GLES30.glGetUniformLocation(programId, "uEllipseCenter[0]")
-        ellipseRadiusLoc = GLES30.glGetUniformLocation(programId, "uEllipseRadius[0]")
-        ellipseAngleLoc = GLES30.glGetUniformLocation(programId, "uEllipseAngle[0]")
-        blockSizeLoc = GLES30.glGetUniformLocation(programId, "uBlockSize")
+        copyProgramId = createProgram(VERTEX_SHADER, COPY_FRAGMENT_SHADER)
+        copyTextureLoc = GLES30.glGetUniformLocation(copyProgramId, "uTexture")
+        copySourceRectLoc = GLES30.glGetUniformLocation(copyProgramId, "uSourceRect")
+
+        kawaseProgramId = createProgram(VERTEX_SHADER, KAWASE_FRAGMENT_SHADER)
+        kawaseTextureLoc = GLES30.glGetUniformLocation(kawaseProgramId, "uTexture")
+        kawaseTexelSizeLoc = GLES30.glGetUniformLocation(kawaseProgramId, "uTexelSize")
+        kawaseOffsetLoc = GLES30.glGetUniformLocation(kawaseProgramId, "uOffsetPx")
+
+        compositeProgramId = createProgram(VERTEX_SHADER, COMPOSITE_FRAGMENT_SHADER)
+        compositeTextureLoc = GLES30.glGetUniformLocation(compositeProgramId, "uTexture")
+        compositeFaceCountLoc = GLES30.glGetUniformLocation(compositeProgramId, "uFaceCount")
+        compositeEllipseCenterLoc = GLES30.glGetUniformLocation(compositeProgramId, "uEllipseCenter[0]")
+        compositeEllipseRadiusLoc = GLES30.glGetUniformLocation(compositeProgramId, "uEllipseRadius[0]")
+        compositeEllipseAngleLoc = GLES30.glGetUniformLocation(compositeProgramId, "uEllipseAngle[0]")
+        compositeRegionRectLoc = GLES30.glGetUniformLocation(compositeProgramId, "uRegionRect")
         setupVao()
     }
 
-    fun draw(
+    fun copyTextureRegion(
         inputTexId: Int,
-        ellipses: List<EllipseParams>,
-        blockSize: Float,
-        viewWidth: Int,
-        viewHeight: Int
+        sourceRect: UvRect = UvRect.FULL,
     ) {
-        if (programId == 0 || inputTexId == 0) return
+        if (copyProgramId == 0 || inputTexId == 0) return
 
-        val faceCount = updateUniformData(ellipses)
-        val blockSizeX = normalizeBlockSizeX(blockSize, viewWidth)
-        val blockSizeY = normalizeBlockSizeY(blockSize, viewHeight)
-
-        GLES30.glUseProgram(programId)
+        GLES30.glUseProgram(copyProgramId)
         GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
         GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, inputTexId)
-        GLES30.glUniform1i(textureLoc, 0)
-        GLES30.glUniform1i(faceCountLoc, faceCount)
-        GLES30.glUniform2fv(ellipseCenterLoc, MAX_FACES, uniformCenters, 0)
-        GLES30.glUniform2fv(ellipseRadiusLoc, MAX_FACES, uniformRadii, 0)
-        GLES30.glUniform1fv(ellipseAngleLoc, MAX_FACES, uniformAngles, 0)
-        GLES30.glUniform2f(blockSizeLoc, blockSizeX, blockSizeY)
+        GLES30.glUniform1i(copyTextureLoc, 0)
+        GLES30.glUniform4f(copySourceRectLoc, sourceRect.minX, sourceRect.minY, sourceRect.maxX, sourceRect.maxY)
+        drawQuad()
+    }
 
-        GLES30.glBindVertexArray(vaoId)
-        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
-        GLES30.glBindVertexArray(0)
-        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+    fun applyKawaseBlur(
+        inputTexId: Int,
+        textureWidth: Int,
+        textureHeight: Int,
+        offsetPx: Float,
+    ) {
+        if (kawaseProgramId == 0 || inputTexId == 0 || textureWidth <= 0 || textureHeight <= 0) return
+
+        GLES30.glUseProgram(kawaseProgramId)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, inputTexId)
+        GLES30.glUniform1i(kawaseTextureLoc, 0)
+        GLES30.glUniform2f(kawaseTexelSizeLoc, 1f / textureWidth.toFloat(), 1f / textureHeight.toFloat())
+        GLES30.glUniform1f(kawaseOffsetLoc, offsetPx)
+        drawQuad()
+    }
+
+    fun compositeBlurredRegion(
+        inputTexId: Int,
+        ellipses: List<EllipseParams>,
+        regionRect: UvRect,
+    ) {
+        if (compositeProgramId == 0 || inputTexId == 0) return
+
+        val faceCount = updateUniformData(ellipses)
+        if (faceCount == 0) return
+
+        GLES30.glUseProgram(compositeProgramId)
+        GLES30.glActiveTexture(GLES30.GL_TEXTURE0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, inputTexId)
+        GLES30.glUniform1i(compositeTextureLoc, 0)
+        GLES30.glUniform1i(compositeFaceCountLoc, faceCount)
+        GLES30.glUniform2fv(compositeEllipseCenterLoc, MAX_FACES, uniformCenters, 0)
+        GLES30.glUniform2fv(compositeEllipseRadiusLoc, MAX_FACES, uniformRadii, 0)
+        GLES30.glUniform1fv(compositeEllipseAngleLoc, MAX_FACES, uniformAngles, 0)
+        GLES30.glUniform4f(
+            compositeRegionRectLoc,
+            regionRect.minX,
+            regionRect.minY,
+            regionRect.maxX,
+            regionRect.maxY,
+        )
+        drawQuad()
     }
 
     @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
@@ -99,10 +145,12 @@ class MosaicProgram {
     fun getUniformAnglesForTest(): FloatArray = uniformAngles
 
     fun release() {
-        if (programId != 0) {
-            GLES30.glDeleteProgram(programId)
-            programId = 0
-        }
+        deleteProgramIfNeeded(copyProgramId)
+        deleteProgramIfNeeded(kawaseProgramId)
+        deleteProgramIfNeeded(compositeProgramId)
+        copyProgramId = 0
+        kawaseProgramId = 0
+        compositeProgramId = 0
         if (vaoId != 0) {
             GLES30.glDeleteVertexArrays(1, intArrayOf(vaoId), 0)
             vaoId = 0
@@ -144,6 +192,19 @@ class MosaicProgram {
 
         GLES30.glBindVertexArray(0)
         GLES30.glBindBuffer(GLES30.GL_ARRAY_BUFFER, 0)
+    }
+
+    private fun drawQuad() {
+        GLES30.glBindVertexArray(vaoId)
+        GLES30.glDrawArrays(GLES30.GL_TRIANGLE_STRIP, 0, 4)
+        GLES30.glBindVertexArray(0)
+        GLES30.glBindTexture(GLES30.GL_TEXTURE_2D, 0)
+    }
+
+    private fun deleteProgramIfNeeded(programId: Int) {
+        if (programId != 0) {
+            GLES30.glDeleteProgram(programId)
+        }
     }
 
     private fun createProgram(vertexSrc: String, fragmentSrc: String): Int {
@@ -199,23 +260,60 @@ class MosaicProgram {
             }
         """
 
-        private const val FRAGMENT_SHADER = """
+        private const val COPY_FRAGMENT_SHADER = """
+            #version 300 es
+            precision mediump float;
+
+            in vec2 vTexCoord;
+            uniform sampler2D uTexture;
+            uniform vec4 uSourceRect;
+            out vec4 fragColor;
+
+            void main() {
+                vec2 uv = vec2(
+                    mix(uSourceRect.x, uSourceRect.z, vTexCoord.x),
+                    mix(uSourceRect.y, uSourceRect.w, vTexCoord.y)
+                );
+                fragColor = texture(uTexture, uv);
+            }
+        """
+
+        private const val KAWASE_FRAGMENT_SHADER = """
+            #version 300 es
+            precision mediump float;
+
+            in vec2 vTexCoord;
+            uniform sampler2D uTexture;
+            uniform vec2 uTexelSize;
+            uniform float uOffsetPx;
+            out vec4 fragColor;
+
+            void main() {
+                vec2 offset = uTexelSize * uOffsetPx;
+                vec4 color = texture(uTexture, vTexCoord) * 4.0;
+                color += texture(uTexture, clamp(vTexCoord + vec2(-offset.x, -offset.y), vec2(0.0), vec2(1.0)));
+                color += texture(uTexture, clamp(vTexCoord + vec2(offset.x, -offset.y), vec2(0.0), vec2(1.0)));
+                color += texture(uTexture, clamp(vTexCoord + vec2(-offset.x, offset.y), vec2(0.0), vec2(1.0)));
+                color += texture(uTexture, clamp(vTexCoord + vec2(offset.x, offset.y), vec2(0.0), vec2(1.0)));
+                fragColor = color / 8.0;
+            }
+        """
+
+        private const val COMPOSITE_FRAGMENT_SHADER = """
             #version 300 es
             precision mediump float;
             #define MAX_FACES 8
 
             in vec2 vTexCoord;
             uniform sampler2D uTexture;
-
             uniform int uFaceCount;
             uniform vec2 uEllipseCenter[MAX_FACES];
             uniform vec2 uEllipseRadius[MAX_FACES];
             uniform float uEllipseAngle[MAX_FACES];
-            uniform vec2 uBlockSize;
-
+            uniform vec4 uRegionRect;
             out vec4 fragColor;
 
-            bool isInsideAnyEllipse(vec2 uv) {
+            bool isMasked(vec2 uv) {
                 for (int i = 0; i < MAX_FACES; i++) {
                     if (i >= uFaceCount) break;
                     vec2 d = uv - uEllipseCenter[i];
@@ -230,13 +328,15 @@ class MosaicProgram {
             }
 
             void main() {
-                if (isInsideAnyEllipse(vTexCoord)) {
-                    vec2 safeBlockSize = max(uBlockSize, vec2(0.000001));
-                    vec2 block = floor(vTexCoord / safeBlockSize) * safeBlockSize + safeBlockSize * 0.5;
-                    fragColor = texture(uTexture, block);
-                } else {
-                    fragColor = texture(uTexture, vTexCoord);
+                if (!isMasked(vTexCoord)) {
+                    discard;
                 }
+                vec2 regionSize = max(uRegionRect.zw - uRegionRect.xy, vec2(0.000001));
+                vec2 localUv = (vTexCoord - uRegionRect.xy) / regionSize;
+                if (localUv.x < 0.0 || localUv.x > 1.0 || localUv.y < 0.0 || localUv.y > 1.0) {
+                    discard;
+                }
+                fragColor = texture(uTexture, localUv);
             }
         """
 
@@ -246,17 +346,5 @@ class MosaicProgram {
             -1f, 1f, 0f, 1f,
             1f, 1f, 1f, 1f
         )
-
-        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-        fun normalizeBlockSizeX(blockPixels: Float, viewWidth: Int): Float {
-            if (viewWidth <= 0) return 1f
-            return blockPixels.coerceAtLeast(1f) / viewWidth.toFloat()
-        }
-
-        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-        fun normalizeBlockSizeY(blockPixels: Float, viewHeight: Int): Float {
-            if (viewHeight <= 0) return 1f
-            return blockPixels.coerceAtLeast(1f) / viewHeight.toFloat()
-        }
     }
 }

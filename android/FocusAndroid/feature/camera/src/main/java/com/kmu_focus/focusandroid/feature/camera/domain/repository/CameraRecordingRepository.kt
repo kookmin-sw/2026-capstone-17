@@ -9,5 +9,12 @@ interface CameraRecordingRepository {
         onSurfaceReady: (encoderSurface: Any, width: Int, height: Int) -> Unit,
     ): File
 
+    fun startBroadcastRecording(
+        width: Int,
+        height: Int,
+        muxerFactory: Any,
+        onSurfaceReady: (encoderSurface: Any, width: Int, height: Int) -> Unit,
+    )
+
     fun stopRecording()
 }

@@ -44,13 +44,13 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = 100_000,
         )
 
-        assertTrue(config.bitrate >= 1_000_000)
+        assertTrue(config.bitrate >= 2_000_000)
     }
 
     // ── 원본 비트레이트가 없는 경우: 해상도 기반 추정 ──
 
     @Test
-    fun `720p 이하는 4Mbps를 반환한다`() {
+    fun `720p 이하는 6Mbps를 반환한다`() {
         val config = useCase(
             width = 1280,
             height = 720,
@@ -58,11 +58,11 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertEquals(4_000_000, config.bitrate)
+        assertEquals(6_000_000, config.bitrate)
     }
 
     @Test
-    fun `1080p는 8Mbps를 반환한다`() {
+    fun `1080p는 12Mbps를 반환한다`() {
         val config = useCase(
             width = 1920,
             height = 1080,
@@ -70,11 +70,11 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertEquals(8_000_000, config.bitrate)
+        assertEquals(12_000_000, config.bitrate)
     }
 
     @Test
-    fun `4K는 15Mbps를 반환한다`() {
+    fun `4K는 20Mbps를 반환한다`() {
         val config = useCase(
             width = 3840,
             height = 2160,
@@ -82,7 +82,7 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertEquals(15_000_000, config.bitrate)
+        assertEquals(20_000_000, config.bitrate)
     }
 
     @Test
@@ -94,13 +94,13 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertTrue(config.bitrate >= 1_000_000)
+        assertTrue(config.bitrate >= 2_000_000)
     }
 
     // ── I-Frame 간격 ──
 
     @Test
-    fun `I프레임 간격은 2초를 반환한다`() {
+    fun `I프레임 간격은 1초를 반환한다`() {
         val config = useCase(
             width = 1920,
             height = 1080,
@@ -108,7 +108,7 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertEquals(2, config.iFrameIntervalSec)
+        assertEquals(1, config.iFrameIntervalSec)
     }
 
     // ── 프레임레이트 전달 ──
@@ -138,13 +138,13 @@ class CalculateEncoderBitrateUseCaseTest {
 
         assertEquals(6_000_000, config.bitrate)
         assertEquals(30, config.frameRate)
-        assertEquals(2, config.iFrameIntervalSec)
+        assertEquals(1, config.iFrameIntervalSec)
     }
 
     // ── 경계값 테스트 ──
 
     @Test
-    fun `720p와 1080p 사이 해상도는 비트레이트가 4~8Mbps 범위에 있다`() {
+    fun `720p와 1080p 사이 해상도는 비트레이트가 6~12Mbps 범위에 있다`() {
         val config = useCase(
             width = 1440,
             height = 900,
@@ -152,11 +152,11 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertTrue(config.bitrate in 4_000_000..8_000_000)
+        assertTrue(config.bitrate in 6_000_000..12_000_000)
     }
 
     @Test
-    fun `1080p와 4K 사이 해상도는 비트레이트가 8~15Mbps 범위에 있다`() {
+    fun `1080p와 4K 사이 해상도는 비트레이트가 12~20Mbps 범위에 있다`() {
         val config = useCase(
             width = 2560,
             height = 1440,
@@ -164,6 +164,6 @@ class CalculateEncoderBitrateUseCaseTest {
             sourceBitrate = null,
         )
 
-        assertTrue(config.bitrate in 8_000_000..15_000_000)
+        assertTrue(config.bitrate in 12_000_000..20_000_000)
     }
 }

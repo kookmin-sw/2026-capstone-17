@@ -61,14 +61,14 @@ class CalculateEncoderBitrateUseCase @Inject constructor() {
     }
 
     private companion object {
-        private const val MIN_BITRATE = 1_000_000
+        private const val MIN_BITRATE = 2_000_000
         private const val MAX_BITRATE = 20_000_000
         private const val MIN_FRAME_RATE = 1
-        private const val DEFAULT_I_FRAME_INTERVAL_SEC = 2
+        private const val DEFAULT_I_FRAME_INTERVAL_SEC = 1
 
-        private const val BITRATE_720P = 4_000_000
-        private const val BITRATE_1080P = 8_000_000
-        private const val BITRATE_4K = 15_000_000
+        private const val BITRATE_720P = 6_000_000
+        private const val BITRATE_1080P = 12_000_000
+        private const val BITRATE_4K = 20_000_000
 
         private const val PIXELS_720P = 1280L * 720L
         private const val PIXELS_1080P = 1920L * 1080L

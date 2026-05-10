@@ -9,6 +9,7 @@ import com.kmu_focus.focusandroid.feature.camera.domain.usecase.CameraAnalysisUs
 import com.kmu_focus.focusandroid.feature.camera.domain.usecase.CameraRecordingUseCase
 import com.kmu_focus.focusandroid.core.media.di.IoDispatcher
 import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.io.File
 import java.nio.ByteBuffer
@@ -30,6 +31,8 @@ data class CameraUiState(
     val detectedFaces: List<DetectedFace> = emptyList(),
     val faceLabels: List<Boolean?> = emptyList(),
     val trackingIds: List<Int> = emptyList(),
+    val previewWidth: Int = 0,
+    val previewHeight: Int = 0,
     val frameWidth: Int = 0,
     val frameHeight: Int = 0,
     val recordingFile: File? = null,
@@ -76,6 +79,21 @@ class CameraViewModel @Inject constructor(
         _uiState.value = _uiState.value.copy(isCameraActive = true)
     }
 
+    fun updatePreviewResolution(
+        width: Int,
+        height: Int,
+    ) {
+        if (width <= 0 || height <= 0) return
+        val currentState = _uiState.value
+        if (currentState.previewWidth == width && currentState.previewHeight == height) {
+            return
+        }
+        _uiState.value = currentState.copy(
+            previewWidth = width,
+            previewHeight = height,
+        )
+    }
+
     fun stopCamera() {
         stopRecordingInternal(saveRecordingFile = false)
         manualOwnerTrackIds.clear()
@@ -87,6 +105,8 @@ class CameraViewModel @Inject constructor(
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            previewWidth = 0,
+            previewHeight = 0,
             registeredOwnerThumbnails = emptyList(),
         )
         cameraAnalysisUseCase.clearProcessingThreadCache()
@@ -108,6 +128,8 @@ class CameraViewModel @Inject constructor(
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            previewWidth = 0,
+            previewHeight = 0,
             registeredOwnerThumbnails = emptyList(),
         )
     }
@@ -202,6 +224,56 @@ class CameraViewModel @Inject constructor(
         }
     }
 
+    fun startBroadcastRecording(
+        width: Int,
+        height: Int,
+        muxerFactory: Any,
+        metadataRepository: MetadataRepository,
+        sessionId: String,
+    ) {
+        val currentState = _uiState.value
+        if (!currentState.isCameraActive || !currentState.isDetecting || currentState.isRecording) return
+
+        viewModelScope.launch(ioDispatcher) {
+            cameraAnalysisUseCase.startMetadataSession(
+                repository = metadataRepository,
+                sessionId = sessionId,
+            )
+            val startResult = cameraRecordingUseCase.startBroadcastRecording(
+                width = width,
+                height = height,
+                muxerFactory = muxerFactory,
+                onSurfaceReady = { encoderSurface, targetWidth, targetHeight ->
+                    currentEncoderSurface = encoderSurface as? Surface
+                    currentEncoderWidth = targetWidth
+                    currentEncoderHeight = targetHeight
+                    encoderSurfaceDispatcher?.invoke(
+                        currentEncoderSurface,
+                        currentEncoderWidth,
+                        currentEncoderHeight,
+                    )
+                },
+            )
+            startResult.fold(
+                onSuccess = {
+                    currentRecordingFile = null
+                    _uiState.value = _uiState.value.copy(
+                        isRecording = true,
+                        recordingFile = null,
+                    )
+                },
+                onFailure = {
+                    currentRecordingFile = null
+                    clearEncoderSurface()
+                    _uiState.value = _uiState.value.copy(isRecording = false)
+                },
+            )
+            if (startResult.isFailure) {
+                cameraAnalysisUseCase.closeMetadataSession()
+            }
+        }
+    }
+
     fun stopRecording() {
         stopRecordingInternal(saveRecordingFile = true)
     }
@@ -219,6 +291,8 @@ class CameraViewModel @Inject constructor(
             detectedFaces = emptyList(),
             faceLabels = emptyList(),
             trackingIds = emptyList(),
+            previewWidth = 0,
+            previewHeight = 0,
             registeredOwnerThumbnails = emptyList(),
         )
         cameraAnalysisUseCase.clearProcessingThreadCache()

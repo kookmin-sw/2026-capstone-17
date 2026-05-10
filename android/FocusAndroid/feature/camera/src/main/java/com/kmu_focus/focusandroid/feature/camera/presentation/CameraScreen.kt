@@ -27,6 +27,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -63,6 +64,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.google.common.util.concurrent.ListenableFuture
+import com.kmu_focus.focusandroid.core.ui.insets.focusSafeDrawingPadding
 import com.kmu_focus.focusandroid.feature.camera.domain.entity.LensFacing
 import com.kmu_focus.focusandroid.core.media.data.gl.VideoGLSurfaceView
 import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
@@ -77,6 +79,11 @@ fun CameraScreen(
     onRecordingComplete: (File) -> Unit,
     modifier: Modifier = Modifier,
     onBack: (() -> Unit)? = null,
+    showDetectionControl: Boolean = true,
+    showRecordingControl: Boolean = true,
+    showMenuButton: Boolean = true,
+    showStatusPanel: Boolean = true,
+    lockLandscapeOrientation: Boolean = false,
     viewModel: CameraViewModel = hiltViewModel(),
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -88,7 +95,10 @@ fun CameraScreen(
         activity?.requestedOrientation ?: ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
     }
     var isLandscapeMode by rememberSaveable {
-        mutableStateOf(configuration.orientation == Configuration.ORIENTATION_LANDSCAPE)
+        mutableStateOf(
+            lockLandscapeOrientation ||
+                configuration.orientation == Configuration.ORIENTATION_LANDSCAPE,
+        )
     }
     val requiredPermissions = remember {
         arrayOf(
@@ -121,8 +131,14 @@ fun CameraScreen(
         }
     }
 
-    LaunchedEffect(activity, isLandscapeMode) {
-        activity?.requestedOrientation = if (isLandscapeMode) {
+    LaunchedEffect(lockLandscapeOrientation) {
+        if (lockLandscapeOrientation) {
+            isLandscapeMode = true
+        }
+    }
+
+    LaunchedEffect(activity, isLandscapeMode, lockLandscapeOrientation) {
+        activity?.requestedOrientation = if (lockLandscapeOrientation || isLandscapeMode) {
             ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
         } else {
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -205,6 +221,7 @@ fun CameraScreen(
                             previewWidth = width
                             previewHeight = height
                             previewAspectRatio = width.toFloat() / height.toFloat()
+                            viewModel.updatePreviewResolution(width, height)
                         }
                     },
                     onEncoderSurfaceReady = null,
@@ -234,125 +251,143 @@ fun CameraScreen(
             }
         }
 
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(12.dp),
-        ) {
-            IconButton(
-                onClick = { isControlMenuExpanded = !isControlMenuExpanded },
-                modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(999.dp)),
+        if (showMenuButton) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .focusSafeDrawingPadding(
+                        sides = WindowInsetsSides.Top + WindowInsetsSides.End,
+                        top = 12.dp,
+                        end = 12.dp,
+                    )
             ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "카메라 메뉴",
-                    tint = Color.White,
-                )
-            }
+                IconButton(
+                    onClick = { isControlMenuExpanded = !isControlMenuExpanded },
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(999.dp)),
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "카메라 메뉴",
+                        tint = Color.White,
+                    )
+                }
 
-            DropdownMenu(
-                expanded = isControlMenuExpanded,
-                onDismissRequest = { isControlMenuExpanded = false },
-            ) {
-                DropdownMenuItem(
-                    text = { Text(if (uiState.isDetecting) "검출 중지" else "검출 시작") },
-                    onClick = {
-                        if (uiState.isDetecting) viewModel.stopDetection() else viewModel.startDetection()
-                        isControlMenuExpanded = false
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(if (uiState.isRecording) "녹화 중지" else "녹화 시작") },
-                    enabled = uiState.isDetecting || uiState.isRecording,
-                    onClick = {
-                        if (uiState.isRecording) {
-                            viewModel.stopRecording()
-                        } else {
-                            viewModel.startRecording(recordingWidth, recordingHeight)
-                        }
-                        isControlMenuExpanded = false
-                    },
-                )
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            if (uiState.lensFacing == LensFacing.BACK) {
-                                "전면 카메라로 전환"
-                            } else {
-                                "후면 카메라로 전환"
+                DropdownMenu(
+                    expanded = isControlMenuExpanded,
+                    onDismissRequest = { isControlMenuExpanded = false },
+                ) {
+                    if (showDetectionControl) {
+                        DropdownMenuItem(
+                            text = { Text(if (uiState.isDetecting) "검출 중지" else "검출 시작") },
+                            onClick = {
+                                if (uiState.isDetecting) viewModel.stopDetection() else viewModel.startDetection()
+                                isControlMenuExpanded = false
                             },
                         )
-                    },
-                    onClick = {
-                        viewModel.switchLensFacing()
-                        isControlMenuExpanded = false
-                    },
-                )
-                DropdownMenuItem(
-                    text = { Text(if (isLandscapeMode) "세로 모드로 전환" else "가로 모드로 전환") },
-                    enabled = !uiState.isRecording,
-                    onClick = {
-                        if (uiState.isRecording) return@DropdownMenuItem
-                        isLandscapeMode = !isLandscapeMode
-                        isControlMenuExpanded = false
-                    },
-                )
-                if (onBack != null) {
+                    }
+                    if (showRecordingControl) {
+                        DropdownMenuItem(
+                            text = { Text(if (uiState.isRecording) "녹화 중지" else "녹화 시작") },
+                            enabled = uiState.isDetecting || uiState.isRecording,
+                            onClick = {
+                                if (uiState.isRecording) {
+                                    viewModel.stopRecording()
+                                } else {
+                                    viewModel.startRecording(recordingWidth, recordingHeight)
+                                }
+                                isControlMenuExpanded = false
+                            },
+                        )
+                    }
                     DropdownMenuItem(
-                        text = { Text("모드 선택으로 돌아가기") },
+                        text = {
+                            Text(
+                                if (uiState.lensFacing == LensFacing.BACK) {
+                                    "전면 카메라로 전환"
+                                } else {
+                                    "후면 카메라로 전환"
+                                },
+                            )
+                        },
                         onClick = {
+                            viewModel.switchLensFacing()
                             isControlMenuExpanded = false
-                            onBack()
                         },
                     )
+                    if (!lockLandscapeOrientation) {
+                        DropdownMenuItem(
+                            text = { Text(if (isLandscapeMode) "세로 모드로 전환" else "가로 모드로 전환") },
+                            enabled = !uiState.isRecording,
+                            onClick = {
+                                if (uiState.isRecording) return@DropdownMenuItem
+                                isLandscapeMode = !isLandscapeMode
+                                isControlMenuExpanded = false
+                            },
+                        )
+                    }
+                    if (onBack != null) {
+                        DropdownMenuItem(
+                            text = { Text("모드 선택으로 돌아가기") },
+                            onClick = {
+                                isControlMenuExpanded = false
+                                onBack()
+                            },
+                        )
+                    }
                 }
             }
         }
 
-        Column(
-            modifier = Modifier
-                .align(Alignment.BottomStart)
-                .padding(12.dp)
-                .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
-                .padding(horizontal = 10.dp, vertical = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            if (uiState.registeredOwnerThumbnails.isNotEmpty()) {
-                Text(
-                    text = "등록된 OWNER (${uiState.registeredOwnerThumbnails.size}명)",
-                    color = Color.Green,
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    items(uiState.registeredOwnerThumbnails) { path ->
-                        Card(
-                            shape = CircleShape,
-                            colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-                            modifier = Modifier
-                                .size(48.dp)
-                                .border(2.dp, Color.Green, CircleShape),
-                        ) {
-                            AsyncImage(
-                                model = File(path),
-                                contentDescription = "Owner",
-                                modifier = Modifier.fillMaxSize(),
-                            )
+        if (showStatusPanel) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .focusSafeDrawingPadding(
+                        sides = WindowInsetsSides.Bottom + WindowInsetsSides.Start,
+                        start = 12.dp,
+                        bottom = 12.dp,
+                    )
+                    .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(10.dp))
+                    .padding(horizontal = 10.dp, vertical = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                if (uiState.registeredOwnerThumbnails.isNotEmpty()) {
+                    Text(
+                        text = "등록된 OWNER (${uiState.registeredOwnerThumbnails.size}명)",
+                        color = Color.Green,
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        items(uiState.registeredOwnerThumbnails) { path ->
+                            Card(
+                                shape = CircleShape,
+                                colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+                                modifier = Modifier
+                                    .size(48.dp)
+                                    .border(2.dp, Color.Green, CircleShape),
+                            ) {
+                                AsyncImage(
+                                    model = File(path),
+                                    contentDescription = "Owner",
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
+                } else {
+                    Text(
+                        text = "탭으로 OWNER 지정",
+                        color = Color.White,
+                    )
                 }
-            } else {
                 Text(
-                    text = "탭으로 OWNER 지정",
+                    text = "렌즈: ${if (uiState.lensFacing == LensFacing.BACK) "후면" else "전면"}",
+                    color = Color.White,
+                )
+                Text(
+                    text = "검출: ${if (uiState.isDetecting) "ON" else "OFF"} · 녹화: ${if (uiState.isRecording) "ON" else "OFF"}",
                     color = Color.White,
                 )
             }
-            Text(
-                text = "렌즈: ${if (uiState.lensFacing == LensFacing.BACK) "후면" else "전면"}",
-                color = Color.White,
-            )
-            Text(
-                text = "검출: ${if (uiState.isDetecting) "ON" else "OFF"} · 녹화: ${if (uiState.isRecording) "ON" else "OFF"}",
-                color = Color.White,
-            )
         }
     }
 }

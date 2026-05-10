@@ -19,6 +19,20 @@ class CameraRecordingUseCase @Inject constructor(
         )
     }
 
+    fun startBroadcastRecording(
+        width: Int,
+        height: Int,
+        muxerFactory: Any,
+        onSurfaceReady: (Any, Int, Int) -> Unit,
+    ): Result<Unit> = runCatching {
+        cameraRecordingRepository.startBroadcastRecording(
+            width = width,
+            height = height,
+            muxerFactory = muxerFactory,
+            onSurfaceReady = onSurfaceReady,
+        )
+    }
+
     fun stopRecording(): Result<Unit> = runCatching {
         cameraRecordingRepository.stopRecording()
     }

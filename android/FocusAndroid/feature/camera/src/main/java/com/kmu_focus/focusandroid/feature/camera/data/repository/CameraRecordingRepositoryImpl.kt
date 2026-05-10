@@ -1,9 +1,9 @@
 package com.kmu_focus.focusandroid.feature.camera.data.repository
 
-import com.kmu_focus.focusandroid.feature.camera.data.audio.MicAudioSource
-import com.kmu_focus.focusandroid.feature.camera.domain.repository.CameraRecordingRepository
 import com.kmu_focus.focusandroid.core.media.data.local.VideoLocalDataSource
 import com.kmu_focus.focusandroid.core.media.data.recorder.RealTimeRecorder
+import com.kmu_focus.focusandroid.feature.camera.data.audio.MicAudioSource
+import com.kmu_focus.focusandroid.feature.camera.domain.repository.CameraRecordingRepository
 import java.io.File
 import javax.inject.Inject
 import javax.inject.Provider
@@ -38,6 +38,34 @@ class CameraRecordingRepositoryImpl @Inject constructor(
         }
 
         return outputFile
+    }
+
+    override fun startBroadcastRecording(
+        width: Int,
+        height: Int,
+        muxerFactory: Any,
+        onSurfaceReady: (Any, Int, Int) -> Unit,
+    ) {
+        val outputFile = videoLocalDataSource.createTempOutputFile()
+        val micAudioSource = micAudioSourceProvider.get()
+        val videoMuxerFactory = muxerFactory as? RealTimeRecorder.VideoMuxerFactory
+            ?: throw IllegalArgumentException("muxerFactory must be RealTimeRecorder.VideoMuxerFactory")
+
+        try {
+            realTimeRecorder.start(
+                width = width,
+                height = height,
+                outputFile = outputFile,
+                audioTrackSource = micAudioSource,
+                onInputSurfaceReady = { surface ->
+                    onSurfaceReady(surface, width, height)
+                },
+                muxerFactory = videoMuxerFactory,
+            )
+        } catch (error: Exception) {
+            runCatching { micAudioSource.release() }
+            throw error
+        }
     }
 
     override fun stopRecording() {

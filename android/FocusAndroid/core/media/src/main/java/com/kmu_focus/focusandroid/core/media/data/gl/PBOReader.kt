@@ -22,11 +22,13 @@ class PBOReader {
 
     private var initialized = false
     private var firstFrameSkipped = false
+    private var outputBuffer: ByteBuffer? = null
 
     fun init(w: Int, h: Int) {
         width = w
         height = h
         bufferSize = w * h * 4 // RGBA
+        writeIndex = 0
 
         GLES30.glGenBuffers(2, pboIds, 0)
         for (i in 0..1) {
@@ -60,11 +62,12 @@ class PBOReader {
             ) as? ByteBuffer
 
             if (mapped != null) {
-                // GC 방지: direct buffer에 복사
-                result = ByteBuffer.allocateDirect(bufferSize).apply {
+                val reusableBuffer = obtainOutputBuffer()
+                reusableBuffer.clear()
+                reusableBuffer.put(mapped)
+                reusableBuffer.flip()
+                result = reusableBuffer.duplicate().apply {
                     order(ByteOrder.nativeOrder())
-                    put(mapped)
-                    flip()
                 }
                 GLES30.glUnmapBuffer(GLES30.GL_PIXEL_PACK_BUFFER)
             }
@@ -80,10 +83,29 @@ class PBOReader {
         return result
     }
 
+    fun resetPipeline() {
+        writeIndex = 0
+        firstFrameSkipped = false
+    }
+
     fun release() {
         if (initialized) {
             GLES30.glDeleteBuffers(2, pboIds, 0)
             initialized = false
+        }
+        writeIndex = 0
+        firstFrameSkipped = false
+        outputBuffer = null
+    }
+
+    private fun obtainOutputBuffer(): ByteBuffer {
+        val cached = outputBuffer
+        if (cached != null && cached.capacity() == bufferSize) {
+            return cached
+        }
+        return ByteBuffer.allocateDirect(bufferSize).apply {
+            order(ByteOrder.nativeOrder())
+            outputBuffer = this
         }
     }
 }

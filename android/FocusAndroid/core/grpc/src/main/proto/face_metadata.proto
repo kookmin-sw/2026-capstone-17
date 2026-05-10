@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package focus.metadata.v1;
+
+option java_package = "com.kmu_focus.focusandroid.core.grpc.proto";
+option java_multiple_files = true;
+
+service FaceMetadataIngestService {
+  rpc PushFaceMetadata (stream PushFaceMetadataRequest) returns (PushFaceMetadataResponse);
+}
+
+message PushFaceMetadataRequest {
+  string session_id = 1;
+  int64 pts_us = 2;
+  repeated FaceEntry faces = 3;
+}
+
+message FaceEntry {
+  int32 tracking_id = 1;
+  BoundingBox bbox = 2;
+  TdmmRaw tdmm_raw = 3;
+}
+
+message BoundingBox {
+  int32 x = 1;
+  int32 y = 2;
+  int32 width = 3;
+  int32 height = 4;
+}
+
+message TdmmRaw {
+  repeated float coeffs = 1;
+}
+
+message PushFaceMetadataResponse {
+  bool success = 1;
+}

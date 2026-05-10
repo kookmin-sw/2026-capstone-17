@@ -25,7 +25,7 @@ class FaceEllipseCalculatorTest {
     }
 
     @Test
-    fun `landmarks가 null인 얼굴은 스킵한다`() {
+    fun `landmarks가 없어도 박스 기준으로 마스크를 생성한다`() {
         val frame = ProcessedFrame(
             faces = listOf(
                 DetectedFace(
@@ -45,16 +45,16 @@ class FaceEllipseCalculatorTest {
 
         val result = FaceEllipseCalculator.calculate(frame)
 
-        assertTrue(result.isEmpty())
+        assertEquals(1, result.size)
     }
 
     @Test
     fun `OWNER는 제외하고 OTHER와 PENDING은 포함한다`() {
         val frame = ProcessedFrame(
             faces = listOf(
-                faceWithLandmarks(rightEyeX = 20f, rightEyeY = 20f), // OWNER
-                faceWithLandmarks(rightEyeX = 50f, rightEyeY = 30f), // OTHER
-                faceWithLandmarks(rightEyeX = 80f, rightEyeY = 40f)  // PENDING
+                faceBox(x = 20, y = 20), // OWNER
+                faceBox(x = 50, y = 30), // OTHER
+                faceBox(x = 80, y = 40)  // PENDING
             ),
             frameWidth = 200,
             frameHeight = 200,
@@ -68,23 +68,22 @@ class FaceEllipseCalculatorTest {
     }
 
     @Test
-    fun `정규화 좌표와 반경 그리고 각도가 계산식과 일치한다`() {
-        val landmarks = FaceLandmarks5(
-            rightEye = Point2f(40f, 60f),
-            leftEye = Point2f(80f, 60f),
-            nose = Point2f(60f, 75f),
-            rightMouth = Point2f(50f, 100f),
-            leftMouth = Point2f(70f, 100f)
-        )
+    fun `랜드마크가 있으면 기존 랜드마크 기반 타원을 사용한다`() {
         val frame = ProcessedFrame(
             faces = listOf(
                 DetectedFace(
                     x = 20,
-                    y = 20,
+                    y = 30,
                     width = 100,
-                    height = 100,
+                    height = 80,
                     confidence = 0.9f,
-                    landmarks = landmarks
+                    landmarks = FaceLandmarks5(
+                        rightEye = Point2f(40f, 40f),
+                        leftEye = Point2f(80f, 40f),
+                        nose = Point2f(60f, 58f),
+                        rightMouth = Point2f(50f, 90f),
+                        leftMouth = Point2f(70f, 90f),
+                    ),
                 )
             ),
             frameWidth = 200,
@@ -97,19 +96,19 @@ class FaceEllipseCalculatorTest {
 
         assertEquals(1, result.size)
         val ellipse = result.first()
-        assertEquals(0.3f, ellipse.centerX, EPSILON)
-        assertEquals(0.36f, ellipse.centerY, EPSILON)
-        assertEquals(0.21f, ellipse.radiusX, EPSILON)
-        assertEquals(0.2835f, ellipse.radiusY, EPSILON)
-        assertEquals(landmarks.getFaceAngle(), ellipse.angle, EPSILON)
+        assertEquals(0.30f, ellipse.centerX, EPSILON)
+        assertEquals(0.275f, ellipse.centerY, EPSILON)
+        assertEquals(0.224f, ellipse.radiusX, EPSILON)
+        assertEquals(0.378f, ellipse.radiusY, EPSILON)
+        assertEquals(0f, ellipse.angle, EPSILON)
     }
 
     @Test
     fun `타원 결과는 최대 8개까지만 반환한다`() {
         val faces = (0 until 10).map { index ->
-            faceWithLandmarks(
-                rightEyeX = 30f + index,
-                rightEyeY = 30f + index
+            faceBox(
+                x = 30 + index,
+                y = 30 + index,
             )
         }
         val frame = ProcessedFrame(
@@ -125,26 +124,16 @@ class FaceEllipseCalculatorTest {
         assertEquals(8, result.size)
     }
 
-    private fun faceWithLandmarks(
-        rightEyeX: Float,
-        rightEyeY: Float
+    private fun faceBox(
+        x: Int,
+        y: Int,
     ): DetectedFace {
-        val leftEyeX = rightEyeX + 40f
-        val leftEyeY = rightEyeY
-        val mouthY = rightEyeY + 40f
         return DetectedFace(
-            x = rightEyeX.toInt(),
-            y = rightEyeY.toInt(),
+            x = x,
+            y = y,
             width = 80,
             height = 80,
             confidence = 0.9f,
-            landmarks = FaceLandmarks5(
-                rightEye = Point2f(rightEyeX, rightEyeY),
-                leftEye = Point2f(leftEyeX, leftEyeY),
-                nose = Point2f((rightEyeX + leftEyeX) / 2f, rightEyeY + 15f),
-                rightMouth = Point2f(rightEyeX + 10f, mouthY),
-                leftMouth = Point2f(leftEyeX - 10f, mouthY)
-            )
         )
     }
 

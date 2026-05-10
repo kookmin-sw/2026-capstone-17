@@ -7,12 +7,8 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +16,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -108,66 +105,165 @@ fun MainScreen(
         }
     }
 
-    Column(modifier = modifier.fillMaxSize()) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         val showTopControls = !isVideoFullScreen && uiState.selectedVideoUri == null
 
         if (showTopControls) {
-            if (onBackToModeSelection != null) {
-                OutlinedButton(
-                    onClick = onBackToModeSelection,
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text("모드 선택으로 돌아가기")
-                }
-            }
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Button(
-                    onClick = {
-                        multiPickerLauncher.launch(
-                            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                Surface(
+                    shape = RoundedCornerShape(30.dp),
+                    tonalElevation = 4.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Text(
+                            text = "LOCAL ARCHIVE",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                        Text(
+                            text = "동영상 분석",
+                            style = MaterialTheme.typography.headlineSmall,
+                        )
+                        Text(
+                            text = "기존 영상을 불러와 owner를 등록하고 분석, 저장 흐름까지 이어갑니다.",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (onBackToModeSelection != null) {
+                            OutlinedButton(
+                                onClick = onBackToModeSelection,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text("모드 선택으로 돌아가기")
+                            }
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 2.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(14.dp),
+                    ) {
+                        Text(
+                            text = "Owner 등록",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Button(
+                                onClick = {
+                                    multiPickerLauncher.launch(
+                                        PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+                                    )
+                                },
+                                modifier = Modifier.weight(1f),
+                            ) {
+                                Text("여러 명 추가")
+                            }
+                            if (uiState.addedOwnerUris.isNotEmpty()) {
+                                OutlinedButton(
+                                    onClick = { viewModel.clearOwners() },
+                                    modifier = Modifier.weight(1f),
+                                ) {
+                                    Text("전체 삭제")
+                                }
+                            }
+                        }
+
+                        if (uiState.addedOwnerUris.isNotEmpty()) {
+                            Text(
+                                text = "등록된 소유자 ${uiState.addedOwnerUris.size}명",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            LazyRow(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                items(uiState.addedOwnerUris) { uri ->
+                                    OwnerThumbnail(uri = uri)
+                                }
+                            }
+                        } else {
+                            Text(
+                                text = "분석 정확도를 위해 owner 이미지를 먼저 등록하세요.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+
+                Surface(
+                    shape = RoundedCornerShape(28.dp),
+                    tonalElevation = 2.dp,
+                    color = MaterialTheme.colorScheme.surface,
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 4.dp),
+                    ) {
+                        Text(
+                            text = "분석할 동영상",
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        VideoUploadScreen(
+                            onVideoSelected = { uri -> viewModel.onVideoSelected(uri) },
                         )
                     }
-                ) {
-                    Text("소유자 추가 (여러 명 선택)")
                 }
-                if (uiState.addedOwnerUris.isNotEmpty()) {
-                    OutlinedButton(onClick = { viewModel.clearOwners() }) {
-                        Text("전체 삭제")
+
+                if (saveUiState.isSaving || saveUiState.savedFilePath != null || saveUiState.error != null) {
+                    Surface(
+                        shape = RoundedCornerShape(28.dp),
+                        tonalElevation = 2.dp,
+                        color = MaterialTheme.colorScheme.surface,
+                    ) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 4.dp),
+                        ) {
+                            Text(
+                                text = "저장 상태",
+                                modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            VideoSaveScreen(
+                                videoUri = uiState.selectedVideoUri.orEmpty(),
+                                viewModel = saveViewModel,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        }
                     }
                 }
-            }
-
-            if (uiState.addedOwnerUris.isNotEmpty()) {
-                Text(
-                    text = "등록된 소유자 (${uiState.addedOwnerUris.size}명)",
-                    style = MaterialTheme.typography.titleSmall,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                LazyRow(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    items(uiState.addedOwnerUris) { uri ->
-                        OwnerThumbnail(uri = uri)
-                    }
-                }
-            }
-
-            VideoUploadScreen(
-                onVideoSelected = { uri -> viewModel.onVideoSelected(uri) }
-            )
-
-            if (saveUiState.isSaving || saveUiState.savedFilePath != null || saveUiState.error != null) {
-                VideoSaveScreen(
-                    videoUri = uiState.selectedVideoUri.orEmpty(),
-                    viewModel = saveViewModel,
-                    modifier = Modifier.fillMaxWidth()
-                )
             }
         }
 

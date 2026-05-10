@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -12,6 +14,19 @@ hilt {
     enableAggregatingTask = false
 }
 
+val localProperties = Properties().apply {
+    val propertiesFile = rootProject.file("local.properties")
+    if (propertiesFile.exists()) {
+        propertiesFile.inputStream().use(::load)
+    }
+}
+
+val kakaoNativeStringAppKey = localProperties
+    .getProperty("kakaoNativeStringAppKey", "")
+    .trim()
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
+
 android {
     namespace = "com.kmu_focus.focusandroid"
     compileSdk = 36
@@ -24,6 +39,8 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        buildConfigField("String", "kakaoNativeStringAppKey", "\"$kakaoNativeStringAppKey\"")
+        manifestPlaceholders["kakaoScheme"] = "kakao$kakaoNativeStringAppKey"
     }
 
     buildTypes {
@@ -44,6 +61,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 
     packaging {
@@ -57,9 +75,16 @@ dependencies {
     // Feature Modules
     implementation(project(":feature:video"))
     implementation(project(":feature:camera"))
+    implementation(project(":feature:auth"))
+    implementation(project(":feature:account"))
+    implementation(project(":feature:broadcast"))
     implementation(project(":core:ai"))
+    implementation(project(":core:grpc"))
     implementation(project(":core:media"))
     implementation(project(":core:metadata"))
+    implementation(project(":core:network"))
+    implementation(project(":core:streaming"))
+    implementation(project(":core:ui"))
 
     // Core & UI
     implementation(libs.androidx.core.ktx)
@@ -83,6 +108,9 @@ dependencies {
     implementation(libs.hilt.android)
     implementation(libs.hilt.navigation.compose)
     ksp(libs.hilt.compiler)
+
+    // Kakao SDK
+    implementation("com.kakao.sdk:v2-user:2.20.6")
 
     // Test
     testImplementation(libs.junit)

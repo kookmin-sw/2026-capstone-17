@@ -1,6 +1,7 @@
 package com.kmu_focus.focusandroid.feature.camera.domain.repository
 
 import com.kmu_focus.focusandroid.core.media.domain.entity.ProcessedFrame
+import com.kmu_focus.focusandroid.core.metadata.domain.repository.MetadataRepository
 import com.kmu_focus.focusandroid.feature.camera.domain.entity.OwnerRegistrationResult
 import java.nio.ByteBuffer
 
@@ -23,6 +24,13 @@ interface CameraAnalysisRepository {
     fun clearProcessingThreadCache()
 
     fun startMetadataSession()
+
+    fun startMetadataSession(repository: MetadataRepository)
+
+    fun startMetadataSession(
+        repository: MetadataRepository,
+        sessionId: String,
+    )
 
     suspend fun closeMetadataSession()
 }
