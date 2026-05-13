@@ -3,7 +3,7 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from core.config import Settings
-from schemas.analysis import SpringAnalysisCompletePayload
+from schemas.analysis import GeminiAnalysisResult, SpringAnalysisCompletePayload, SpringAnalysisContext
 from services.analysis_archive import AnalysisArchiveService
 from services.gemini_analyzer import GeminiVideoAnalyzer
 from services.s3_storage import S3StorageClient
@@ -49,14 +49,27 @@ class AnalysisWorkflow:
                 "spring_latest_job",
                 lambda: self._spring.fetch_latest_job_id(broadcast_id),
             )
+            analysis_context = await self._with_retries(
+                "spring_analysis_context",
+                lambda: self._spring.fetch_analysis_context(broadcast_id),
+            )
             gemini_result = await self._with_retries(
                 "gemini_analysis",
-                lambda: self._gemini.analyze(analysis_path, duration_sec),
+                lambda: self._gemini.analyze(analysis_path, duration_sec, analysis_context),
             )
-            complete_payload = SpringAnalysisCompletePayload(
-                **gemini_result.model_dump(),
-                storageUrl=storage_url,
-                durationSec=duration_sec,
+            complete_payload = self._build_complete_payload(
+                gemini_result=gemini_result,
+                analysis_context=analysis_context,
+                storage_url=storage_url,
+                duration_sec=duration_sec,
+            )
+            logger.info(
+                "analysis_complete_payload_prepared broadcast_id=%s peak_viewer_count=%s occurred_at=%s scene_description_present=%s content_ratio_count=%s",
+                broadcast_id,
+                complete_payload.viewerPeakInsight.peakViewerCount,
+                complete_payload.viewerPeakInsight.occurredAt,
+                bool(complete_payload.viewerPeakInsight.sceneDescription),
+                len(complete_payload.contentRatios),
             )
             await self._with_retries(
                 "spring_complete_job",
@@ -86,3 +99,35 @@ class AnalysisWorkflow:
                     exc_info=True,
                 )
                 await asyncio.sleep(delay)
+
+    def _build_complete_payload(
+        self,
+        gemini_result: GeminiAnalysisResult,
+        analysis_context: SpringAnalysisContext,
+        storage_url: str,
+        duration_sec: int,
+    ) -> SpringAnalysisCompletePayload:
+        payload_data = gemini_result.model_dump()
+
+        context_peak = analysis_context.viewerPeakInsight
+        gemini_peak = payload_data.get("viewerPeakInsight") or {}
+        merged_peak = {
+            **gemini_peak,
+            "sceneDescription": gemini_peak.get("sceneDescription") or context_peak.sceneDescription,
+        }
+        if context_peak.peakViewerCount is not None:
+            merged_peak["peakViewerCount"] = context_peak.peakViewerCount
+        if context_peak.occurredAt is not None:
+            merged_peak["occurredAt"] = context_peak.occurredAt
+        payload_data["viewerPeakInsight"] = merged_peak
+
+        if analysis_context.contentRatios:
+            payload_data["contentRatios"] = [
+                ratio.model_dump() for ratio in analysis_context.contentRatios
+            ]
+
+        return SpringAnalysisCompletePayload(
+            **payload_data,
+            storageUrl=storage_url,
+            durationSec=duration_sec,
+        )

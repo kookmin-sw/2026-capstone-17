@@ -5,7 +5,7 @@ import time
 from typing import Any
 
 from core.config import Settings
-from schemas.analysis import GeminiAnalysisResult
+from schemas.analysis import GeminiAnalysisResult, SpringAnalysisContext
 
 try:
     from google import genai
@@ -23,13 +23,18 @@ ANALYSIS_PROMPT = """
 
 분석 목표:
 - 오늘 방송 요약
-- 시청자 반응이 가장 높았을 것으로 보이는 시점과 당시 장면 설명
+- strengths / weaknesses / actionItems
+- Spring 컨텍스트의 occurredAt 시각대에 해당하는 장면 설명(sceneDescription)
 - 타인 얼굴, 군중, 아바타 치환으로 보이는 장면의 통계 추정
-- 이동, 카페 소통, 식사 등 주요 콘텐츠 유형별 방송 비율
+
+Spring 컨텍스트가 함께 제공되면 peakViewerCount, occurredAt, contentRatios는
+Spring 서버가 치지직 API polling으로 계산한 값입니다.
+수치 데이터와 카테고리 비율은 임의로 변경하지 말고 전달된 값을 유지하세요.
+Gemini는 특히 viewerPeakInsight.sceneDescription 생성에 집중하세요.
 
 반드시 아래 JSON 형태만 반환하세요. Markdown 코드블록, 설명 문장, 주석은 금지합니다.
 모르는 값은 합리적으로 추정하되, 숫자는 음수가 되면 안 됩니다.
-occurredAt은 실제 절대 시각을 알 수 없으면 null로 둡니다.
+Spring 컨텍스트가 없을 때만 peakViewerCount, occurredAt, contentRatios를 영상 기반으로 추정하세요.
 
 {
   "summary": "string",
@@ -60,24 +65,34 @@ class GeminiVideoAnalyzer:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
 
-    async def analyze(self, video_path: str, duration_sec: int) -> GeminiAnalysisResult:
+    async def analyze(
+        self,
+        video_path: str,
+        duration_sec: int,
+        analysis_context: SpringAnalysisContext | None = None,
+    ) -> GeminiAnalysisResult:
         if genai is None or types is None:
             raise RuntimeError("google-genai is not installed.")
         if not self._settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is required.")
 
-        result = await asyncio.to_thread(self._analyze_blocking, video_path, duration_sec)
+        result = await asyncio.to_thread(self._analyze_blocking, video_path, duration_sec, analysis_context)
         logger.info("gemini_analysis_completed video=%s", video_path)
         return result
 
-    def _analyze_blocking(self, video_path: str, duration_sec: int) -> GeminiAnalysisResult:
+    def _analyze_blocking(
+        self,
+        video_path: str,
+        duration_sec: int,
+        analysis_context: SpringAnalysisContext | None,
+    ) -> GeminiAnalysisResult:
         client = genai.Client(api_key=self._settings.gemini_api_key)
         uploaded = client.files.upload(
             file=video_path,
             config=types.UploadFileConfig(mime_type="video/mp4"),
         )
         uploaded = self._wait_until_active(client, uploaded)
-        prompt = f"{ANALYSIS_PROMPT}\n\n방송 전체 길이(durationSec): {duration_sec}"
+        prompt = self._build_prompt(duration_sec=duration_sec, analysis_context=analysis_context)
         response = client.models.generate_content(
             model=self._settings.gemini_model,
             contents=[uploaded, prompt],
@@ -89,6 +104,26 @@ class GeminiVideoAnalyzer:
         if getattr(response, "parsed", None):
             return GeminiAnalysisResult.model_validate(response.parsed)
         return GeminiAnalysisResult.model_validate(self._parse_json_text(response.text))
+
+    def _build_prompt(
+        self,
+        duration_sec: int,
+        analysis_context: SpringAnalysisContext | None,
+    ) -> str:
+        prompt = f"{ANALYSIS_PROMPT}\n\n방송 전체 길이(durationSec): {duration_sec}"
+        if analysis_context is not None:
+            context_json = json.dumps(
+                analysis_context.model_dump(exclude_none=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+            prompt += (
+                "\n\n아래 Spring 분석 컨텍스트를 우선 신뢰하세요."
+                "\npeakViewerCount, occurredAt, contentRatios는 변경하지 마세요."
+                "\noccurredAt 주변 장면을 찾아 sceneDescription을 작성하세요."
+                f"\n\nSpring analysis context:\n{context_json}"
+            )
+        return prompt
 
     def _wait_until_active(self, client, uploaded_file):
         deadline = time.monotonic() + self._settings.gemini_file_processing_timeout_sec

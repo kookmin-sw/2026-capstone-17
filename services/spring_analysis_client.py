@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 
 from core.config import Settings
-from schemas.analysis import SpringAnalysisCompletePayload
+from schemas.analysis import SpringAnalysisCompletePayload, SpringAnalysisContext
 
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,40 @@ class SpringAnalysisClient:
             raise RuntimeError(f"analysis job id not found in Spring response. payload={payload}")
         return job_id
 
+    async def fetch_analysis_context(self, broadcast_id: str) -> SpringAnalysisContext:
+        if not self._settings.spring_internal_base_url:
+            raise RuntimeError("SPRING_INTERNAL_BASE_URL is required.")
+        payload = await self._request(
+            "GET",
+            f"/internal/broadcasts/{broadcast_id}/analysis-context",
+        )
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        context = SpringAnalysisContext.model_validate(data)
+        logger.info(
+            "spring_analysis_context_fetched broadcast_id=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s sampled_snapshot_count=%s last_sampled_at=%s",
+            broadcast_id,
+            context.viewerPeakInsight.peakViewerCount,
+            context.viewerPeakInsight.occurredAt,
+            len(context.contentRatios),
+            context.sampledSnapshotCount,
+            context.lastSampledAt,
+        )
+        return context
+
     async def complete_job(
         self,
         broadcast_id: str,
         analysis_job_id: str,
         payload: SpringAnalysisCompletePayload,
     ) -> None:
+        logger.info(
+            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
+            broadcast_id,
+            analysis_job_id,
+            payload.viewerPeakInsight.peakViewerCount,
+            payload.viewerPeakInsight.occurredAt,
+            len(payload.contentRatios),
+        )
         await self._request(
             "POST",
             f"/internal/broadcasts/{broadcast_id}/analysis-jobs/{analysis_job_id}/complete",
