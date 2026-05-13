@@ -14,6 +14,7 @@ class StreamState(str, Enum):
 class OutputMode(str, Enum):
     HLS = "HLS"
     CHZZK_RTMP = "CHZZK_RTMP"
+    YOUTUBE_RTMP = "YOUTUBE_RTMP"
 
 
 class StreamStartRequest(BaseModel):
@@ -68,9 +69,9 @@ class StreamStartRequest(BaseModel):
                 "broadcast_id": "bc_20260227_001",
                 "input_stream_key": "live_101_stream_key",
                 "avatar_id": "avatar-a",
-                "output_mode": "CHZZK_RTMP",
-                "output_url": "rtmp://live.example/app/live-key",
-                "watch_url": "https://chzzk.naver.com/channel-id",
+                "output_mode": "YOUTUBE_RTMP",
+                "output_url": "rtmp://a.rtmp.youtube.com/live2/live-key",
+                "watch_url": "https://www.youtube.com/watch?v=video-id",
             }
         }
     )
@@ -110,12 +111,12 @@ class StreamStatusResponse(BaseModel):
                 "processed_frames": 1842,
                 "dropped_frames": 17,
                 "last_pts_us": 61400000,
-                "output_mode": "CHZZK_RTMP",
+                "output_mode": "YOUTUBE_RTMP",
                 "input_url": "rtsp://localhost:8554/live/live_101_stream_key",
-                "output_path": "rtmp://live.example/app/live-key",
-                "hls_url": "https://chzzk.naver.com/channel-id",
-                "output_url": "rtmp://live.example/app/live-key",
-                "watch_url": "https://chzzk.naver.com/channel-id",
+                "output_path": "rtmp://a.rtmp.youtube.com/live2/live-key",
+                "hls_url": "https://www.youtube.com/watch?v=video-id",
+                "output_url": "rtmp://a.rtmp.youtube.com/live2/live-key",
+                "watch_url": "https://www.youtube.com/watch?v=video-id",
                 "detail": None,
             }
         }
