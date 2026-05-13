@@ -165,7 +165,8 @@ class StreamPipeline:
             os.makedirs(os.path.dirname(self.analysis_output_path), exist_ok=True)
 
     async def _start_ffmpeg(self) -> None:
-        cmd = self._build_ffmpeg_command()
+        use_input_audio = await self._detect_input_audio()
+        cmd = self._build_ffmpeg_command(use_input_audio=use_input_audio)
         self._ffmpeg_proc = await asyncio.create_subprocess_exec(
             *cmd,
             stdin=asyncio.subprocess.PIPE,
@@ -208,17 +209,63 @@ class StreamPipeline:
             return False
         return "404 Not Found" in message or "Error opening input" in message
 
-    def _build_ffmpeg_command(self) -> list[str]:
-        command = self._build_input_args()
-        command += self._build_encoded_output_args()
+    async def _detect_input_audio(self) -> bool:
+        cmd = [
+            "ffprobe",
+            "-v",
+            "error",
+            "-rtsp_transport",
+            "tcp",
+            "-select_streams",
+            "a:0",
+            "-show_entries",
+            "stream=index",
+            "-of",
+            "csv=p=0",
+            self.input_url,
+        ]
+        proc: asyncio.subprocess.Process | None = None
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+        except Exception as exc:
+            if proc and proc.returncode is None:
+                proc.kill()
+                await proc.wait()
+            logger.warning(
+                "input_audio_probe_failed broadcast_id=%s input=%s detail=%s",
+                self.broadcast_id,
+                self.input_url,
+                exc,
+            )
+            return False
+
+        has_audio = proc.returncode == 0 and bool(stdout.strip())
+        if has_audio:
+            logger.info("input_audio_detected broadcast_id=%s", self.broadcast_id)
+        else:
+            logger.info(
+                "input_audio_not_detected_using_silence broadcast_id=%s detail=%s",
+                self.broadcast_id,
+                stderr.decode(errors="replace")[-200:],
+            )
+        return has_audio
+
+    def _build_ffmpeg_command(self, use_input_audio: bool) -> list[str]:
+        command = self._build_input_args(use_input_audio=use_input_audio)
+        command += self._build_encoded_output_args(use_input_audio=use_input_audio)
         command += self._build_primary_output_args()
         if self.analysis_output_path:
-            command += self._build_encoded_output_args()
+            command += self._build_encoded_output_args(use_input_audio=use_input_audio)
             command += ["-movflags", "+faststart", self.analysis_output_path]
         return command
 
-    def _build_input_args(self) -> list[str]:
-        return [
+    def _build_input_args(self, use_input_audio: bool) -> list[str]:
+        command = [
             "ffmpeg",
             "-y",
             "-loglevel",
@@ -235,19 +282,24 @@ class StreamPipeline:
             "tcp",
             "-i",
             self.input_url,
-            "-f",
-            "lavfi",
-            "-i",
-            f"anullsrc=channel_layout=stereo:sample_rate={self._output_audio_sample_rate}",
         ]
+        if not use_input_audio:
+            command += [
+                "-f",
+                "lavfi",
+                "-i",
+                f"anullsrc=channel_layout=stereo:sample_rate={self._output_audio_sample_rate}",
+            ]
+        return command
 
-    def _build_encoded_output_args(self) -> list[str]:
+    def _build_encoded_output_args(self, use_input_audio: bool) -> list[str]:
         gop = max(self._fps * self._gop_seconds, 1)
+        audio_map = "0:a:0" if use_input_audio else "1:a:0"
         return [
             "-map",
             "0:v:0",
             "-map",
-            "1:a:0",
+            audio_map,
             "-c:v",
             "libx264",
             "-preset",
