@@ -1,0 +1,21 @@
+# CocoaPods
+Pods/
+
+# Frameworks
+*.framework
+*.xcframework
+
+# Xcode
+DerivedData/
+.build/
+xcuserdata/
+*.xcworkspace
+!*.xcodeproj/project.pbxproj
+
+# Local IDE / tooling
+.idea/
+.swift-module-cache/
+.codex/skills/
+__pycache__/
+*.pyc
+.DS_Store
