@@ -37,7 +37,7 @@ spring:
 
 jwt:
   common:
-    key: ${JWT_SECRET:dasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djiasdasdh13279hd9asdah8012djias}
+    key: ${JWT_SECRET}
 
 
 kakao:
@@ -54,6 +54,12 @@ focus:
     redis:
       key-template: broadcast:{broadcast_id}:meta:{pts_us}
       ttl-seconds: 60
+  analysis:
+    snapshot:
+      enabled: ${FOCUS_ANALYSIS_SNAPSHOT_ENABLED:true}
+      fixed-delay-ms: ${FOCUS_ANALYSIS_SNAPSHOT_DELAY_MS:60000}
+      live-list-page-size: ${FOCUS_CHZZK_LIVE_PAGE_SIZE:20}
+      live-list-max-pages: ${FOCUS_CHZZK_LIVE_MAX_PAGES:10}
   fastapi:
     base-url: ${FASTAPI_BASE_URL:http://localhost:8000}
   internal-api:
@@ -73,8 +79,8 @@ aws:
 
 naver:
   chzzk:
-    client-id: ${CHZZK_CLIENT_ID:1338a5cb-d5c0-43e9-885c-dbaf0eb0f075}
-    client-secret: ${CHZZK_CLIENT_SECRET:s83qKdSp9JbdAxrIoI_p_rOkwngpSk4KfCIbmNP54Mo}
+    client-id: ${CHZZK_CLIENT_ID}
+    client-secret: ${CHZZK_CLIENT_SECRET}
     redirect-uri: http://localhost:8080/api/v1/platforms/chzzk/callback
     authorization-uri: https://chzzk.naver.com/account-interlock
     open-api-base-url: https://openapi.chzzk.naver.com
@@ -84,6 +90,25 @@ naver:
     token-refresh-buffer-seconds: 60
 
 google:
+  youtube:
+    client-id: ${YOUTUBE_CLIENT_ID}
+    client-secret: ${YOUTUBE_CLIENT_SECRET}
+    redirect-uri: ${YOUTUBE_REDIRECT_URI:http://localhost:8080/api/v1/platforms/youtube/callback}
+    authorization-uri: ${YOUTUBE_AUTHORIZATION_URI:https://accounts.google.com/o/oauth2/v2/auth}
+    token-uri: ${YOUTUBE_TOKEN_URI:https://oauth2.googleapis.com/token}
+    revoke-uri: ${YOUTUBE_REVOKE_URI:https://oauth2.googleapis.com/revoke}
+    api-base-url: ${YOUTUBE_API_BASE_URL:https://www.googleapis.com}
+    scope: ${YOUTUBE_SCOPE:https://www.googleapis.com/auth/youtube.force-ssl}
+    watch-url-template: ${YOUTUBE_WATCH_URL_TEMPLATE:https://www.youtube.com/watch?v={broadcastId}}
+    privacy-status: ${YOUTUBE_LIVE_PRIVACY_STATUS:public}
+    latency-preference: ${YOUTUBE_LIVE_LATENCY_PREFERENCE:low}
+    enable-auto-start: ${YOUTUBE_LIVE_ENABLE_AUTO_START:true}
+    enable-auto-stop: ${YOUTUBE_LIVE_ENABLE_AUTO_STOP:true}
+    record-from-start: ${YOUTUBE_LIVE_RECORD_FROM_START:true}
+    made-for-kids: ${YOUTUBE_LIVE_MADE_FOR_KIDS:false}
+    prefer-rtmps: ${YOUTUBE_PREFER_RTMPS:false}
+    oauth-state-ttl-seconds: ${YOUTUBE_OAUTH_STATE_TTL_SECONDS:600}
+    token-refresh-buffer-seconds: ${YOUTUBE_TOKEN_REFRESH_BUFFER_SECONDS:60}
   gemini:
     api-key: ${GEMINI_API_KEY:}
     model: ${GEMINI_MODEL:gemini-2.5-flash-lite}

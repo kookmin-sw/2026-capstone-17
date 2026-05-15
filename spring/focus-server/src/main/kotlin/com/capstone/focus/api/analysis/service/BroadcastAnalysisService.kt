@@ -1,7 +1,9 @@
 package com.capstone.focus.api.analysis.service
 
 import com.capstone.focus.api.analysis.dto.request.CompleteBroadcastAnalysisJobRequest
+import com.capstone.focus.api.analysis.dto.request.ContentRatioRequest
 import com.capstone.focus.api.analysis.dto.request.CreateBroadcastAnalysisJobRequest
+import com.capstone.focus.api.analysis.dto.request.ViewerPeakInsightRequest
 import com.capstone.focus.api.analysis.dto.response.BroadcastAiReportResponse
 import com.capstone.focus.api.analysis.dto.response.BroadcastAnalysisJobResponse
 import com.capstone.focus.api.analysis.dto.response.BroadcastAnalysisResultResponse
@@ -42,7 +44,8 @@ class BroadcastAnalysisServiceImpl(
     private val broadcastAnalysisJobRepository: BroadcastAnalysisJobRepository,
     private val broadcastAiReportRepository: BroadcastAiReportRepository,
     private val broadcastHighlightCandidateRepository: BroadcastHighlightCandidateRepository,
-    private val trackingSessionRepository: TrackingSessionRepository
+    private val trackingSessionRepository: TrackingSessionRepository,
+    private val broadcastPlatformSnapshotService: BroadcastPlatformSnapshotService
 ) : BroadcastAnalysisService {
 
     @Transactional
@@ -99,14 +102,15 @@ class BroadcastAnalysisServiceImpl(
         broadcastAnalysisJobRepository.findTopByBroadcastIdAndJobTypeOrderByCreatedAtDesc(
             broadcastId,
             BroadcastAnalysisJobType.FULL_SUMMARY
-        )
-            ?.let { return BroadcastAnalysisJobResponse.from(it) }
+        )?.let { return BroadcastAnalysisJobResponse.from(it) }
 
         val durationSec = if (broadcast.startedAt != null && broadcast.endedAt != null) {
             Duration.between(broadcast.startedAt, broadcast.endedAt).seconds.coerceAtLeast(0)
         } else {
             null
         }
+
+        val analysisContext = broadcastPlatformSnapshotService.getAnalysisContext(broadcastId)
 
         return createAnalysisJob(
             memberId = memberId,
@@ -116,7 +120,21 @@ class BroadcastAnalysisServiceImpl(
                 jobType = BroadcastAnalysisJobType.FULL_SUMMARY,
                 storageProvider = "S3",
                 storageKey = buildDefaultAnalysisStorageKey(broadcastId),
-                durationSec = durationSec
+                durationSec = durationSec,
+                viewerPeakInsight = analysisContext.viewerPeakInsight?.let {
+                    ViewerPeakInsightRequest(
+                        peakViewerCount = it.peakViewerCount,
+                        occurredAt = it.occurredAt,
+                        sceneDescription = it.sceneDescription
+                    )
+                },
+                contentRatios = analysisContext.contentRatios.map {
+                    ContentRatioRequest(
+                        contentType = it.contentType,
+                        percentage = it.percentage,
+                        durationSec = it.durationSec
+                    )
+                }
             )
         )
     }
@@ -165,20 +183,31 @@ class BroadcastAnalysisServiceImpl(
             fileSizeBytes = request.fileSizeBytes
         )
 
+        val report = broadcastAiReportRepository.findByAnalysisJobId(analysisJobId)
         val durationSec = request.durationSec ?: job.mediaAsset.durationSec
         val replacedFaceCount = request.faceStatistics?.totalReplacedFaceCount
             ?: trackingSessionRepository.countByBroadcastId(broadcastId)
         val readableDuration = durationSec?.let { formatDuration(it) } ?: "알 수 없는 길이"
-        val contentRatios = request.contentRatios.map { it.toDomain() }
-        val summaryTitle = if (job.broadcast.title.isNullOrBlank()) "방송 종료 요약" else "'${job.broadcast.title}' 방송 요약"
+        val resolvedPeakViewerCount = request.viewerPeakInsight?.peakViewerCount ?: report?.peakViewerCount
+        val resolvedPeakOccurredAt = request.viewerPeakInsight?.occurredAt ?: report?.peakViewerOccurredAt
+        val resolvedPeakSceneDescription = request.viewerPeakInsight?.sceneDescription ?: report?.peakSceneDescription
+        val contentRatios = if (request.contentRatios.isNotEmpty()) {
+            request.contentRatios.map { it.toDomain() }
+        } else {
+            report?.contentRatios ?: emptyList()
+        }
+        val summaryTitle = if (job.broadcast.title.isNullOrBlank()) {
+            "방송 종료 요약"
+        } else {
+            "'${job.broadcast.title}' 방송 요약"
+        }
         val summary = request.summary ?: buildDefaultSummary(
             readableDuration = readableDuration,
             replacedFaceCount = replacedFaceCount,
-            peakViewerCount = request.viewerPeakInsight?.peakViewerCount,
+            peakViewerCount = resolvedPeakViewerCount,
             contentRatios = contentRatios
         )
 
-        val report = broadcastAiReportRepository.findByAnalysisJobId(analysisJobId)
         if (report == null) {
             broadcastAiReportRepository.save(
                 BroadcastAiReport(
@@ -190,9 +219,9 @@ class BroadcastAnalysisServiceImpl(
                     strengths = if (request.strengths.isNotEmpty()) request.strengths else defaultStrengths(durationSec, readableDuration, contentRatios),
                     weaknesses = if (request.weaknesses.isNotEmpty()) request.weaknesses else defaultWeaknessesFromComplete(request),
                     actionItems = if (request.actionItems.isNotEmpty()) request.actionItems else defaultActionItemsFromComplete(request),
-                    peakViewerCount = request.viewerPeakInsight?.peakViewerCount,
-                    peakViewerOccurredAt = request.viewerPeakInsight?.occurredAt,
-                    peakSceneDescription = request.viewerPeakInsight?.sceneDescription,
+                    peakViewerCount = resolvedPeakViewerCount,
+                    peakViewerOccurredAt = resolvedPeakOccurredAt,
+                    peakSceneDescription = resolvedPeakSceneDescription,
                     totalReplacedFaceCount = replacedFaceCount,
                     maxSimultaneousCrowdCount = request.faceStatistics?.maxSimultaneousCrowdCount,
                     contentRatios = contentRatios
@@ -205,9 +234,9 @@ class BroadcastAnalysisServiceImpl(
                 strengths = if (request.strengths.isNotEmpty()) request.strengths else defaultStrengths(durationSec, readableDuration, contentRatios),
                 weaknesses = if (request.weaknesses.isNotEmpty()) request.weaknesses else defaultWeaknessesFromComplete(request),
                 actionItems = if (request.actionItems.isNotEmpty()) request.actionItems else defaultActionItemsFromComplete(request),
-                peakViewerCount = request.viewerPeakInsight?.peakViewerCount,
-                peakViewerOccurredAt = request.viewerPeakInsight?.occurredAt,
-                peakSceneDescription = request.viewerPeakInsight?.sceneDescription,
+                peakViewerCount = resolvedPeakViewerCount,
+                peakViewerOccurredAt = resolvedPeakOccurredAt,
+                peakSceneDescription = resolvedPeakSceneDescription,
                 totalReplacedFaceCount = replacedFaceCount,
                 maxSimultaneousCrowdCount = request.faceStatistics?.maxSimultaneousCrowdCount,
                 contentRatios = contentRatios
@@ -305,16 +334,16 @@ class BroadcastAnalysisServiceImpl(
         peakViewerCount: Long?,
         contentRatios: List<BroadcastContentRatio>
     ): String {
-        val peakClause = peakViewerCount?.let { "최고 시청자 수는 ${it}명이었습니다." }
-            ?: "시청자 최고점 데이터는 아직 집계되지 않았습니다."
+        val peakClause = peakViewerCount?.let { "최대 시청자 수는 ${it}명입니다." }
+            ?: "최대 시청자 수 데이터는 아직 집계되지 않았습니다."
         val contentClause = contentRatios.takeIf { it.isNotEmpty() }
             ?.sortedByDescending { it.percentage }
             ?.take(2)
-            ?.joinToString(", ") { "${it.contentType} ${it.percentage}%" }
-            ?.let { "주요 콘텐츠 비율은 $it 입니다." }
-            ?: "콘텐츠 비율 분석은 아직 비어 있습니다."
+            ?.joinToString(", ") { "${it.contentType} ${"%.1f".format(it.percentage)}%" }
+            ?.let { "주요 카테고리 비율은 $it 입니다." }
+            ?: "카테고리 비율 분석 데이터는 아직 비어 있습니다."
 
-        return "총 $readableDuration 분량의 분석용 영상이 등록되었습니다. 현재 기준으로 확인 가능한 타인 얼굴 아바타 치환 세션은 ${replacedFaceCount}건이며, $peakClause $contentClause"
+        return "총 $readableDuration 분량의 방송 분석 데이터를 등록했습니다. 현재 기준으로 확인 가능한 아바타 치환 세션은 ${replacedFaceCount}건이며, $peakClause $contentClause"
     }
 
     private fun defaultStrengths(
@@ -324,11 +353,11 @@ class BroadcastAnalysisServiceImpl(
     ): List<String> {
         return buildList {
             durationSec?.takeIf { it > 0 }?.let {
-                add("분석 가능한 방송 길이($readableDuration)가 확보되었습니다.")
+                add("분석 가능한 방송 길이($readableDuration) 정보가 확보되었습니다.")
             }
             mediaAssetSummary(durationSec)?.let { add(it) }
             if (contentRatios.isNotEmpty()) {
-                add("콘텐츠 비율 데이터가 함께 저장되어 후속 리포트 확장이 쉬워졌습니다.")
+                add("카테고리 비율 데이터가 함께 수집되어 리포트 해석 범위를 넓혀줍니다.")
             }
         }
     }
@@ -336,10 +365,10 @@ class BroadcastAnalysisServiceImpl(
     private fun defaultWeaknesses(request: CreateBroadcastAnalysisJobRequest): List<String> {
         return buildList {
             if (request.viewerPeakInsight == null) {
-                add("시청자 최고점 데이터 집계는 아직 연결되지 않았습니다.")
+                add("시청자 피크 데이터가 아직 집계되지 않았습니다.")
             }
             if (request.contentRatios.isEmpty()) {
-                add("콘텐츠 비율 분석은 Gemini 분류 로직 연동 전이라 비어 있습니다.")
+                add("카테고리 비율 분석 데이터가 아직 비어 있습니다.")
             }
         }
     }
@@ -347,10 +376,10 @@ class BroadcastAnalysisServiceImpl(
     private fun defaultActionItems(request: CreateBroadcastAnalysisJobRequest): List<String> {
         return buildList {
             if (request.viewerPeakInsight == null) {
-                add("시청자 피크 집계 로직을 연결해 최고 반응 시점을 리포트에 포함하세요.")
+                add("방송 중 시청자 수 polling 결과를 연결해 최대 반응 시점을 함께 제공해 주세요.")
             }
             if (request.contentRatios.isEmpty()) {
-                add("영상 세그먼트 분류를 붙여 이동, 소통, 식사 비율을 계산하세요.")
+                add("카테고리 snapshot 집계를 연결해 이동, 토크, 게임 같은 비율을 함께 보여주세요.")
             }
         }
     }
@@ -358,10 +387,10 @@ class BroadcastAnalysisServiceImpl(
     private fun defaultWeaknessesFromComplete(request: CompleteBroadcastAnalysisJobRequest): List<String> {
         return buildList {
             if (request.viewerPeakInsight == null) {
-                add("시청자 최고점 데이터 집계는 아직 연결되지 않았습니다.")
+                add("시청자 피크 데이터가 아직 집계되지 않았습니다.")
             }
             if (request.contentRatios.isEmpty()) {
-                add("콘텐츠 비율 분석은 Gemini 분류 로직 연동 전이라 비어 있습니다.")
+                add("카테고리 비율 분석 데이터가 아직 비어 있습니다.")
             }
         }
     }
@@ -369,10 +398,10 @@ class BroadcastAnalysisServiceImpl(
     private fun defaultActionItemsFromComplete(request: CompleteBroadcastAnalysisJobRequest): List<String> {
         return buildList {
             if (request.viewerPeakInsight == null) {
-                add("시청자 피크 집계 로직을 연결해 최고 반응 시점을 리포트에 포함하세요.")
+                add("방송 중 시청자 수 polling 결과를 연결해 최대 반응 시점을 함께 제공해 주세요.")
             }
             if (request.contentRatios.isEmpty()) {
-                add("영상 세그먼트 분류를 붙여 이동, 소통, 식사 비율을 계산하세요.")
+                add("카테고리 snapshot 집계를 연결해 이동, 토크, 게임 같은 비율을 함께 보여주세요.")
             }
         }
     }

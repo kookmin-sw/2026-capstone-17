@@ -4,6 +4,7 @@ import com.capstone.focus.common.config.ChzzkProperties
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
 import com.capstone.focus.common.external.chzzk.dto.ChzzkApiResponse
+import com.capstone.focus.common.external.chzzk.dto.ChzzkLiveContent
 import com.capstone.focus.common.external.chzzk.dto.ChzzkLiveSettingPatchRequest
 import com.capstone.focus.common.external.chzzk.dto.ChzzkStreamKeyContent
 import com.capstone.focus.common.external.chzzk.dto.ChzzkTokenContent
@@ -22,6 +23,16 @@ class ChzzkClient(
     private val chzzkOpenApiFeignClient: ChzzkOpenApiFeignClient
 ) {
     private val logger = LoggerFactory.getLogger(ChzzkClient::class.java)
+
+    data class LiveSnapshot(
+        val channelId: String,
+        val channelName: String?,
+        val liveTitle: String?,
+        val concurrentUserCount: Long?,
+        val categoryType: String?,
+        val liveCategoryId: String?,
+        val liveCategoryName: String?
+    )
 
     fun getAuthorizationUrl(state: String): String {
         return UriComponentsBuilder.fromUriString(chzzkProperties.authorizationUri)
@@ -83,6 +94,41 @@ class ChzzkClient(
         }
     }
 
+    fun getLiveSnapshotByChannelId(
+        channelId: String,
+        pageSize: Int = 20,
+        maxPages: Int = 10
+    ): LiveSnapshot? {
+        return call("getLiveSnapshotByChannelId") {
+            var next: String? = null
+            var pageCount = 0
+
+            while (pageCount < maxPages) {
+                val content = unwrap(
+                    chzzkOpenApiFeignClient.getLives(
+                        clientId = chzzkProperties.clientId,
+                        clientSecret = chzzkProperties.clientSecret,
+                        size = pageSize,
+                        next = next
+                    )
+                )
+
+                val live = content.data.firstOrNull { it.channelId == channelId }
+                if (live != null) {
+                    return@call live.toSnapshot()
+                }
+
+                next = content.page?.next?.takeIf { it.isNotBlank() }
+                if (next == null) {
+                    break
+                }
+                pageCount++
+            }
+
+            null
+        }
+    }
+
     fun getStreamKey(accessToken: String): ChzzkStreamKeyContent {
         return call("getStreamKey") {
             unwrap(chzzkOpenApiFeignClient.getStreamKey(bearer(accessToken)))
@@ -121,5 +167,17 @@ class ChzzkClient(
             logger.error("CHZZK API call failed. label={}", label, exception)
             throw ApiException(ErrorTitle.ExternalServerError, "치지직 API 호출에 실패했습니다. [$label]")
         }
+    }
+
+    private fun ChzzkLiveContent.toSnapshot(): LiveSnapshot {
+        return LiveSnapshot(
+            channelId = channelId,
+            channelName = channelName,
+            liveTitle = liveTitle,
+            concurrentUserCount = concurrentUserCount,
+            categoryType = categoryType,
+            liveCategoryId = liveCategory,
+            liveCategoryName = liveCategoryValue
+        )
     }
 }

@@ -6,6 +6,7 @@ import com.capstone.focus.api.broadcast.dto.request.StartBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.request.UpdateBroadcastRequest
 import com.capstone.focus.api.broadcast.dto.response.BroadcastResponse
 import com.capstone.focus.api.platform.service.ChzzkPlatformService
+import com.capstone.focus.api.platform.service.YoutubePlatformService
 import com.capstone.focus.common.config.BroadcastOutputProperties
 import com.capstone.focus.common.exception.ApiException
 import com.capstone.focus.common.exception.ErrorTitle
@@ -40,6 +41,7 @@ class BroadcastServiceImpl(
     private val fastApiStreamClient: FastApiStreamClient,
     private val broadcastAnalysisService: BroadcastAnalysisService,
     private val chzzkPlatformService: ChzzkPlatformService,
+    private val youtubePlatformService: YoutubePlatformService,
     private val broadcastOutputProperties: BroadcastOutputProperties
 ) : BroadcastService {
     private val logger = LoggerFactory.getLogger(BroadcastServiceImpl::class.java)
@@ -49,12 +51,14 @@ class BroadcastServiceImpl(
         val member = memberRepository.findByIdOrNull(memberId)
             ?: throw ApiException(ErrorTitle.NotFoundUser)
 
+        val outputMode = request.outputMode ?: broadcastOutputProperties.outputMode
+
         val broadcast = Broadcast(
             member = member,
             streamKey = UUID.randomUUID().toString(),
             title = request.title,
-            platform = StreamingPlatform.CHZZK,
-            outputMode = broadcastOutputProperties.outputMode
+            platform = outputMode.toStreamingPlatform(),
+            outputMode = outputMode
         )
 
         val savedBroadcast = broadcastRepository.save(broadcast)
@@ -72,21 +76,25 @@ class BroadcastServiceImpl(
 
         validateOwnership(broadcast, memberId)
 
-        return if (broadcastOutputProperties.outputMode == BroadcastOutputMode.HLS) {
+        val outputMode = broadcast.outputMode
+
+        return if (outputMode == BroadcastOutputMode.HLS) {
             startHlsBroadcast(broadcast, request, null)
         } else {
-            startPlatformBroadcast(memberId, broadcast, request)
+            startPlatformBroadcast(memberId, broadcast, request, outputMode)
         }
     }
 
     private fun startPlatformBroadcast(
         memberId: String,
         broadcast: Broadcast,
-        request: StartBroadcastRequest
+        request: StartBroadcastRequest,
+        outputMode: BroadcastOutputMode
     ): BroadcastResponse {
         return try {
-            when (broadcastOutputProperties.outputMode) {
+            when (outputMode) {
                 BroadcastOutputMode.CHZZK_RTMP -> startChzzkBroadcast(memberId, broadcast, request)
+                BroadcastOutputMode.YOUTUBE_RTMP -> startYoutubeBroadcast(memberId, broadcast, request)
                 BroadcastOutputMode.HLS -> startHlsBroadcast(broadcast, request, null)
             }
         } catch (exception: ApiException) {
@@ -123,6 +131,30 @@ class BroadcastServiceImpl(
         return BroadcastResponse.from(broadcast)
     }
 
+    private fun startYoutubeBroadcast(
+        memberId: String,
+        broadcast: Broadcast,
+        request: StartBroadcastRequest
+    ): BroadcastResponse {
+        val youtubeTarget = youtubePlatformService.prepareBroadcastTarget(memberId, broadcast)
+        val worker = fastApiStreamClient.startBroadcast(
+            broadcastId = broadcast.id,
+            inputStreamKey = broadcast.streamKey,
+            avatarId = request.avatarId,
+            outputMode = BroadcastOutputMode.YOUTUBE_RTMP.name,
+            outputUrl = youtubeTarget.outputUrl,
+            watchUrl = youtubeTarget.watchUrl
+        )
+        broadcast.startBroadcast(
+            platform = StreamingPlatform.YOUTUBE,
+            platformChannelId = youtubeTarget.platformChannelId,
+            watchUrl = worker.watchUrl ?: youtubeTarget.watchUrl,
+            outputMode = BroadcastOutputMode.YOUTUBE_RTMP,
+            hlsUrl = null
+        )
+        return BroadcastResponse.from(broadcast)
+    }
+
     private fun startHlsBroadcast(
         broadcast: Broadcast,
         request: StartBroadcastRequest,
@@ -137,7 +169,7 @@ class BroadcastServiceImpl(
             watchUrl = null
         )
         broadcast.startBroadcast(
-            platform = StreamingPlatform.CHZZK,
+            platform = broadcast.platform,
             platformChannelId = null,
             watchUrl = worker.watchUrl,
             outputMode = BroadcastOutputMode.HLS,
@@ -157,6 +189,13 @@ class BroadcastServiceImpl(
         validateOwnership(broadcast, memberId)
 
         fastApiStreamClient.stopBroadcast(broadcast.id)
+        if (broadcast.outputMode == BroadcastOutputMode.YOUTUBE_RTMP) {
+            try {
+                youtubePlatformService.completeBroadcast(memberId, broadcast)
+            } catch (exception: Exception) {
+                logger.warn("Failed to complete YouTube platform broadcast. broadcastId={}", broadcast.id, exception)
+            }
+        }
         broadcast.endBroadcast()
         broadcastAnalysisService.queuePostStreamSummary(memberId, broadcast.id)
 
@@ -204,6 +243,14 @@ class BroadcastServiceImpl(
     private fun validateOwnership(broadcast: Broadcast, memberId: String) {
         if (broadcast.member.id != memberId) {
             throw ApiException(ErrorTitle.Forbidden)
+        }
+    }
+
+    private fun BroadcastOutputMode.toStreamingPlatform(): StreamingPlatform {
+        return when (this) {
+            BroadcastOutputMode.YOUTUBE_RTMP -> StreamingPlatform.YOUTUBE
+            BroadcastOutputMode.CHZZK_RTMP,
+            BroadcastOutputMode.HLS -> StreamingPlatform.CHZZK
         }
     }
 }

@@ -1,8 +1,10 @@
 package com.capstone.focus.api.analysis.controller
 
 import com.capstone.focus.api.analysis.dto.request.CompleteBroadcastAnalysisJobRequest
+import com.capstone.focus.api.analysis.dto.response.BroadcastAnalysisContextResponse
 import com.capstone.focus.api.analysis.dto.response.BroadcastAnalysisJobResponse
 import com.capstone.focus.api.analysis.service.BroadcastAnalysisService
+import com.capstone.focus.api.analysis.service.BroadcastPlatformSnapshotService
 import com.capstone.focus.common.common.dto.ApiResponse
 import com.capstone.focus.common.config.InternalApiProperties
 import com.capstone.focus.common.exception.ApiException
@@ -24,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController
 @RequestMapping("/internal/broadcasts")
 class InternalBroadcastAnalysisController(
     private val broadcastAnalysisService: BroadcastAnalysisService,
+    private val broadcastPlatformSnapshotService: BroadcastPlatformSnapshotService,
     private val internalApiProperties: InternalApiProperties
 ) {
 
@@ -35,6 +38,16 @@ class InternalBroadcastAnalysisController(
         validateInternalApiKey(internalApiKey)
         val response = broadcastAnalysisService.getLatestFullSummaryJob(broadcastId)
         return ResponseUtil.success("최신 분석 작업 조회 성공", response)
+    }
+
+    @GetMapping("/{broadcastId}/analysis-context")
+    fun getAnalysisContext(
+        @RequestHeader("X-Internal-Api-Key") internalApiKey: String,
+        @PathVariable broadcastId: String
+    ): ResponseEntity<ApiResponse.Success<BroadcastAnalysisContextResponse>> {
+        validateInternalApiKey(internalApiKey)
+        val response = broadcastPlatformSnapshotService.getAnalysisContext(broadcastId)
+        return ResponseUtil.success("방송 분석 컨텍스트 조회 성공", response)
     }
 
     @PostMapping("/{broadcastId}/analysis-jobs/{analysisJobId}/complete")

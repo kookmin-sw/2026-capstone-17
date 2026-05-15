@@ -28,6 +28,7 @@ services:
       - AWS_REGION=${AWS_REGION}
       - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
       - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_S3_PUBLIC_BASE_URL=${AWS_S3_PUBLIC_BASE_URL}
       - KAKAO_CLIENT_ID=${KAKAO_CLIENT_ID}
       - KAKAO_CLIENT_SECRET=${KAKAO_CLIENT_SECRET}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
@@ -37,15 +38,36 @@ services:
       - EC2_HOST=${EC2_HOST}
       - FASTAPI_BASE_URL=${FASTAPI_BASE_URL}
       - INTERNAL_API_KEY=${INTERNAL_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL}
+      - GEMINI_BASE_URL=${GEMINI_BASE_URL}
       - BROADCAST_OUTPUT_MODE=${BROADCAST_OUTPUT_MODE:-CHZZK_RTMP}
       - BROADCAST_FALLBACK_TO_HLS=${BROADCAST_FALLBACK_TO_HLS:-true}
       - CHZZK_CLIENT_ID=${CHZZK_CLIENT_ID}
       - CHZZK_CLIENT_SECRET=${CHZZK_CLIENT_SECRET}
       - CHZZK_REDIRECT_URI=${CHZZK_REDIRECT_URI}
-      - CHZZK_STREAM_PUBLISH_URL_TEMPLATE=${CHZZK_STREAM_PUBLISH_URL_TEMPLATE}
+      - JAVA_TOOL_OPTIONS=${JAVA_TOOL_OPTIONS:--XX:MaxRAMPercentage=75.0 -XX:+ExitOnOutOfMemoryError}
+      - CHZZK_STREAM_PUBLISH_URL_TEMPLATE=${CHZZK_STREAM_PUBLISH_URL_TEMPLATE:-rtmp://global-rtmp.lip2.navercorp.com:8080/relay/{streamKey}}
+      - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID}
+      - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET}
+      - YOUTUBE_REDIRECT_URI=${YOUTUBE_REDIRECT_URI}
+      - YOUTUBE_LIVE_PRIVACY_STATUS=${YOUTUBE_LIVE_PRIVACY_STATUS:-private}
+      - YOUTUBE_LIVE_LATENCY_PREFERENCE=${YOUTUBE_LIVE_LATENCY_PREFERENCE:-low}
+      - YOUTUBE_PREFER_RTMPS=${YOUTUBE_PREFER_RTMPS:-false}
     depends_on:
       - redis
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/actuator/health/liveness >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 60s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     networks:
       - focus-network
 

@@ -40,6 +40,7 @@ dependencies {
 
     // Web & gRPC
     implementation("org.springframework.boot:spring-boot-starter-web")
+    implementation("org.springframework.boot:spring-boot-starter-actuator")
     implementation("org.springframework.grpc:spring-grpc-server-web-spring-boot-starter")
     implementation("io.grpc:grpc-services")
 
@@ -121,4 +122,8 @@ sourceSets {
 
 tasks.withType<Test> {
 	useJUnitPlatform()
+}
+
+tasks.named<Jar>("jar") {
+	enabled = false
 }

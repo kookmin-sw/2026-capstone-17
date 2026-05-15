@@ -27,12 +27,23 @@ interface ChzzkPlatformService {
     fun getConnectionStatus(memberId: String): ChzzkConnectionStatusResponse
     fun disconnect(memberId: String)
     fun prepareBroadcastTarget(memberId: String, broadcast: Broadcast): ChzzkBroadcastTarget
+    fun getCurrentLiveSnapshot(channelId: String): ChzzkLiveSnapshot?
 }
 
 data class ChzzkBroadcastTarget(
     val platformChannelId: String,
     val watchUrl: String,
     val outputUrl: String
+)
+
+data class ChzzkLiveSnapshot(
+    val channelId: String,
+    val channelName: String?,
+    val liveTitle: String?,
+    val concurrentUserCount: Long?,
+    val categoryType: String?,
+    val liveCategoryId: String?,
+    val liveCategoryName: String?
 )
 
 @Service
@@ -121,6 +132,21 @@ class ChzzkPlatformServiceImpl(
 
         connection.revoke()
         connectionRepository.save(connection)
+    }
+
+    @Transactional(readOnly = true)
+    override fun getCurrentLiveSnapshot(channelId: String): ChzzkLiveSnapshot? {
+        return chzzkClient.getLiveSnapshotByChannelId(channelId)?.let {
+            ChzzkLiveSnapshot(
+                channelId = it.channelId,
+                channelName = it.channelName,
+                liveTitle = it.liveTitle,
+                concurrentUserCount = it.concurrentUserCount,
+                categoryType = it.categoryType,
+                liveCategoryId = it.liveCategoryId,
+                liveCategoryName = it.liveCategoryName
+            )
+        }
     }
 
     @Transactional

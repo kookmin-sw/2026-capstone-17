@@ -2,6 +2,7 @@ package com.capstone.focus.common.external.chzzk
 
 import com.capstone.focus.common.config.FeignConfig
 import com.capstone.focus.common.external.chzzk.dto.ChzzkApiResponse
+import com.capstone.focus.common.external.chzzk.dto.ChzzkLiveListContent
 import com.capstone.focus.common.external.chzzk.dto.ChzzkLiveSettingPatchRequest
 import com.capstone.focus.common.external.chzzk.dto.ChzzkStreamKeyContent
 import com.capstone.focus.common.external.chzzk.dto.ChzzkTokenContent
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.PatchMapping
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RequestHeader
+import org.springframework.web.bind.annotation.RequestParam
 
 @FeignClient(
     name = "chzzk-open-api",
@@ -22,6 +24,14 @@ import org.springframework.web.bind.annotation.RequestHeader
     configuration = [FeignConfig::class]
 )
 interface ChzzkOpenApiFeignClient {
+
+    @GetMapping("/open/v1/lives")
+    fun getLives(
+        @RequestHeader("Client-Id") clientId: String,
+        @RequestHeader("Client-Secret") clientSecret: String,
+        @RequestParam("size") size: Int? = null,
+        @RequestParam("next") next: String? = null
+    ): ChzzkApiResponse<ChzzkLiveListContent>
 
     @PostMapping("/auth/v1/token")
     fun issueToken(@RequestBody request: ChzzkTokenIssueRequest): ChzzkApiResponse<ChzzkTokenContent>

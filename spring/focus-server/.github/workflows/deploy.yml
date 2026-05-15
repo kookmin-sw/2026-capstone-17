@@ -46,7 +46,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "docker-compose.yaml,db/google-login-migration.sql"
+          source: "docker-compose.yaml,db/google-login-migration.sql,scripts/ec2-health-watchdog.sh,scripts/install-ec2-watchdog.sh"
           target: "~/"
 
       - name: Deploy to EC2 via SSH
@@ -67,6 +67,7 @@ jobs:
             echo "AWS_REGION=${{ secrets.AWS_REGION }}" >> .env
             echo "AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}" >> .env
             echo "AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}" >> .env
+            echo "AWS_S3_PUBLIC_BASE_URL=${{ secrets.AWS_S3_PUBLIC_BASE_URL }}" >> .env
             echo "KAKAO_CLIENT_ID=${{ secrets.KAKAO_CLIENT_ID }}" >> .env
             echo "KAKAO_CLIENT_SECRET=${{ secrets.KAKAO_CLIENT_SECRET }}" >> .env
             echo "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}" >> .env
@@ -76,12 +77,21 @@ jobs:
             echo "EC2_HOST=${{ secrets.EC2_HOST }}" >> .env
             echo "FASTAPI_BASE_URL=${{ secrets.FASTAPI_BASE_URL }}" >> .env
             echo "INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}" >> .env
+            echo "GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}" >> .env
+            echo "GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}" >> .env
+            echo "GEMINI_BASE_URL=${{ secrets.GEMINI_BASE_URL }}" >> .env
             echo "BROADCAST_OUTPUT_MODE=${{ secrets.BROADCAST_OUTPUT_MODE }}" >> .env
             echo "BROADCAST_FALLBACK_TO_HLS=${{ secrets.BROADCAST_FALLBACK_TO_HLS }}" >> .env
             echo "CHZZK_CLIENT_ID=${{ secrets.CHZZK_CLIENT_ID }}" >> .env
             echo "CHZZK_CLIENT_SECRET=${{ secrets.CHZZK_CLIENT_SECRET }}" >> .env
             echo "CHZZK_REDIRECT_URI=${{ secrets.CHZZK_REDIRECT_URI }}" >> .env
             echo "CHZZK_STREAM_PUBLISH_URL_TEMPLATE=${{ secrets.CHZZK_STREAM_PUBLISH_URL_TEMPLATE }}" >> .env
+            echo "YOUTUBE_CLIENT_ID=${{ secrets.YOUTUBE_CLIENT_ID }}" >> .env
+            echo "YOUTUBE_CLIENT_SECRET=${{ secrets.YOUTUBE_CLIENT_SECRET }}" >> .env
+            echo "YOUTUBE_REDIRECT_URI=${{ secrets.YOUTUBE_REDIRECT_URI }}" >> .env
+            echo "YOUTUBE_LIVE_PRIVACY_STATUS=${{ secrets.YOUTUBE_LIVE_PRIVACY_STATUS }}" >> .env
+            echo "YOUTUBE_LIVE_LATENCY_PREFERENCE=${{ secrets.YOUTUBE_LIVE_LATENCY_PREFERENCE }}" >> .env
+            echo "YOUTUBE_PREFER_RTMPS=${{ secrets.YOUTUBE_PREFER_RTMPS }}" >> .env
 
             set -a
             . ./.env
@@ -92,9 +102,17 @@ jobs:
               postgres:16-alpine \
               sh -c 'PGPASSWORD="$RDS_PASSWORD" psql -h "$RDS_HOSTNAME" -U "$RDS_USERNAME" -d focus_avatar -f /work/db/google-login-migration.sql'
 
+            sudo docker run --rm \
+              -v "$HOME/db:/work/db" \
+              postgres:16-alpine \
+              sh -c 'PGPASSWORD="$RDS_PASSWORD" psql -h "$RDS_HOSTNAME" -U "$RDS_USERNAME" -d focus_avatar -f /work/db/youtube-platform-migration.sql'
+
             sudo docker pull ${{ secrets.DOCKER_USERNAME }}/focus:latest
 
             sudo docker-compose down || true
             sudo docker-compose up -d
+
+            chmod +x scripts/ec2-health-watchdog.sh scripts/install-ec2-watchdog.sh
+            sudo env FOCUS_APP_HOME="$HOME" bash scripts/install-ec2-watchdog.sh
 
             sudo docker image prune -f

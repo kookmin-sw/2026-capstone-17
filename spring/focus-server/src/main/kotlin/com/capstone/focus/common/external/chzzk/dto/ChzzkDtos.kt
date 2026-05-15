@@ -76,3 +76,36 @@ data class ChzzkLiveSettingPatchRequest(
     @JsonProperty("tags")
     val tags: List<String>? = null
 )
+
+data class ChzzkLiveListContent(
+    @JsonProperty("data")
+    val data: List<ChzzkLiveContent> = emptyList(),
+    @JsonProperty("page")
+    val page: ChzzkCursorPage? = null
+)
+
+data class ChzzkCursorPage(
+    @JsonProperty("next")
+    val next: String? = null
+)
+
+data class ChzzkLiveContent(
+    @JsonProperty("liveId")
+    val liveId: Long? = null,
+    @JsonProperty("liveTitle")
+    val liveTitle: String? = null,
+    @JsonProperty("concurrentUserCount")
+    val concurrentUserCount: Long? = null,
+    @JsonProperty("openDate")
+    val openDate: String? = null,
+    @JsonProperty("categoryType")
+    val categoryType: String? = null,
+    @JsonProperty("liveCategory")
+    val liveCategory: String? = null,
+    @JsonProperty("liveCategoryValue")
+    val liveCategoryValue: String? = null,
+    @JsonProperty("channelId")
+    val channelId: String,
+    @JsonProperty("channelName")
+    val channelName: String? = null
+)
