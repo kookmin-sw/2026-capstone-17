@@ -12,6 +12,7 @@
 		361819C62F5C8B1C003BF757 /* GRPCCore in Frameworks */ = {isa = PBXBuildFile; productRef = 361819C52F5C8B1C003BF757 /* GRPCCore */; };
 		361819C82F5C8B1C003BF757 /* GRPCInProcessTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 361819C72F5C8B1C003BF757 /* GRPCInProcessTransport */; };
 		361BDEDC2F5E9E2800AAACD2 /* opencv2.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 361BDEDB2F5E9E2800AAACD2 /* opencv2.framework */; };
+		36AA00102F75000100AAB001 /* SRTHaishinKit in Frameworks */ = {isa = PBXBuildFile; productRef = 36AA00112F75000100AAB001 /* SRTHaishinKit */; };
 		6F0AC75A71E31063FEED37D6 /* Pods_focusTests.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 77ADF1CDA14AA856B4B99D9B /* Pods_focusTests.framework */; };
 		B2432C6F82140F86F9F1B754 /* Pods_focus.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = BD2F11FC8F3676AFF24DA6FE /* Pods_focus.framework */; };
 /* End PBXBuildFile section */
@@ -90,6 +91,7 @@
 				361819C42F5C8B1C003BF757 /* GRPCCodeGen in Frameworks */,
 				361819C82F5C8B1C003BF757 /* GRPCInProcessTransport in Frameworks */,
 				361819C62F5C8B1C003BF757 /* GRPCCore in Frameworks */,
+				36AA00102F75000100AAB001 /* SRTHaishinKit in Frameworks */,
 				361BDEDC2F5E9E2800AAACD2 /* opencv2.framework in Frameworks */,
 				B2432C6F82140F86F9F1B754 /* Pods_focus.framework in Frameworks */,
 			);
@@ -172,6 +174,7 @@
 				36340CB12F5C2518002F9B5F /* Frameworks */,
 				36340CB22F5C2518002F9B5F /* Resources */,
 				666E15711AD4892E38E22812 /* [CP] Copy Pods Resources */,
+				6833527EFFB029AF9AD608E9 /* [CP] Embed Pods Frameworks */,
 			);
 			buildRules = (
 			);
@@ -181,6 +184,9 @@
 				36340CB62F5C2518002F9B5F /* focus */,
 			);
 			name = focus;
+			packageProductDependencies = (
+				36AA00112F75000100AAB001 /* SRTHaishinKit */,
+			);
 			productName = focus;
 			productReference = 36340CB42F5C2518002F9B5F /* focus.app */;
 			productType = "com.apple.product-type.application";
@@ -263,6 +269,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				361819C22F5C8B1C003BF757 /* XCRemoteSwiftPackageReference "grpc-swift" */,
+				36AA00122F75000100AAB001 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 36340CB52F5C2518002F9B5F /* Products */;
@@ -342,6 +349,27 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-focus/Pods-focus-resources.sh\"\n";
+			showEnvVarsInLog = 0;
+		};
+		6833527EFFB029AF9AD608E9 /* [CP] Embed Pods Frameworks */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-focus/Pods-focus-frameworks-${CONFIGURATION}-input-files.xcfilelist",
+			);
+			inputPaths = (
+			);
+			name = "[CP] Embed Pods Frameworks";
+			outputFileListPaths = (
+				"${PODS_ROOT}/Target Support Files/Pods-focus/Pods-focus-frameworks-${CONFIGURATION}-output-files.xcfilelist",
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${PODS_ROOT}/Target Support Files/Pods-focus/Pods-focus-frameworks.sh\"\n";
 			showEnvVarsInLog = 0;
 		};
 		AE7883D7080568493B4A9F55 /* [CP] Check Pods Manifest.lock */ = {
@@ -572,7 +600,7 @@
 					"$(PROJECT_DIR)/Frameworks",
 					"$(PROJECT_DIR)",
 				);
-				GENERATE_INFOPLIST_FILE = YES;
+				GENERATE_INFOPLIST_FILE = NO;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"\"${PODS_CONFIGURATION_BUILD_DIR}/TensorFlowLiteSwift/TensorFlowLite.framework/Headers\"",
@@ -581,15 +609,8 @@
 					"\"${PODS_ROOT}/Headers/Public/onnxruntime-c\"",
 					"$(PROJECT_DIR)/Frameworks/opencv2.framework/Headers",
 				);
-				INFOPLIST_KEY_NSCameraUsageDescription = "카메라 분석과 얼굴 비식별화 기능을 위해 카메라 접근이 필요합니다.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "녹화 영상에 오디오를 포함하기 위해 마이크 접근이 필요합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "분석이 끝난 결과 영상을 사진 라이브러리에 저장하기 위해 접근이 필요합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "동영상과 owner 이미지를 불러오기 위해 사진 라이브러리 접근이 필요합니다.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_FILE = "FocusApp-Info.plist";
+				KAKAO_NATIVE_APP_KEY = 6469ed2eeff35781c414a39b7a9c3227;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -620,16 +641,9 @@
 					"$(inherited)",
 					"$(PROJECT_DIR)",
 				);
-				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_NSCameraUsageDescription = "카메라 분석과 얼굴 비식별화 기능을 위해 카메라 접근이 필요합니다.";
-				INFOPLIST_KEY_NSMicrophoneUsageDescription = "녹화 영상에 오디오를 포함하기 위해 마이크 접근이 필요합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "분석이 끝난 결과 영상을 사진 라이브러리에 저장하기 위해 접근이 필요합니다.";
-				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "동영상과 owner 이미지를 불러오기 위해 사진 라이브러리 접근이 필요합니다.";
-				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
-				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "FocusApp-Info.plist";
+				KAKAO_NATIVE_APP_KEY = 6469ed2eeff35781c414a39b7a9c3227;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -770,6 +784,14 @@
 				minimumVersion = 2.2.3;
 			};
 		};
+		36AA00122F75000100AAB001 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/shogo4405/HaishinKit.swift.git";
+			requirement = {
+				kind = exactVersion;
+				version = 2.0.1;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -787,6 +809,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 361819C22F5C8B1C003BF757 /* XCRemoteSwiftPackageReference "grpc-swift" */;
 			productName = GRPCInProcessTransport;
+		};
+		36AA00112F75000100AAB001 /* SRTHaishinKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 36AA00122F75000100AAB001 /* XCRemoteSwiftPackageReference "HaishinKit.swift" */;
+			productName = SRTHaishinKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

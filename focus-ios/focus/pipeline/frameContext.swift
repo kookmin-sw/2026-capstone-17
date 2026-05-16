@@ -17,6 +17,7 @@ enum PipelineInputMode {
 
 struct FrameContext {
     let pixelBuffer: CVPixelBuffer
+    let videoSampleBuffer: CMSampleBuffer?
     let pts: CMTime
     let ptsUs: Int64
     let sessionID: String?

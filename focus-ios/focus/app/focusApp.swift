@@ -12,30 +12,54 @@ import UIKit
 struct FocusApp: App {
     @UIApplicationDelegateAdaptor(FocusAppDelegate.self) private var appDelegate
     @Environment(\.scenePhase) private var scenePhase
-    @State private var showsMainPage = false
+    @StateObject private var loginViewModel = KakaoLoginViewModel()
 
     var body: some Scene {
         WindowGroup {
             ZStack {
-                if showsMainPage {
+                if loginViewModel.isAuthenticated && loginViewModel.isChzzkConnected {
                     ContentView()
                         .modifier(AppOrientationModifier(mask: .landscapeRight, rotateTo: .landscapeRight))
                         .transition(.opacity)
+                } else if loginViewModel.isAuthenticated {
+                    ChzzkConnectGateView(
+                        onTapConnect: {
+                            loginViewModel.connectChzzk()
+                        },
+                        onTapRefresh: {
+                            loginViewModel.refreshChzzkConnectionStatusIfNeeded()
+                        },
+                        isLoading: loginViewModel.isCheckingChzzkStatus || loginViewModel.isOpeningChzzkConnect,
+                        channelName: loginViewModel.chzzkChannelName,
+                        watchURL: loginViewModel.chzzkWatchURL,
+                        errorMessage: loginViewModel.errorMessage
+                    )
+                    .modifier(AppOrientationModifier(mask: .portrait, rotateTo: .portrait))
+                    .transition(.opacity)
                 } else {
-                    StartView(onTapPrepare: {
-                        withAnimation(.easeInOut(duration: 0.25)) {
-                            showsMainPage = true
-                        }
-                    })
+                    StartView(
+                        onTapPrepare: {
+                            loginViewModel.loginWithKakao()
+                        },
+                        isLoading: loginViewModel.isBootstrapping || loginViewModel.isLoggingIn,
+                        errorMessage: loginViewModel.errorMessage
+                    )
                     .modifier(AppOrientationModifier(mask: .portrait, rotateTo: .portrait))
                     .transition(.opacity)
                 }
             }
             .onAppear {
                 ScreenWakeController.update(for: scenePhase)
+                loginViewModel.bootstrapIfNeeded()
             }
             .onChange(of: scenePhase) { _, newPhase in
                 ScreenWakeController.update(for: newPhase)
+                if newPhase == .active {
+                    loginViewModel.refreshChzzkConnectionStatusIfNeeded()
+                }
+            }
+            .onOpenURL { url in
+                loginViewModel.handleOpenURL(url)
             }
         }
     }
@@ -46,9 +70,25 @@ final class FocusAppDelegate: NSObject, UIApplicationDelegate {
 
     func application(
         _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        KakaoSDKRuntime.initializeIfPossible(appKey: KakaoAuthConfiguration.nativeAppKey)
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
         supportedInterfaceOrientationsFor window: UIWindow?
     ) -> UIInterfaceOrientationMask {
         Self.orientationLock
+    }
+
+    func application(
+        _ app: UIApplication,
+        open url: URL,
+        options: [UIApplication.OpenURLOptionsKey: Any] = [:]
+    ) -> Bool {
+        KakaoSDKRuntime.handleOpenURL(url)
     }
 }
 

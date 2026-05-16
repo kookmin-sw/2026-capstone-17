@@ -36,6 +36,10 @@ final class FocusAppViewModel: ObservableObject {
     @Published var completedStreamReport: PostStreamAnalysisReport?
     @Published var archivedStreamReports: [PostStreamAnalysisReport] = []
     @Published var isReportArchivePresented: Bool = false
+    @Published var activeBroadcastID: String?
+    @Published var activeBroadcastOutputMode: String?
+    @Published var activeBroadcastWatchURLText: String?
+    @Published var activeBroadcastStartFailureReason: String?
 
     let cameraManager = CameraSessionManager()
 
@@ -44,6 +48,7 @@ final class FocusAppViewModel: ObservableObject {
     let timestampCorrector = MonotonicTimestampCorrector()
     let fileCoordinator = SessionFileCoordinator()
     let ownerStore = OwnerEmbeddingStore()
+    let appTokenStore = AppTokenStore()
     private let ownerClassifier = OwnerOtherClassifier()
     lazy var sessionAPIClient: SessionAPIClient? = {
         guard FocusConstants.enableRemoteSessionLifecycle,
@@ -52,6 +57,22 @@ final class FocusAppViewModel: ObservableObject {
         }
 
         return SessionAPIClient(baseURL: baseURL)
+    }()
+    lazy var broadcastAPIClient: BroadcastAPIClient? = {
+        guard FocusConstants.enableRemoteBroadcastLifecycle,
+              let baseURL = URL(string: FocusConstants.serverBaseURLString) else {
+            return nil
+        }
+
+        return BroadcastAPIClient(baseURL: baseURL)
+    }()
+    lazy var accountAPIClient: AccountAPIClient? = {
+        guard FocusConstants.enableRemoteBroadcastLifecycle,
+              let baseURL = URL(string: FocusConstants.serverBaseURLString) else {
+            return nil
+        }
+
+        return AccountAPIClient(baseURL: baseURL)
     }()
     lazy var metadataRepository: MetadataFrameWriting = {
         let localRepository = JSONMetadataRepository(fileCoordinator: fileCoordinator)
@@ -67,6 +88,11 @@ final class FocusAppViewModel: ObservableObject {
     var pendingOwnerRegistrationFeedback = false
     var pendingOwnerFeedbackTask: Task<Void, Never>?
     var statusDismissTask: Task<Void, Never>?
+    var broadcastHeartbeatTask: Task<Void, Never>?
+    var activeBroadcastSession: BroadcastSession?
+    var preparedBroadcastSession: PreparedBroadcastSession?
+    var preparedBroadcastStartTask: Task<Void, Never>?
+    var activeBroadcastStreamer: SRTBroadcastStreamer?
 
     var cameraSession: AVCaptureSession {
         cameraManager.session
@@ -86,6 +112,46 @@ final class FocusAppViewModel: ObservableObject {
 
     var recordingStateText: String {
         isRecording ? "녹화 중" : "대기"
+    }
+
+    var shouldShowBroadcastDebugCard: Bool {
+        activeBroadcastID != nil ||
+        preparedBroadcastSession != nil ||
+        activeBroadcastSession != nil ||
+        activeBroadcastOutputMode != nil ||
+        activeBroadcastWatchURLText != nil ||
+        activeBroadcastStartFailureReason != nil
+    }
+
+    var displayBroadcastOutputModeText: String {
+        if let outputMode = activeBroadcastOutputMode, !outputMode.isEmpty {
+            return outputMode
+        }
+        if preparedBroadcastSession != nil {
+            return "START_PENDING"
+        }
+        return "-"
+    }
+
+    var displayBroadcastWatchURLText: String {
+        if let watchURLText = activeBroadcastWatchURLText, !watchURLText.isEmpty {
+            return watchURLText
+        }
+        if preparedBroadcastSession != nil {
+            return "방송 시작 응답 대기 중"
+        }
+        return "-"
+    }
+
+    var displayBroadcastStartFailureReasonText: String {
+        if let failureReason = activeBroadcastStartFailureReason,
+           !failureReason.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return failureReason
+        }
+        if preparedBroadcastSession != nil {
+            return "아직 없음"
+        }
+        return "-"
     }
 
     var cameraStatusText: String {
@@ -184,10 +250,26 @@ final class FocusAppViewModel: ObservableObject {
             self.lastMetadataURL = nil
             self.lastAvatarVideoURL = nil
             self.lastAvatarSchemaURL = nil
+            self.activeBroadcastID = nil
+            self.activeBroadcastOutputMode = nil
+            self.activeBroadcastWatchURLText = nil
+            self.activeBroadcastStartFailureReason = nil
+
+            do {
+                let remoteStreamer = try await self.prepareRemoteBroadcastIfNeeded()
+                pipelineController.liveBroadcastStreamer = remoteStreamer
+            } catch {
+                pipelineController.liveBroadcastStreamer = nil
+                self.handleError(error.localizedDescription)
+                return
+            }
 
             do {
                 try pipelineController.start(sessionID: newSessionID)
             } catch {
+                Task {
+                    await self.stopRemoteBroadcastIfNeeded()
+                }
                 self.handleError(error.localizedDescription)
                 return
             }

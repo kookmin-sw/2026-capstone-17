@@ -9,6 +9,8 @@ import SwiftUI
 
 struct LaunchIntroView: View {
     let onTapContinue: () -> Void
+    let isLoading: Bool
+    let errorMessage: String?
 
     @State private var selectedSlide = 0
 
@@ -16,7 +18,7 @@ struct LaunchIntroView: View {
 
     private let slides: [IntroSlide] = [
         IntroSlide(
-            title: "스트리머는 그대로, 배경 인물은 안전하게",
+            title: "스트리머는 그대로,\n배경인물은 안전하게",
             subtitle: "초상권 걱정 없는 스마트 라이브 스트리밍"
         ),
         IntroSlide(
@@ -97,20 +99,6 @@ private extension LaunchIntroView {
                 .tracking(1.4)
 
             Spacer()
-
-            Text("Avatar 기본")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .foregroundStyle(LaunchTheme.primary)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 7)
-                .background(
-                    Capsule()
-                        .fill(Color.white.opacity(0.82))
-                )
-                .overlay(
-                    Capsule()
-                        .stroke(LaunchTheme.border, lineWidth: 1)
-                )
         }
     }
 
@@ -180,23 +168,47 @@ private extension LaunchIntroView {
     }
 
     var footerSection: some View {
-        Button(action: onTapContinue) {
-            Text("시작하기")
-                .font(.system(size: 18, weight: .bold, design: .rounded))
-                .foregroundStyle(.white)
+        VStack(spacing: 12) {
+            Button(action: onTapContinue) {
+                HStack(spacing: 12) {
+                    if isLoading {
+                        ProgressView()
+                            .tint(LaunchTheme.kakaoText)
+                            .frame(width: 28, height: 28)
+                    } else {
+                        Image(systemName: "message.fill")
+                            .font(.system(size: 19, weight: .black))
+                            .foregroundStyle(LaunchTheme.kakaoText)
+                            .frame(width: 28, height: 28)
+                    }
+
+                    Text(isLoading ? "카카오 로그인 준비 중..." : "카카오톡으로 시작하기")
+                        .font(.system(size: 18, weight: .bold, design: .rounded))
+                        .foregroundStyle(LaunchTheme.kakaoText)
+                }
                 .frame(maxWidth: .infinity)
                 .frame(height: 58)
-                .background(
-                    LinearGradient(
-                        colors: [LaunchTheme.cta, LaunchTheme.ctaBright],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                )
+                .background(LaunchTheme.kakaoYellow)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-                .shadow(color: LaunchTheme.cta.opacity(0.24), radius: 18, x: 0, y: 12)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18, style: .continuous)
+                        .stroke(Color.black.opacity(0.08), lineWidth: 1)
+                )
+                .shadow(color: Color.black.opacity(0.08), radius: 14, x: 0, y: 10)
+            }
+            .buttonStyle(.plain)
+            .disabled(isLoading)
+
+            if let errorMessage, !errorMessage.isEmpty {
+                Text(errorMessage)
+                    .font(.system(size: 13, weight: .medium, design: .rounded))
+                    .foregroundStyle(Color.red.opacity(0.82))
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+                    .frame(maxWidth: .infinity)
+                    .padding(.horizontal, 8)
+            }
         }
-        .buttonStyle(.plain)
     }
 }
 
@@ -213,8 +225,10 @@ private enum LaunchTheme {
     static let background = Color(red: 240.0 / 255.0, green: 249.0 / 255.0, blue: 255.0 / 255.0)
     static let text = Color(red: 12.0 / 255.0, green: 74.0 / 255.0, blue: 110.0 / 255.0)
     static let border = Color(red: 215.0 / 255.0, green: 234.0 / 255.0, blue: 245.0 / 255.0)
+    static let kakaoYellow = Color(red: 254.0 / 255.0, green: 229.0 / 255.0, blue: 0.0 / 255.0)
+    static let kakaoText = Color(red: 25.0 / 255.0, green: 25.0 / 255.0, blue: 25.0 / 255.0)
 }
 
 #Preview {
-    LaunchIntroView(onTapContinue: {})
+    LaunchIntroView(onTapContinue: {}, isLoading: false, errorMessage: nil)
 }

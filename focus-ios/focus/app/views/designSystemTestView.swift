@@ -23,7 +23,7 @@ struct DesignSystemTestView: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            topStatusCluster
+            topStatusArea
                 .padding(.top, 18)
                 .padding(.leading, 22)
                 .allowsHitTesting(false)
@@ -216,6 +216,64 @@ private extension DesignSystemTestView {
                     title: "Owner \(viewModel.ownerProfiles.count)"
                 )
             }
+        }
+    }
+
+    var topStatusArea: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            topStatusCluster
+
+            if viewModel.shouldShowBroadcastDebugCard {
+                broadcastDebugCard
+            }
+        }
+    }
+
+    var broadcastDebugCard: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Broadcast Debug")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.92))
+
+            broadcastDebugRow(
+                label: "outputMode",
+                value: viewModel.displayBroadcastOutputModeText
+            )
+
+            broadcastDebugRow(
+                label: "watchUrl",
+                value: viewModel.displayBroadcastWatchURLText
+            )
+
+            broadcastDebugRow(
+                label: "startFailure",
+                value: viewModel.displayBroadcastStartFailureReasonText
+            )
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: 360, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .fill(Color.black.opacity(0.32))
+                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    func broadcastDebugRow(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(label)
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(.white.opacity(0.66))
+            Text(value)
+                .font(.system(size: 11, weight: .medium, design: .rounded))
+                .foregroundStyle(.white)
+                .lineLimit(3)
+                .multilineTextAlignment(.leading)
         }
     }
 

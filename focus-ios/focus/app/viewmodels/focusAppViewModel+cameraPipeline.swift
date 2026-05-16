@@ -145,6 +145,8 @@ extension FocusAppViewModel {
                         await self.saveRecordingToPhotoLibrary(recordingURL)
                     }
 
+                    await self.stopRemoteBroadcastIfNeeded()
+
                     if let finishedSessionID {
                         await self.closeRemoteSessionIfNeeded(sessionID: finishedSessionID)
                     }
@@ -155,6 +157,12 @@ extension FocusAppViewModel {
 
             pipeline.onOwnerStoreChanged = { [weak self] in
                 self?.refreshOwnerProfiles(showSuccessIfPending: true)
+            }
+
+            pipeline.onLiveBroadcastFirstVideoFrame = { [weak self] in
+                Task { @MainActor in
+                    self?.confirmPreparedRemoteBroadcastStartIfNeeded()
+                }
             }
 
             self.pipelineController = pipeline

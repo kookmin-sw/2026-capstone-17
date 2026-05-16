@@ -5,6 +5,9 @@ target 'focus' do
 
   pod 'TensorFlowLiteSwift'
   pod 'onnxruntime-objc'
+  pod 'KakaoSDKCommon', '~> 2.22'
+  pod 'KakaoSDKAuth', '~> 2.22'
+  pod 'KakaoSDKUser', '~> 2.22'
 
   target 'focusTests' do
     inherit! :search_paths

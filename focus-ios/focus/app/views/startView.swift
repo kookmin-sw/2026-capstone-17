@@ -9,12 +9,18 @@ import SwiftUI
 
 struct StartView: View {
     let onTapPrepare: () -> Void
+    let isLoading: Bool
+    let errorMessage: String?
 
     var body: some View {
-        LaunchIntroView(onTapContinue: onTapPrepare)
+        LaunchIntroView(
+            onTapContinue: onTapPrepare,
+            isLoading: isLoading,
+            errorMessage: errorMessage
+        )
     }
 }
 
 #Preview {
-    StartView(onTapPrepare: {})
+    StartView(onTapPrepare: {}, isLoading: false, errorMessage: nil)
 }

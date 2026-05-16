@@ -19,7 +19,7 @@ extension FocusAppViewModel {
             previewSize: previewSize,
             tracks: visibleTracks,
             sourceSize: previewSourceSize,
-            isMirrored: cameraFacing == .front
+            isMirrored: false
         ) else {
             return nil
         }

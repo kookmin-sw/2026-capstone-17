@@ -36,6 +36,7 @@ final class FocusPipelineController {
     var onStateChanged: ((PipelineState) -> Void)?
     var onSessionFinished: ((PipelineSessionOutputs) -> Void)?
     var onOwnerStoreChanged: (() -> Void)?
+    var onLiveBroadcastFirstVideoFrame: (() -> Void)?
 
     // MARK: - Queues
     private let inferenceQueue = DispatchQueue(label: "focus.pipeline.inferenceQueue", qos: .userInitiated)
@@ -54,6 +55,7 @@ final class FocusPipelineController {
     private let tracker: FaceTracker
     private let stateMachine: TrackStateMachine?
     private let recorder: LocalRecorder?
+    var liveBroadcastStreamer: SRTBroadcastStreamer?
     private let timestampCorrector: MonotonicTimestampCorrector?
     private let maskRenderer: PrivacyMaskRenderer?
     private let metadataRepository: MetadataFrameWriting?
@@ -72,6 +74,7 @@ final class FocusPipelineController {
     private var manualOwnerBindings: [Int: ManualOwnerBinding] = [:]
     private var manualOwnerRegistrationLastAttemptAt: [Int: Date] = [:]
     private var soleOwnerVisibilityLock: SoleOwnerVisibilityLock?
+    private var hasDeliveredLiveBroadcastFirstVideoFrame = false
 
     init(
         frameProcessor: FocusFrameProcessor,
@@ -115,6 +118,7 @@ final class FocusPipelineController {
         self.sessionID = sessionID
         self.frameIndex = 0
         self.activeRecordingURL = nil
+        self.hasDeliveredLiveBroadcastFirstVideoFrame = false
         metadataRepository?.startSession(sessionID: sessionID)
         timestampCorrector?.reset()
         syncMonitor?.reset()
@@ -180,6 +184,7 @@ final class FocusPipelineController {
 
         let context = FrameContext(
             pixelBuffer: pixelBuffer,
+            videoSampleBuffer: sampleBuffer,
             pts: pts,
             ptsUs: ptsUs,
             sessionID: currentSessionID,
@@ -211,6 +216,7 @@ final class FocusPipelineController {
         let ptsUs = Int64(CMTimeGetSeconds(pts) * FocusConstants.ptsScaleMicroseconds)
         let context = FrameContext(
             pixelBuffer: pixelBuffer,
+            videoSampleBuffer: nil,
             pts: pts,
             ptsUs: ptsUs,
             sessionID: nil,
@@ -233,7 +239,11 @@ final class FocusPipelineController {
         syncMonitor?.recordAudioPTS(CMSampleBufferGetPresentationTimeStamp(sampleBuffer))
 
         encoderQueue.async { [weak self] in
-            self?.recorder?.appendAudioSampleBuffer(sampleBuffer)
+            if let liveBroadcastStreamer = self?.liveBroadcastStreamer {
+                liveBroadcastStreamer.appendAudio(sampleBuffer)
+            } else {
+                self?.recorder?.appendAudioSampleBuffer(sampleBuffer)
+            }
         }
     }
 
@@ -315,6 +325,7 @@ final class FocusPipelineController {
         lock.lock()
         frameIndex = 0
         previewFrameIndex = 0
+        hasDeliveredLiveBroadcastFirstVideoFrame = false
 
         if clearManualOwnerBindings {
             pendingManualOwnerTrackIDs.removeAll()
@@ -386,6 +397,7 @@ final class FocusPipelineController {
                 syncMonitor?.recordVideoPTS(context.pts)
                 appendRecordingFrameIfNeeded(
                     pixelBuffer: context.pixelBuffer,
+                    sourceSampleBuffer: context.videoSampleBuffer,
                     tracks: recordingMaskTracks,
                     pts: context.pts,
                     sessionID: sessionID
@@ -567,18 +579,11 @@ final class FocusPipelineController {
     // MARK: - Recording / Finalize
     private func appendRecordingFrameIfNeeded(
         pixelBuffer: CVPixelBuffer,
+        sourceSampleBuffer: CMSampleBuffer?,
         tracks: [TrackedFace],
         pts: CMTime,
         sessionID: String
     ) {
-        guard let recorder else { return }
-
-        prepareRecorderIfNeeded(
-            recorder: recorder,
-            pixelBuffer: pixelBuffer,
-            sessionID: sessionID
-        )
-
         let recordingPixelBuffer: CVPixelBuffer
         if let maskRenderer {
             if shouldMaskRecordingFaces,
@@ -592,6 +597,32 @@ final class FocusPipelineController {
         } else {
             recordingPixelBuffer = pixelBuffer
         }
+
+        if let liveBroadcastStreamer,
+           let sourceSampleBuffer,
+           let videoSampleBuffer = VideoSampleBufferFactory.makeSampleBuffer(
+                from: recordingPixelBuffer,
+                timingSource: sourceSampleBuffer
+           ) {
+            if !hasDeliveredLiveBroadcastFirstVideoFrame {
+                hasDeliveredLiveBroadcastFirstVideoFrame = true
+                DispatchQueue.main.async { [weak self] in
+                    self?.onLiveBroadcastFirstVideoFrame?()
+                }
+            }
+            encoderQueue.async {
+                liveBroadcastStreamer.appendVideo(videoSampleBuffer)
+            }
+            return
+        }
+
+        guard let recorder else { return }
+
+        prepareRecorderIfNeeded(
+            recorder: recorder,
+            pixelBuffer: pixelBuffer,
+            sessionID: sessionID
+        )
 
         encoderQueue.async {
             recorder.appendVideoPixelBuffer(recordingPixelBuffer, pts: pts)
