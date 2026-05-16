@@ -9,6 +9,7 @@ from adapters.media_source import MediaSource, create_media_source
 from adapters.metadata_store import MetadataStore
 from model.renderer import AvatarRenderer
 from schemas.stream import OutputMode, StreamStatusResponse
+from services.avatar_assets import AvatarAssetResolver
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,8 @@ class StreamPipeline:
         metadata_store: MetadataStore,
         avatar_rendering_enabled: bool = True,
         avatar_project_dir: str | None = None,
-        avatar_bank_dir: str | None = None,
+        avatar_bank_dir: str | list[str] | None = None,
+        avatar_asset_resolver: AvatarAssetResolver | None = None,
         avatar_random_seed: int = 0,
         metadata_poll_attempts: int = 3,
         metadata_poll_interval_ms: int = 10,
@@ -81,6 +83,7 @@ class StreamPipeline:
         self._avatar_rendering_enabled = avatar_rendering_enabled
         self._avatar_project_dir = avatar_project_dir
         self._avatar_bank_dir = avatar_bank_dir
+        self._avatar_asset_resolver = avatar_asset_resolver
         self._avatar_random_seed = int(avatar_random_seed)
         self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
         self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
@@ -181,7 +184,7 @@ class StreamPipeline:
             logger.info("pipeline_finished broadcast_id=%s state=%s", self.broadcast_id, self._state.value)
 
     def _should_render_avatar(self) -> bool:
-        return bool(self.avatar_id) and self._avatar_rendering_enabled
+        return self._avatar_rendering_enabled
 
     async def _run_relay_loop(self) -> None:
         logger.info("pipeline_relay_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
@@ -227,6 +230,7 @@ class StreamPipeline:
                     self._stats.metadata_misses += 1
                 else:
                     self._stats.metadata_hits += 1
+                    await self._prepare_face_avatar_assets(face_metadata)
                 rendered_frame = await renderer.render(
                     frame,
                     face_metadata=face_metadata,
@@ -262,6 +266,18 @@ class StreamPipeline:
             if attempt + 1 < self._metadata_poll_attempts and not self._stop_event.is_set():
                 await asyncio.sleep(self._metadata_poll_interval_s)
         return None
+
+    async def _prepare_face_avatar_assets(self, face_metadata: dict) -> None:
+        if self._avatar_asset_resolver is None:
+            return
+        try:
+            await self._avatar_asset_resolver.prepare_face_avatar_assets(face_metadata)
+        except Exception as exc:
+            logger.warning(
+                "avatar_asset_prepare_failed broadcast_id=%s detail=%s",
+                self.broadcast_id,
+                exc,
+            )
 
     def _prepare_output_dirs(self) -> None:
         if self.output_mode == OutputMode.HLS:

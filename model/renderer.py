@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
 
@@ -16,7 +17,7 @@ class AvatarRenderer:
         self,
         *,
         avatar_project_dir: str | Path | None = None,
-        avatar_bank_dir: str | Path | None = None,
+        avatar_bank_dir: str | Path | Sequence[str | Path] | None = None,
         avatar_random_seed: int = 0,
     ) -> None:
         self._avatar_project_dir = avatar_project_dir

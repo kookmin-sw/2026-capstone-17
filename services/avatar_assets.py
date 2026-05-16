@@ -3,8 +3,10 @@ import logging
 import shutil
 import tempfile
 import zipfile
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 from urllib.parse import urlparse
+from typing import Any
 
 from core.config import Settings
 
@@ -34,6 +36,27 @@ class AvatarAssetResolver:
 
         await asyncio.to_thread(self._materialize_avatar, avatar_id, avatar_asset_key, target_dir)
         return str(target_dir)
+
+    async def prepare_face_avatar_assets(self, face_metadata: Mapping[str, Any] | None) -> None:
+        if not isinstance(face_metadata, Mapping):
+            return
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, Sequence) or isinstance(raw_faces, (str, bytes)):
+            return
+
+        prepared_pairs: set[tuple[str, str]] = set()
+        for raw_face in raw_faces:
+            if not isinstance(raw_face, Mapping):
+                continue
+            avatar_id = raw_face.get("avatar_id", raw_face.get("avatarId"))
+            avatar_asset_key = raw_face.get("avatar_asset_key", raw_face.get("avatarAssetKey"))
+            if not avatar_id or not avatar_asset_key:
+                continue
+            pair = (str(avatar_id), str(avatar_asset_key))
+            if pair in prepared_pairs:
+                continue
+            prepared_pairs.add(pair)
+            await self.prepare_avatar_bank(pair[0], pair[1])
 
     def _materialize_avatar(self, avatar_id: str, avatar_asset_key: str, target_dir: Path) -> None:
         logger.info(

@@ -27,7 +27,7 @@ class LiveAvatarReenactor:
         self,
         *,
         avatar_project_dir: str | Path | None = None,
-        avatar_bank_dir: str | Path | None = None,
+        avatar_bank_dir: str | Path | Sequence[str | Path] | None = None,
         random_seed: int = 0,
     ) -> None:
         repo_root = Path(__file__).resolve().parents[1]
@@ -36,11 +36,7 @@ class LiveAvatarReenactor:
             default=repo_root / "focus-avatar" / "project",
             base=repo_root,
         )
-        self._avatar_bank_dir = self._resolve_path(
-            avatar_bank_dir,
-            default=self._project_dir / "avatar_bank",
-            base=repo_root,
-        )
+        self._avatar_bank_dirs = self._resolve_bank_dirs(avatar_bank_dir, repo_root)
         self._random_seed = int(random_seed)
 
         self._modules: _AvatarModules | None = None
@@ -72,6 +68,29 @@ class LiveAvatarReenactor:
             path = base / path
         return path.resolve()
 
+    def _resolve_bank_dirs(
+        self,
+        raw_paths: str | Path | Sequence[str | Path] | None,
+        repo_root: Path,
+    ) -> list[Path]:
+        if raw_paths is None:
+            raw_values: list[str | Path | None] = [self._project_dir / "avatar_bank"]
+        elif isinstance(raw_paths, (str, Path)):
+            raw_values = [raw_paths]
+        else:
+            raw_values = list(raw_paths)
+
+        resolved_dirs: list[Path] = []
+        for raw_value in raw_values:
+            path = self._resolve_path(
+                raw_value,
+                default=self._project_dir / "avatar_bank",
+                base=repo_root,
+            )
+            if path not in resolved_dirs:
+                resolved_dirs.append(path)
+        return resolved_dirs
+
     def render_frame(
         self,
         frame_bgr: Any,
@@ -79,12 +98,22 @@ class LiveAvatarReenactor:
         avatar_id: str | None,
     ) -> Any:
         try:
-            modules = self._ensure_ready()
-            selected_faces = self._normalize_faces(face_metadata)
+            selected_faces = self._normalize_faces(
+                face_metadata,
+                require_face_avatar=avatar_id is None,
+            )
             if not selected_faces:
                 return frame_bgr
 
-            avatar_ids = self._resolve_avatar_ids(avatar_id)
+            modules = self._ensure_ready()
+            requested_avatar_ids = sorted(
+                {
+                    str(selected["avatar_id"])
+                    for selected in selected_faces
+                    if selected.get("avatar_id") is not None
+                }
+            )
+            avatar_ids = self._resolve_avatar_ids(avatar_id, requested_avatar_ids)
             selected_faces = sorted(selected_faces, key=modules.bbox_area, reverse=True)
             used_untracked_face_keys: set[str] = set()
             rendered_bgr = frame_bgr
@@ -131,13 +160,10 @@ class LiveAvatarReenactor:
     def _ensure_ready(self) -> _AvatarModules:
         modules = self._ensure_modules()
         if not self._avatar_profile_paths_by_id:
-            self._avatar_profile_paths_by_id = modules.discover_avatar_bank_entries(
-                [self._avatar_bank_dir]
-            )
-            self._avatar_ids = sorted(self._avatar_profile_paths_by_id.keys())
+            self._refresh_avatar_profile_paths()
             if not self._avatar_ids:
                 raise RuntimeError(
-                    f"No avatar profiles were found under avatar bank: {self._avatar_bank_dir}"
+                    f"No avatar profiles were found under avatar banks: {self._avatar_bank_dirs}"
                 )
 
         if self._mean_face is None:
@@ -174,11 +200,22 @@ class LiveAvatarReenactor:
         )
         return self._modules
 
-    def _resolve_avatar_ids(self, avatar_id: str | None) -> list[str]:
+    def _refresh_avatar_profile_paths(self) -> None:
+        modules = self._ensure_modules()
+        self._avatar_profile_paths_by_id = modules.discover_avatar_bank_entries(self._avatar_bank_dirs)
+        self._avatar_ids = sorted(self._avatar_profile_paths_by_id.keys())
+
+    def _resolve_avatar_ids(self, avatar_id: str | None, requested_avatar_ids: list[str]) -> list[str]:
         if not avatar_id:
-            return list(self._avatar_ids)
+            for requested_avatar_id in requested_avatar_ids:
+                if requested_avatar_id not in self._avatar_profile_paths_by_id:
+                    self._refresh_avatar_profile_paths()
+                    break
+            return requested_avatar_ids or list(self._avatar_ids)
 
         requested = str(avatar_id)
+        if requested not in self._avatar_profile_paths_by_id:
+            self._refresh_avatar_profile_paths()
         if requested not in self._avatar_profile_paths_by_id:
             raise RuntimeError(f"Unknown avatar_id '{requested}' in avatar bank.")
 
@@ -197,7 +234,11 @@ class LiveAvatarReenactor:
         self._avatar_profile_cache[avatar_id] = profile
         return profile
 
-    def _normalize_faces(self, face_metadata: Mapping[str, Any] | None) -> list[dict[str, Any]]:
+    def _normalize_faces(
+        self,
+        face_metadata: Mapping[str, Any] | None,
+        require_face_avatar: bool,
+    ) -> list[dict[str, Any]]:
         if not isinstance(face_metadata, Mapping):
             return []
 
@@ -217,13 +258,18 @@ class LiveAvatarReenactor:
                 continue
 
             tracking_id = raw_face.get("tracking_id", raw_face.get("trackingId"))
-            normalized_faces.append(
-                {
-                    "tracking_id": tracking_id,
-                    "bbox": bbox,
-                    "tdmm_raw": {"coeffs": coeffs},
-                }
-            )
+            face_avatar_id = raw_face.get("avatar_id", raw_face.get("avatarId"))
+            if require_face_avatar and not face_avatar_id:
+                continue
+
+            normalized_face = {
+                "tracking_id": tracking_id,
+                "bbox": bbox,
+                "tdmm_raw": {"coeffs": coeffs},
+            }
+            if face_avatar_id:
+                normalized_face["avatar_id"] = str(face_avatar_id)
+            normalized_faces.append(normalized_face)
         return normalized_faces
 
     def _normalize_bbox(self, raw_bbox: Any) -> dict[str, float] | None:

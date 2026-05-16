@@ -58,7 +58,7 @@ class StreamManager:
                 self._build_hls_url(req.broadcast_id) if output_mode == OutputMode.HLS else None
             )
             analysis_output_path = self._analysis_archive.build_analysis_path(req.broadcast_id)
-            avatar_bank_dir = await self._prepare_avatar_bank(req)
+            avatar_bank_dirs = await self._prepare_avatar_bank_dirs(req)
 
             try:
                 pipeline = StreamPipeline(
@@ -74,7 +74,8 @@ class StreamManager:
                     metadata_store=metadata_store,
                     avatar_rendering_enabled=self._settings.avatar_rendering_enabled,
                     avatar_project_dir=self._settings.avatar_project_dir,
-                    avatar_bank_dir=avatar_bank_dir,
+                    avatar_bank_dir=avatar_bank_dirs,
+                    avatar_asset_resolver=self._avatar_assets,
                     avatar_random_seed=self._settings.avatar_random_seed,
                     metadata_poll_attempts=self._settings.metadata_poll_attempts,
                     metadata_poll_interval_ms=self._settings.metadata_poll_interval_ms,
@@ -148,11 +149,22 @@ class StreamManager:
         except ValueError:
             return OutputMode.HLS
 
-    async def _prepare_avatar_bank(self, req: StreamStartRequest) -> str | None:
+    async def _prepare_avatar_bank_dirs(self, req: StreamStartRequest) -> list[str]:
         try:
-            return await self._avatar_assets.prepare_avatar_bank(req.avatar_id, req.avatar_asset_key)
+            prepared_bank_dir = await self._avatar_assets.prepare_avatar_bank(req.avatar_id, req.avatar_asset_key)
         except RuntimeError as exc:
             raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc
+
+        bank_dirs = [
+            prepared_bank_dir,
+            self._settings.avatar_cache_dir,
+            self._settings.avatar_bank_dir,
+        ]
+        unique_bank_dirs: list[str] = []
+        for bank_dir in bank_dirs:
+            if bank_dir and bank_dir not in unique_bank_dirs:
+                unique_bank_dirs.append(bank_dir)
+        return unique_bank_dirs
 
     def _schedule_analysis(self, pipeline: StreamPipeline) -> None:
         if not self._settings.analysis_enabled:

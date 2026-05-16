@@ -205,12 +205,19 @@ def build_single_face_plan(
     # 현재 reenact 경로는 avatar bank를 전제로 하므로,
     # 얼굴별 avatar_id를 정하고 현재 yaw에 맞는 source_view를 항상 고른다.
     # source_view는 정면/좌측/우측 같은 avatar 기준 이미지 방향을 의미한다.
-    avatar_id = choose_avatar_id_for_face(
-        face_key=face_key,
-        avatar_ids=avatar_ids,
-        assignment_by_face=avatar_assignment_by_face,
-        rng=avatar_rng,
-    )
+    requested_avatar_id = selected.get("avatar_id")
+    if requested_avatar_id is not None:
+        avatar_id = str(requested_avatar_id)
+        if avatar_id not in avatar_ids:
+            return None
+        avatar_assignment_by_face[face_key] = avatar_id
+    else:
+        avatar_id = choose_avatar_id_for_face(
+            face_key=face_key,
+            avatar_ids=avatar_ids,
+            assignment_by_face=avatar_assignment_by_face,
+            rng=avatar_rng,
+        )
     avatar_profile = load_avatar_profile_for_id(avatar_id)
     source_view = select_avatar_view(avatar_profile, coeff_to_pose_radians(coeff_264)["yaw"])
 
