@@ -84,13 +84,12 @@ class PyAVMediaSource:
                 continue
 
             pts_us = self._resolve_pts_us(frame)
-            rgb_frame = frame.reformat(format="rgb24")
-            payload = bytes(rgb_frame.planes[0])
+            rgb_frame = frame.to_ndarray(format="rgb24")
             return VideoFrame(
                 pts_us=pts_us,
-                payload=payload,
-                width=rgb_frame.width,
-                height=rgb_frame.height,
+                payload=rgb_frame.tobytes(),
+                width=int(rgb_frame.shape[1]),
+                height=int(rgb_frame.shape[0]),
                 pixel_format="rgb24",
             )
 

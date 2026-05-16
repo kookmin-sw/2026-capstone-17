@@ -36,6 +36,11 @@ class StreamStartRequest(BaseModel):
         description="Deprecated alias for input_stream_key.",
     )
     avatar_id: str | None = Field(default=None, max_length=100)
+    avatar_asset_key: str | None = Field(
+        default=None,
+        max_length=500,
+        description="S3 object key or s3:// URI for the selected avatar bundle/prefix.",
+    )
     input_url: str | None = Field(
         default=None,
         description="Debug override for MediaMTX read URL.",
@@ -68,7 +73,8 @@ class StreamStartRequest(BaseModel):
             "example": {
                 "broadcast_id": "bc_20260227_001",
                 "input_stream_key": "live_101_stream_key",
-                "avatar_id": "avatar-a",
+                "avatar_id": "01KP_AVATAR_ID",
+                "avatar_asset_key": "avatars/01KP_AVATAR_ID/",
                 "output_mode": "YOUTUBE_RTMP",
                 "output_url": "rtmp://a.rtmp.youtube.com/live2/live-key",
                 "watch_url": "https://www.youtube.com/watch?v=video-id",
@@ -93,6 +99,9 @@ class StreamStatusResponse(BaseModel):
     processed_frames: int = Field(default=0, ge=0)
     dropped_frames: int = Field(default=0, ge=0)
     last_pts_us: int | None = Field(default=None, ge=0)
+    metadata_hits: int = Field(default=0, ge=0)
+    metadata_misses: int = Field(default=0, ge=0)
+    avatar_rendered_frames: int = Field(default=0, ge=0)
     output_mode: OutputMode
     input_url: str
     output_path: str
@@ -111,6 +120,9 @@ class StreamStatusResponse(BaseModel):
                 "processed_frames": 1842,
                 "dropped_frames": 17,
                 "last_pts_us": 61400000,
+                "metadata_hits": 1810,
+                "metadata_misses": 32,
+                "avatar_rendered_frames": 1810,
                 "output_mode": "YOUTUBE_RTMP",
                 "input_url": "rtsp://localhost:8554/live/live_101_stream_key",
                 "output_path": "rtmp://a.rtmp.youtube.com/live2/live-key",

@@ -31,6 +31,18 @@ class Settings(BaseSettings):
     output_audio_bitrate: str = "128k"
     output_audio_sample_rate: int = 44100
     output_audio_channels: int = 2
+    avatar_rendering_enabled: bool = True
+    avatar_project_dir: str | None = "focus-avatar/project"
+    avatar_bank_dir: str | None = "focus-avatar/project/avatar_bank"
+    avatar_cache_dir: str = "/tmp/focus-avatar-cache"
+    avatar_s3_bucket: str | None = None
+    avatar_s3_region: str | None = None
+    avatar_random_seed: int = 0
+    metadata_poll_attempts: int = 3
+    metadata_poll_interval_ms: int = 10
+    metadata_lookup_tolerance_us: int = 5000
+    metadata_lookup_fine_tolerance_us: int = 100
+    metadata_lookup_coarse_step_us: int = 500
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
     mediamtx_path_prefix: str = "live"

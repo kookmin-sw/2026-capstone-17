@@ -4,7 +4,10 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 
+from adapters.frame_sink import FrameSink, create_frame_sink
+from adapters.media_source import MediaSource, create_media_source
 from adapters.metadata_store import MetadataStore
+from model.renderer import AvatarRenderer
 from schemas.stream import OutputMode, StreamStatusResponse
 
 logger = logging.getLogger(__name__)
@@ -23,10 +26,13 @@ class PipelineStats:
     processed_frames: int = 0
     dropped_frames: int = 0
     last_pts_us: int | None = None
+    metadata_hits: int = 0
+    metadata_misses: int = 0
+    avatar_rendered_frames: int = 0
 
 
 class StreamPipeline:
-    """RTSP relay via an FFmpeg subprocess without Python frame decode."""
+    """RTSP relay by default, or frame-level avatar rendering when requested."""
 
     def __init__(
         self,
@@ -40,6 +46,12 @@ class StreamPipeline:
         fps: int,
         max_frame_lag_ms: int,
         metadata_store: MetadataStore,
+        avatar_rendering_enabled: bool = True,
+        avatar_project_dir: str | None = None,
+        avatar_bank_dir: str | None = None,
+        avatar_random_seed: int = 0,
+        metadata_poll_attempts: int = 3,
+        metadata_poll_interval_ms: int = 10,
         ffmpeg_log_level: str = "warning",
         gop_seconds: int = 1,
         video_bitrate: str = "2500k",
@@ -64,7 +76,14 @@ class StreamPipeline:
         self.watch_url = watch_url
         self.avatar_id = avatar_id
         self._fps = fps
+        self._max_frame_lag_ms = max(max_frame_lag_ms, 0)
         self._metadata_store = metadata_store
+        self._avatar_rendering_enabled = avatar_rendering_enabled
+        self._avatar_project_dir = avatar_project_dir
+        self._avatar_bank_dir = avatar_bank_dir
+        self._avatar_random_seed = int(avatar_random_seed)
+        self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
+        self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
         self._ffmpeg_log_level = ffmpeg_log_level
         self._gop_seconds = max(gop_seconds, 1)
         self._video_bitrate = video_bitrate
@@ -82,6 +101,8 @@ class StreamPipeline:
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
+        self._media_source: MediaSource | None = None
+        self._frame_sink: FrameSink | None = None
         self._stop_event = asyncio.Event()
         self._state = PipelineState.STOPPED
         self._detail: str | None = None
@@ -119,6 +140,9 @@ class StreamPipeline:
             processed_frames=self._stats.processed_frames,
             dropped_frames=self._stats.dropped_frames,
             last_pts_us=self._stats.last_pts_us,
+            metadata_hits=self._stats.metadata_hits,
+            metadata_misses=self._stats.metadata_misses,
+            avatar_rendered_frames=self._stats.avatar_rendered_frames,
             output_mode=self.output_mode,
             input_url=self.input_url,
             output_path=self.output_url,
@@ -130,18 +154,18 @@ class StreamPipeline:
 
     async def _run(self) -> None:
         self._state = PipelineState.RUNNING
-        logger.info("pipeline_relay_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
+        logger.info(
+            "pipeline_started broadcast_id=%s input=%s render_avatar=%s",
+            self.broadcast_id,
+            self.input_url,
+            self._should_render_avatar(),
+        )
         self._prepare_output_dirs()
-        retry_count = 0
         try:
-            while not self._stop_event.is_set():
-                await self._start_ffmpeg()
-                should_restart = await self._monitor_ffmpeg(retry_count)
-                if not should_restart:
-                    break
-                retry_count += 1
-                await self._kill_ffmpeg()
-                await asyncio.sleep(self._input_open_retry_backoff_s)
+            if self._should_render_avatar():
+                await self._run_render_loop()
+            else:
+                await self._run_relay_loop()
         except Exception as exc:
             self._state = PipelineState.FAILED
             self._detail = str(exc)
@@ -155,6 +179,89 @@ class StreamPipeline:
             if self._state != PipelineState.FAILED:
                 self._state = PipelineState.STOPPED
             logger.info("pipeline_finished broadcast_id=%s state=%s", self.broadcast_id, self._state.value)
+
+    def _should_render_avatar(self) -> bool:
+        return bool(self.avatar_id) and self._avatar_rendering_enabled
+
+    async def _run_relay_loop(self) -> None:
+        logger.info("pipeline_relay_started broadcast_id=%s input=%s", self.broadcast_id, self.input_url)
+        retry_count = 0
+        while not self._stop_event.is_set():
+            await self._start_ffmpeg()
+            should_restart = await self._monitor_ffmpeg(retry_count)
+            if not should_restart:
+                break
+            retry_count += 1
+            await self._kill_ffmpeg()
+            await asyncio.sleep(self._input_open_retry_backoff_s)
+
+    async def _run_render_loop(self) -> None:
+        logger.info("pipeline_render_started broadcast_id=%s avatar_id=%s", self.broadcast_id, self.avatar_id)
+        renderer = AvatarRenderer(
+            avatar_project_dir=self._avatar_project_dir,
+            avatar_bank_dir=self._avatar_bank_dir,
+            avatar_random_seed=self._avatar_random_seed,
+        )
+        self._media_source = create_media_source(self.input_url, fps=self._fps)
+        use_input_audio = await self._detect_input_audio()
+        self._frame_sink = create_frame_sink(
+            self.output_url,
+            fps=self._fps,
+            hls_time=self._hls_time,
+            hls_list_size=self._hls_list_size,
+            hls_flags=self._hls_flags,
+            audio_bitrate=self._output_audio_bitrate,
+            audio_sample_rate=self._output_audio_sample_rate,
+            audio_channels=self._output_audio_channels,
+            audio_source_url=self.input_url if use_input_audio else None,
+        )
+
+        try:
+            while not self._stop_event.is_set():
+                frame = await self._media_source.read_frame()
+                if frame is None:
+                    break
+
+                face_metadata = await self._read_face_metadata(frame.pts_us)
+                if face_metadata is None:
+                    self._stats.metadata_misses += 1
+                else:
+                    self._stats.metadata_hits += 1
+                rendered_frame = await renderer.render(
+                    frame,
+                    face_metadata=face_metadata,
+                    avatar_id=self.avatar_id,
+                )
+                if face_metadata is not None and rendered_frame is not frame:
+                    self._stats.avatar_rendered_frames += 1
+                await self._frame_sink.write_frame(rendered_frame)
+                self._stats.processed_frames += 1
+                self._stats.last_pts_us = frame.pts_us
+        finally:
+            if self._media_source is not None:
+                await self._media_source.close()
+                self._media_source = None
+            if self._frame_sink is not None:
+                await self._frame_sink.close()
+                self._frame_sink = None
+
+    async def _read_face_metadata(self, pts_us: int) -> dict | None:
+        for attempt in range(self._metadata_poll_attempts):
+            try:
+                face_metadata = await self._metadata_store.get_face_metadata(self.broadcast_id, pts_us)
+            except Exception as exc:
+                logger.warning(
+                    "metadata_read_failed broadcast_id=%s pts_us=%s detail=%s",
+                    self.broadcast_id,
+                    pts_us,
+                    exc,
+                )
+                return None
+            if face_metadata is not None:
+                return face_metadata
+            if attempt + 1 < self._metadata_poll_attempts and not self._stop_event.is_set():
+                await asyncio.sleep(self._metadata_poll_interval_s)
+        return None
 
     def _prepare_output_dirs(self) -> None:
         if self.output_mode == OutputMode.HLS:

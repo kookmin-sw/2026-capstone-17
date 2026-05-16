@@ -15,18 +15,18 @@
   - 중복 시작 방지
   - 상태 추적 (`starting`, `running`, `stopping`, `stopped`, `failed`)
 - 파이프라인 루프 핵심 로직
-  - **프레임 수신:** PyAV를 이용한 SRT/RTMP 라이브 디코딩 (또는 더미 소스)
-  - **메타데이터 동기화 (Jitter Buffer):** 네트워크 지연을 고려해 10ms 단위로 최대 3회(30ms) 메타데이터를 기다려주는 지터 버퍼링 적용
-  - **모델 렌더링:** `AvatarRenderer` 인터페이스를 통한 프레임 합성
-  - **FFmpeg 송출:** 합성된 원시(Raw) 프레임을 FFmpeg 프로세스(stdin)로 파이프라이닝하여 HLS 파일 생성 또는 RTMP/SRT로 실시간 재송출 (`zerolatency` 적용)
-  - **메모리 최적화:** OOM 방지를 위해 Redis에서 읽어온 메타데이터는 즉각 삭제 처리
+  - **기본 릴레이:** `avatar_id`가 없거나 `AVATAR_RENDERING_ENABLED=false`이면 FFmpeg가 RTSP 입력을 바로 HLS/RTMP로 중계
+  - **아바타 렌더링:** `avatar_id`가 있으면 PyAV로 프레임을 디코딩하고, Redis 메타데이터를 읽어 `AvatarRenderer`로 합성 후 FFmpeg stdin으로 송출
+  - **메타데이터 대기:** 네트워크 지연을 고려해 기본 10ms 단위로 최대 3회(30ms) 메타데이터를 기다림
+  - **FFmpeg 송출:** 합성된 원시(Raw) RGB 프레임을 FFmpeg 프로세스(stdin)로 파이프라이닝하여 HLS 파일 생성 또는 RTMP로 실시간 재송출 (`zerolatency` 적용)
+  - **메모리 최적화:** Redis에서 읽어온 메타데이터는 즉각 삭제 처리
 - 지연 프레임 드랍 정책
   - `MAX_FRAME_LAG_MS` 초과 시 과거 프레임 drop
 - 장애 내성 기본 처리
   - Redis 조회 실패/타임아웃 시 `face_metadata=None`으로 진행
   - 렌더링 예외 시 `emergency_fallback()` (블러 또는 원본 통과)
 
-RTMP/SRT 입력 디코더(PyAV)와 FFmpeg HLS/RTMP 출력 파이프라인은 모두 구현 완료되었으며, 실제 아바타 합성을 위한 AI 모델만 `model/renderer.py`에 이식하면 됩니다.
+기본 FFmpeg 릴레이 경로와 아바타 합성 경로가 분리되어 있으며, 아바타 합성은 vendored `focus-avatar` 런타임을 `model/renderer.py`에서 호출합니다.
 
 ## 2. FastAPI 역할 (R&R)
 
@@ -53,6 +53,7 @@ Spring이 넘겨야 하는 최소 정보:
 - `broadcast_id`
 - `stream_key`
 - `avatar_id` (선택)
+- `avatar_asset_key` (선택, Spring RDB `avatar.object_key`에서 조회한 S3 prefix 또는 zip key)
 
 ### 시작 요청 예시
 
@@ -60,7 +61,8 @@ Spring이 넘겨야 하는 최소 정보:
 {
   "broadcast_id": "bc_20260227_001",
   "stream_key": "live_101_stream_key",
-  "avatar_id": "avatar-a"
+  "avatar_id": "01KP_AVATAR_ID",
+  "avatar_asset_key": "avatars/01KP_AVATAR_ID/"
 }
 ```
 
@@ -82,20 +84,56 @@ Spring이 넘겨야 하는 최소 정보:
 
 ## 4. 모델러 함수와 상호작용
 
-`model/renderer.py`의 `AvatarRenderer` 인터페이스로 모델 함수를 연결합니다.
+`model/renderer.py`의 `AvatarRenderer`가 `focus-avatar/project`의 reenact 런타임을 호출합니다.
+
+실제 운영 플로우에서는 Spring이 PostgreSQL `avatar` 테이블을 조회해 `avatar_id`와 `object_key`를 함께 넘깁니다. FastAPI는 `avatar_asset_key`가 있으면 해당 S3 object/prefix를 `AVATAR_CACHE_DIR/{avatar_id}`로 내려받아 로컬 avatar bank로 사용합니다. 로컬 개발처럼 `avatar_asset_key`가 없으면 `AVATAR_BANK_DIR`에 이미 있는 샘플 bank를 그대로 사용합니다.
 
 - 입력
   - `frame` (원본 프레임)
   - `face_metadata` (Redis JSON, 없을 수 있음)
-  - `avatar_id`
+  - `avatar_id` (Spring RDB의 `avatar.avatar_id`, 또는 로컬 bank 폴더명)
+  - `avatar_asset_key` (S3에 올라간 avatar bundle zip 또는 prefix)
 - 출력
   - 합성 완료 프레임 (`VideoFrame`)
+
+현재 렌더러가 실제로 소비하는 얼굴 메타데이터 필드:
+
+```json
+{
+  "faces": [
+    {
+      "tracking_id": 0,
+      "bbox": { "x": 659, "y": 177, "width": 49, "height": 64 },
+      "tdmm_raw": { "coeffs": [0.0] }
+    }
+  ]
+}
+```
+
+`trackingId`, `tdmmRaw` camelCase 입력도 렌더러에서 정규화합니다. `tdmm_raw.coeffs`는 Qualcomm FaceMap 3DMM 264차원 계수여야 합니다.
 
 fallback 정책:
 
 - Redis 데이터 없음/손상: `face_metadata=None`
-- 렌더링 예외: `emergency_fallback(frame)`
-- 운영 단계에서 블러/원본/마지막 정상 프레임 정책으로 교체 권장
+- 렌더링 의존성/자산 로딩 실패 또는 프레임별 합성 예외: `emergency_fallback(frame)`으로 원본 프레임 통과
+- `avatar_id`가 없거나 `AVATAR_RENDERING_ENABLED=false`: 기존 FFmpeg relay 경로 사용
+
+아바타 렌더링 관련 환경변수:
+
+- `AVATAR_RENDERING_ENABLED` (기본값: `true`)
+- `AVATAR_PROJECT_DIR` (기본값: `focus-avatar/project`)
+- `AVATAR_BANK_DIR` (기본값: `focus-avatar/project/avatar_bank`)
+- `AVATAR_CACHE_DIR` (기본값: `/tmp/focus-avatar-cache`)
+- `AVATAR_S3_BUCKET` (선택, 없으면 `S3_BUCKET` 사용)
+- `AVATAR_S3_REGION` (선택, 없으면 `S3_REGION` 사용)
+- `AVATAR_RANDOM_SEED` (기본값: `0`)
+- `METADATA_POLL_ATTEMPTS` (기본값: `3`)
+- `METADATA_POLL_INTERVAL_MS` (기본값: `10`)
+- `METADATA_LOOKUP_TOLERANCE_US` (기본값: `5000`)
+- `METADATA_LOOKUP_FINE_TOLERANCE_US` (기본값: `100`)
+- `METADATA_LOOKUP_COARSE_STEP_US` (기본값: `500`)
+
+`METADATA_LOOKUP_*` 설정은 클라이언트 gRPC `pts_us`와 PyAV/RTSP 프레임 PTS가 마이크로초 단위로 아주 조금 어긋나는 경우를 보정합니다. 다만 서로 다른 클럭을 쓰는 큰 오차까지 맞추는 기능은 아니므로 클라이언트는 반드시 영상 프레임 PTS 기준으로 metadata를 보내야 합니다.
 
 ## 5. 예외 응답 규칙 (focus-server 통일)
 
@@ -182,6 +220,13 @@ uvicorn main:app --reload
 pip install -r requirements.media.txt
 ```
 
+아바타 합성까지 테스트할 경우:
+
+```bash
+pip install -r requirements.media.txt
+pip install -r requirements.avatar.txt
+```
+
 Swagger:
 
 - `http://localhost:8000/swagger`
@@ -201,7 +246,7 @@ uvicorn main:app --reload
 
 ## 9. 다음 구현 우선순위
 
-1. **AI 모델 이식:** `model/renderer.py`에 실제 얼굴 검출 및 아바타 합성 로직 이식 및 최적화 (GPU 연동 포함)
+1. **아바타 합성 검증:** Spring gRPC 메타데이터 + MediaMTX 입력으로 `avatar_id=avatar_001` 형태의 라이브 합성 E2E 확인 및 품질 튜닝
 2. **배포 환경 구성:** 생성된 HLS 파일을 Nginx 볼륨 마운트로 서빙하거나, Fluentd/데몬을 통한 AWS S3 동기화 및 CDN 연동 아키텍처 확정
 3. **부하 테스트:** 다중 방송 동시 처리 시 프레임 드랍 정책(`max_frame_lag_ms`) 및 지터 버퍼 값 튜닝
 4. **로깅 및 모니터링:** Prometheus/Grafana 등과 연동하여 워커 파이프라인의 실시간 FPS 및 지연 메트릭 수집

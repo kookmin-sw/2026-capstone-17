@@ -39,12 +39,26 @@ class FFmpegProcessSink:
         width: int = 1280,
         height: int = 720,
         is_hls: bool = True,
+        hls_time: float = 2.0,
+        hls_list_size: int = 10,
+        hls_flags: str = "delete_segments",
+        audio_bitrate: str = "128k",
+        audio_sample_rate: int = 44100,
+        audio_channels: int = 2,
+        audio_source_url: str | None = None,
     ) -> None:
         self.output_url = output_url
         self.fps = fps
         self.width = width
         self.height = height
         self.is_hls = is_hls
+        self.hls_time = max(float(hls_time), 0.5)
+        self.hls_list_size = max(int(hls_list_size), 3)
+        self.hls_flags = hls_flags
+        self.audio_bitrate = audio_bitrate
+        self.audio_sample_rate = int(audio_sample_rate)
+        self.audio_channels = int(audio_channels)
+        self.audio_source_url = audio_source_url
         self._process: Optional[asyncio.subprocess.Process] = None
         self._initialized = False
 
@@ -56,9 +70,9 @@ class FFmpegProcessSink:
 
             output_args = [
                 "-f", "hls",
-                "-hls_time", "2",
-                "-hls_list_size", "10",
-                "-hls_flags", "delete_segments",
+                "-hls_time", str(self.hls_time),
+                "-hls_list_size", str(self.hls_list_size),
+                "-hls_flags", self.hls_flags,
                 self.output_url,
             ]
         else:
@@ -73,10 +87,27 @@ class FFmpegProcessSink:
             "-s", f"{width}x{height}",
             "-r", str(self.fps),
             "-i", "-",
+        ]
+        if self.audio_source_url:
+            command += self._build_audio_source_input_args(self.audio_source_url)
+        else:
+            command += [
+                "-f", "lavfi",
+                "-i", f"anullsrc=channel_layout=stereo:sample_rate={self.audio_sample_rate}",
+            ]
+
+        command += [
+            "-map", "0:v:0",
+            "-map", "1:a:0",
             "-c:v", "libx264",
             "-preset", "veryfast",
             "-tune", "zerolatency",
             "-pix_fmt", "yuv420p",
+            "-c:a", "aac",
+            "-b:a", self.audio_bitrate,
+            "-ar", str(self.audio_sample_rate),
+            "-ac", str(self.audio_channels),
+            "-shortest",
         ] + output_args
 
         logger.info("starting_ffmpeg_sink url=%s", self.output_url)
@@ -89,6 +120,12 @@ class FFmpegProcessSink:
         self._initialized = True
         self.width = width
         self.height = height
+
+    def _build_audio_source_input_args(self, audio_source_url: str) -> list[str]:
+        args = ["-thread_queue_size", "512"]
+        if audio_source_url.startswith("rtsp://"):
+            args += ["-rtsp_transport", "tcp"]
+        return args + ["-i", audio_source_url]
 
     async def write_frame(self, frame: VideoFrame) -> None:
         if not self._initialized or self._process is None:
@@ -120,7 +157,17 @@ class FFmpegProcessSink:
             self._process = None
 
 
-def create_frame_sink(output_path: str, fps: int = 30) -> FrameSink:
+def create_frame_sink(
+    output_path: str,
+    fps: int = 30,
+    hls_time: float = 2.0,
+    hls_list_size: int = 10,
+    hls_flags: str = "delete_segments",
+    audio_bitrate: str = "128k",
+    audio_sample_rate: int = 44100,
+    audio_channels: int = 2,
+    audio_source_url: str | None = None,
+) -> FrameSink:
     if output_path.startswith("/tmp/test") or output_path.startswith("dummy"):
         return DummyHlsSink(output_path=output_path)
 
@@ -128,4 +175,15 @@ def create_frame_sink(output_path: str, fps: int = 30) -> FrameSink:
     if is_hls and not output_path.endswith(".m3u8"):
         output_path = os.path.join(output_path, "index.m3u8")
 
-    return FFmpegProcessSink(output_url=output_path, fps=fps, is_hls=is_hls)
+    return FFmpegProcessSink(
+        output_url=output_path,
+        fps=fps,
+        is_hls=is_hls,
+        hls_time=hls_time,
+        hls_list_size=hls_list_size,
+        hls_flags=hls_flags,
+        audio_bitrate=audio_bitrate,
+        audio_sample_rate=audio_sample_rate,
+        audio_channels=audio_channels,
+        audio_source_url=audio_source_url,
+    )
