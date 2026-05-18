@@ -2,7 +2,7 @@ import asyncio
 import logging
 import os
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 from adapters.frame_sink import FrameSink, create_frame_sink
@@ -32,6 +32,49 @@ class PipelineStats:
     metadata_hits: int = 0
     metadata_misses: int = 0
     avatar_rendered_frames: int = 0
+
+
+@dataclass(slots=True)
+class StageTiming:
+    count: int = 0
+    total_ms: float = 0.0
+    max_ms: float = 0.0
+
+    def record(self, started_at: float) -> None:
+        elapsed_ms = (time.perf_counter() - started_at) * 1000
+        self.count += 1
+        self.total_ms += elapsed_ms
+        self.max_ms = max(self.max_ms, elapsed_ms)
+
+    def average_ms(self) -> float:
+        if self.count == 0:
+            return 0.0
+        return self.total_ms / self.count
+
+    def reset(self) -> None:
+        self.count = 0
+        self.total_ms = 0.0
+        self.max_ms = 0.0
+
+
+@dataclass(slots=True)
+class PipelineTimingStats:
+    input_read: StageTiming = field(default_factory=StageTiming)
+    latest_wait: StageTiming = field(default_factory=StageTiming)
+    metadata: StageTiming = field(default_factory=StageTiming)
+    asset_prepare: StageTiming = field(default_factory=StageTiming)
+    avatar_render: StageTiming = field(default_factory=StageTiming)
+    output_write: StageTiming = field(default_factory=StageTiming)
+    frame_total: StageTiming = field(default_factory=StageTiming)
+
+    def reset(self) -> None:
+        self.input_read.reset()
+        self.latest_wait.reset()
+        self.metadata.reset()
+        self.asset_prepare.reset()
+        self.avatar_render.reset()
+        self.output_write.reset()
+        self.frame_total.reset()
 
 
 class StreamPipeline:
@@ -111,7 +154,9 @@ class StreamPipeline:
         self._output_audio_channels = output_audio_channels
         self._target_frame_interval_us = int(1_000_000 / max(self._fps, 1))
         self._next_render_pts_us: int | None = None
-        self._last_render_progress_log_at = 0.0
+        self._last_render_progress_log_at = time.monotonic()
+        self._last_progress_processed_frames = 0
+        self._last_progress_dropped_frames = 0
         self._latest_frame: VideoFrame | None = None
         self._latest_frame_seq = 0
         self._rendered_frame_seq = 0
@@ -126,6 +171,7 @@ class StreamPipeline:
         self._state = PipelineState.STOPPED
         self._detail: str | None = None
         self._stats = PipelineStats()
+        self._timings = PipelineTimingStats()
 
     @property
     def state(self) -> PipelineState:
@@ -217,7 +263,10 @@ class StreamPipeline:
     async def _run_render_loop(self) -> None:
         logger.info("pipeline_render_started broadcast_id=%s avatar_id=%s", self.broadcast_id, self.avatar_id)
         self._next_render_pts_us = None
-        self._last_render_progress_log_at = 0.0
+        self._last_render_progress_log_at = time.monotonic()
+        self._last_progress_processed_frames = 0
+        self._last_progress_dropped_frames = 0
+        self._timings.reset()
         self._latest_frame = None
         self._latest_frame_seq = 0
         self._rendered_frame_seq = 0
@@ -259,27 +308,39 @@ class StreamPipeline:
 
         try:
             while not self._stop_event.is_set():
+                frame_started_at = time.perf_counter()
+                latest_started_at = time.perf_counter()
                 latest = await self._wait_for_latest_frame(consumed_seq, reader_task)
+                self._timings.latest_wait.record(latest_started_at)
                 if latest is None:
                     break
                 consumed_seq, frame = latest
                 self._rendered_frame_seq = consumed_seq
+                metadata_started_at = time.perf_counter()
                 face_metadata = await self._read_face_metadata(frame.pts_us)
+                self._timings.metadata.record(metadata_started_at)
                 if face_metadata is None:
                     self._stats.metadata_misses += 1
                 else:
                     self._stats.metadata_hits += 1
+                    asset_started_at = time.perf_counter()
                     await self._prepare_face_avatar_assets(face_metadata)
+                    self._timings.asset_prepare.record(asset_started_at)
+                render_started_at = time.perf_counter()
                 rendered_frame = await renderer.render(
                     frame,
                     face_metadata=face_metadata,
                     avatar_id=self.avatar_id,
                 )
+                self._timings.avatar_render.record(render_started_at)
                 if face_metadata is not None and rendered_frame is not frame:
                     self._stats.avatar_rendered_frames += 1
+                write_started_at = time.perf_counter()
                 await self._frame_sink.write_frame(rendered_frame)
+                self._timings.output_write.record(write_started_at)
                 self._stats.processed_frames += 1
                 self._stats.last_pts_us = frame.pts_us
+                self._timings.frame_total.record(frame_started_at)
                 self._log_render_progress()
         finally:
             reader_task.cancel()
@@ -299,7 +360,9 @@ class StreamPipeline:
             return
         try:
             while not self._stop_event.is_set():
+                read_started_at = time.perf_counter()
                 frame = await self._media_source.read_frame()
+                self._timings.input_read.record(read_started_at)
                 if frame is None:
                     return
                 if self._should_drop_frame(frame.pts_us):
@@ -350,17 +413,44 @@ class StreamPipeline:
         now = time.monotonic()
         if now - self._last_render_progress_log_at < 5.0:
             return
+        elapsed_s = max(now - self._last_render_progress_log_at, 0.001) if self._last_render_progress_log_at else 0.0
+        processed_delta = self._stats.processed_frames - self._last_progress_processed_frames
+        dropped_delta = self._stats.dropped_frames - self._last_progress_dropped_frames
+        effective_fps = processed_delta / elapsed_s if elapsed_s > 0 else 0.0
         self._last_render_progress_log_at = now
         logger.info(
-            "pipeline_render_progress broadcast_id=%s processed=%s dropped=%s hits=%s misses=%s avatar=%s last_pts_us=%s",
+            (
+                "pipeline_render_progress broadcast_id=%s processed=%s dropped=%s "
+                "delta_processed=%s delta_dropped=%s effective_fps=%.2f hits=%s misses=%s avatar=%s "
+                "last_pts_us=%s read_avg_ms=%.1f read_max_ms=%.1f wait_avg_ms=%.1f "
+                "metadata_avg_ms=%.1f asset_avg_ms=%.1f render_avg_ms=%.1f render_max_ms=%.1f "
+                "write_avg_ms=%.1f write_max_ms=%.1f frame_avg_ms=%.1f frame_max_ms=%.1f"
+            ),
             self.broadcast_id,
             self._stats.processed_frames,
             self._stats.dropped_frames,
+            processed_delta,
+            dropped_delta,
+            effective_fps,
             self._stats.metadata_hits,
             self._stats.metadata_misses,
             self._stats.avatar_rendered_frames,
             self._stats.last_pts_us,
+            self._timings.input_read.average_ms(),
+            self._timings.input_read.max_ms,
+            self._timings.latest_wait.average_ms(),
+            self._timings.metadata.average_ms(),
+            self._timings.asset_prepare.average_ms(),
+            self._timings.avatar_render.average_ms(),
+            self._timings.avatar_render.max_ms,
+            self._timings.output_write.average_ms(),
+            self._timings.output_write.max_ms,
+            self._timings.frame_total.average_ms(),
+            self._timings.frame_total.max_ms,
         )
+        self._last_progress_processed_frames = self._stats.processed_frames
+        self._last_progress_dropped_frames = self._stats.dropped_frames
+        self._timings.reset()
 
     async def _read_face_metadata(self, pts_us: int) -> dict | None:
         for attempt in range(self._metadata_poll_attempts):
