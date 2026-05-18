@@ -41,7 +41,13 @@ class DummyMediaSource:
 class PyAVMediaSource:
     """Live media source backed by PyAV/FFmpeg."""
 
-    def __init__(self, input_url: str, fallback_fps: int = 30) -> None:
+    def __init__(
+        self,
+        input_url: str,
+        fallback_fps: int = 30,
+        max_frame_width: int | None = None,
+        max_frame_height: int | None = None,
+    ) -> None:
         if av is None:
             raise RuntimeError(
                 "PyAV is not installed. Install optional deps with "
@@ -50,6 +56,8 @@ class PyAVMediaSource:
 
         self._input_url = input_url
         self._fallback_interval_us = int(1_000_000 / max(fallback_fps, 1))
+        self._max_frame_width = int(max_frame_width or 0)
+        self._max_frame_height = int(max_frame_height or 0)
         self._container = None
         self._video_stream = None
         self._frame_iterator = None
@@ -84,6 +92,7 @@ class PyAVMediaSource:
                 continue
 
             pts_us = self._resolve_pts_us(frame)
+            frame = self._resize_frame_if_needed(frame)
             rgb_frame = frame.to_ndarray(format="rgb24")
             return VideoFrame(
                 pts_us=pts_us,
@@ -129,6 +138,31 @@ class PyAVMediaSource:
             "max_delay": "0",
         }
 
+    def _resize_frame_if_needed(self, frame):
+        target_width, target_height = self._resolve_target_size(
+            int(frame.width),
+            int(frame.height),
+        )
+        if target_width == int(frame.width) and target_height == int(frame.height):
+            return frame.reformat(format="rgb24")
+        return frame.reformat(width=target_width, height=target_height, format="rgb24")
+
+    def _resolve_target_size(self, width: int, height: int) -> tuple[int, int]:
+        if self._max_frame_width <= 0 and self._max_frame_height <= 0:
+            return width, height
+        width_ratio = self._max_frame_width / width if self._max_frame_width > 0 else 1.0
+        height_ratio = self._max_frame_height / height if self._max_frame_height > 0 else 1.0
+        scale = min(width_ratio, height_ratio, 1.0)
+        target_width = self._to_even_dimension(width * scale)
+        target_height = self._to_even_dimension(height * scale)
+        return max(target_width, 2), max(target_height, 2)
+
+    def _to_even_dimension(self, value: float) -> int:
+        dimension = int(value)
+        if dimension % 2 == 1:
+            dimension -= 1
+        return max(dimension, 2)
+
     def _resolve_pts_us(self, frame) -> int:
         if frame.pts is not None:
             time_base = frame.time_base or getattr(self._video_stream, "time_base", None)
@@ -158,7 +192,17 @@ class PyAVMediaSource:
         self._frame_iterator = None
 
 
-def create_media_source(input_url: str, fps: int) -> MediaSource:
+def create_media_source(
+    input_url: str,
+    fps: int,
+    max_frame_width: int | None = None,
+    max_frame_height: int | None = None,
+) -> MediaSource:
     if input_url.startswith("dummy://"):
         return DummyMediaSource(fps=fps)
-    return PyAVMediaSource(input_url=input_url, fallback_fps=fps)
+    return PyAVMediaSource(
+        input_url=input_url,
+        fallback_fps=fps,
+        max_frame_width=max_frame_width,
+        max_frame_height=max_frame_height,
+    )

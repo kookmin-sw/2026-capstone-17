@@ -50,6 +50,7 @@ class FFmpegProcessSink:
         maxrate: str = "2500k",
         bufsize: str = "5000k",
         gop_seconds: int = 1,
+        x264_preset: str = "veryfast",
     ) -> None:
         self.output_url = output_url
         self.fps = fps
@@ -67,6 +68,7 @@ class FFmpegProcessSink:
         self.maxrate = maxrate
         self.bufsize = bufsize
         self.gop_seconds = max(int(gop_seconds), 1)
+        self.x264_preset = x264_preset
         self._process: Optional[asyncio.subprocess.Process] = None
         self._stderr_task: asyncio.Task[None] | None = None
         self._initialized = False
@@ -111,7 +113,7 @@ class FFmpegProcessSink:
             "-map", "0:v:0",
             "-map", "1:a:0",
             "-c:v", "libx264",
-            "-preset", "veryfast",
+            "-preset", self.x264_preset,
             "-tune", "zerolatency",
             "-pix_fmt", "yuv420p",
             "-b:v", self.video_bitrate,
@@ -208,6 +210,7 @@ def create_frame_sink(
     maxrate: str = "2500k",
     bufsize: str = "5000k",
     gop_seconds: int = 1,
+    x264_preset: str = "veryfast",
 ) -> FrameSink:
     if output_path.startswith("/tmp/test") or output_path.startswith("dummy"):
         return DummyHlsSink(output_path=output_path)
@@ -231,4 +234,5 @@ def create_frame_sink(
         maxrate=maxrate,
         bufsize=bufsize,
         gop_seconds=gop_seconds,
+        x264_preset=x264_preset,
     )

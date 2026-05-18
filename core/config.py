@@ -15,13 +15,16 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
 
-    pipeline_fps: int = 24
-    max_frame_lag_ms: int = 150
+    pipeline_fps: int = 20
+    max_frame_lag_ms: int = 100
     ffmpeg_log_level: str = "warning"
     pipeline_gop_seconds: int = 1
-    pipeline_video_bitrate: str = "1500k"
-    pipeline_maxrate: str = "1500k"
-    pipeline_bufsize: str = "3000k"
+    pipeline_video_bitrate: str = "1200k"
+    pipeline_maxrate: str = "1200k"
+    pipeline_bufsize: str = "2400k"
+    pipeline_max_frame_width: int = 854
+    pipeline_max_frame_height: int = 854
+    pipeline_x264_preset: str = "ultrafast"
     hls_time: float = 1.0
     hls_list_size: int = 6
     hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist"
@@ -38,8 +41,8 @@ class Settings(BaseSettings):
     avatar_s3_bucket: str | None = None
     avatar_s3_region: str | None = None
     avatar_random_seed: int = 0
-    metadata_poll_attempts: int = 3
-    metadata_poll_interval_ms: int = 10
+    metadata_poll_attempts: int = 1
+    metadata_poll_interval_ms: int = 0
     metadata_lookup_tolerance_us: int = 5000
     metadata_lookup_fine_tolerance_us: int = 100
     metadata_lookup_coarse_step_us: int = 500

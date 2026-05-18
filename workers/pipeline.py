@@ -11,6 +11,7 @@ from adapters.metadata_store import MetadataStore
 from model.renderer import AvatarRenderer
 from schemas.stream import OutputMode, StreamStatusResponse
 from services.avatar_assets import AvatarAssetResolver
+from workers.types import VideoFrame
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,9 @@ class StreamPipeline:
         video_bitrate: str = "2500k",
         maxrate: str = "2500k",
         bufsize: str = "5000k",
+        max_frame_width: int = 0,
+        max_frame_height: int = 0,
+        x264_preset: str = "veryfast",
         hls_time: float = 1.0,
         hls_list_size: int = 6,
         hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist",
@@ -93,6 +97,9 @@ class StreamPipeline:
         self._video_bitrate = video_bitrate
         self._maxrate = maxrate
         self._bufsize = bufsize
+        self._max_frame_width = max(int(max_frame_width), 0)
+        self._max_frame_height = max(int(max_frame_height), 0)
+        self._x264_preset = x264_preset
         self._hls_time = max(hls_time, 0.5)
         self._hls_list_size = max(hls_list_size, 3)
         self._hls_flags = hls_flags
@@ -105,6 +112,11 @@ class StreamPipeline:
         self._target_frame_interval_us = int(1_000_000 / max(self._fps, 1))
         self._next_render_pts_us: int | None = None
         self._last_render_progress_log_at = 0.0
+        self._latest_frame: VideoFrame | None = None
+        self._latest_frame_seq = 0
+        self._rendered_frame_seq = 0
+        self._latest_frame_event = asyncio.Event()
+        self._reader_error: Exception | None = None
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -206,12 +218,22 @@ class StreamPipeline:
         logger.info("pipeline_render_started broadcast_id=%s avatar_id=%s", self.broadcast_id, self.avatar_id)
         self._next_render_pts_us = None
         self._last_render_progress_log_at = 0.0
+        self._latest_frame = None
+        self._latest_frame_seq = 0
+        self._rendered_frame_seq = 0
+        self._reader_error = None
+        self._latest_frame_event.clear()
         renderer = AvatarRenderer(
             avatar_project_dir=self._avatar_project_dir,
             avatar_bank_dir=self._avatar_bank_dir,
             avatar_random_seed=self._avatar_random_seed,
         )
-        self._media_source = create_media_source(self.input_url, fps=self._fps)
+        self._media_source = create_media_source(
+            self.input_url,
+            fps=self._fps,
+            max_frame_width=self._max_frame_width,
+            max_frame_height=self._max_frame_height,
+        )
         use_input_audio = await self._detect_input_audio()
         self._frame_sink = create_frame_sink(
             self.output_url,
@@ -227,18 +249,21 @@ class StreamPipeline:
             maxrate=self._maxrate,
             bufsize=self._bufsize,
             gop_seconds=self._gop_seconds,
+            x264_preset=self._x264_preset,
         )
+        reader_task = asyncio.create_task(
+            self._read_latest_frames(),
+            name=f"pipeline-reader:{self.broadcast_id}",
+        )
+        consumed_seq = 0
 
         try:
             while not self._stop_event.is_set():
-                frame = await self._media_source.read_frame()
-                if frame is None:
+                latest = await self._wait_for_latest_frame(consumed_seq, reader_task)
+                if latest is None:
                     break
-
-                if self._should_drop_frame(frame.pts_us):
-                    self._stats.dropped_frames += 1
-                    self._log_render_progress()
-                    continue
+                consumed_seq, frame = latest
+                self._rendered_frame_seq = consumed_seq
                 face_metadata = await self._read_face_metadata(frame.pts_us)
                 if face_metadata is None:
                     self._stats.metadata_misses += 1
@@ -257,12 +282,59 @@ class StreamPipeline:
                 self._stats.last_pts_us = frame.pts_us
                 self._log_render_progress()
         finally:
+            reader_task.cancel()
+            try:
+                await reader_task
+            except asyncio.CancelledError:
+                pass
             if self._media_source is not None:
                 await self._media_source.close()
                 self._media_source = None
             if self._frame_sink is not None:
                 await self._frame_sink.close()
                 self._frame_sink = None
+
+    async def _read_latest_frames(self) -> None:
+        if self._media_source is None:
+            return
+        try:
+            while not self._stop_event.is_set():
+                frame = await self._media_source.read_frame()
+                if frame is None:
+                    return
+                if self._should_drop_frame(frame.pts_us):
+                    self._stats.dropped_frames += 1
+                    self._log_render_progress()
+                    continue
+                if self._latest_frame_seq > self._rendered_frame_seq:
+                    self._stats.dropped_frames += 1
+                self._latest_frame_seq += 1
+                self._latest_frame = frame
+                self._latest_frame_event.set()
+        except Exception as exc:
+            self._reader_error = exc
+            logger.exception("pipeline_reader_failed broadcast_id=%s", self.broadcast_id)
+        finally:
+            self._latest_frame_event.set()
+
+    async def _wait_for_latest_frame(
+        self,
+        consumed_seq: int,
+        reader_task: asyncio.Task[None],
+    ) -> tuple[int, VideoFrame] | None:
+        while not self._stop_event.is_set():
+            if self._latest_frame_seq > consumed_seq and self._latest_frame is not None:
+                return self._latest_frame_seq, self._latest_frame
+            if reader_task.done():
+                if self._reader_error is not None:
+                    raise RuntimeError(f"input reader failed: {self._reader_error}") from self._reader_error
+                return None
+            self._latest_frame_event.clear()
+            try:
+                await asyncio.wait_for(self._latest_frame_event.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                continue
+        return None
 
     def _should_drop_frame(self, pts_us: int) -> bool:
         if self._next_render_pts_us is None:
@@ -467,7 +539,7 @@ class StreamPipeline:
             "-c:v",
             "libx264",
             "-preset",
-            "veryfast",
+            self._x264_preset,
             "-tune",
             "zerolatency",
             "-pix_fmt",
