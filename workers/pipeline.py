@@ -217,6 +217,10 @@ class StreamPipeline:
             audio_sample_rate=self._output_audio_sample_rate,
             audio_channels=self._output_audio_channels,
             audio_source_url=self.input_url if use_input_audio else None,
+            video_bitrate=self._video_bitrate,
+            maxrate=self._maxrate,
+            bufsize=self._bufsize,
+            gop_seconds=self._gop_seconds,
         )
 
         try:

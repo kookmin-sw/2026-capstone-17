@@ -46,6 +46,10 @@ class FFmpegProcessSink:
         audio_sample_rate: int = 44100,
         audio_channels: int = 2,
         audio_source_url: str | None = None,
+        video_bitrate: str = "2500k",
+        maxrate: str = "2500k",
+        bufsize: str = "5000k",
+        gop_seconds: int = 1,
     ) -> None:
         self.output_url = output_url
         self.fps = fps
@@ -59,6 +63,10 @@ class FFmpegProcessSink:
         self.audio_sample_rate = int(audio_sample_rate)
         self.audio_channels = int(audio_channels)
         self.audio_source_url = audio_source_url
+        self.video_bitrate = video_bitrate
+        self.maxrate = maxrate
+        self.bufsize = bufsize
+        self.gop_seconds = max(int(gop_seconds), 1)
         self._process: Optional[asyncio.subprocess.Process] = None
         self._initialized = False
 
@@ -96,6 +104,7 @@ class FFmpegProcessSink:
                 "-i", f"anullsrc=channel_layout=stereo:sample_rate={self.audio_sample_rate}",
             ]
 
+        gop = max(self.fps * self.gop_seconds, 1)
         command += [
             "-map", "0:v:0",
             "-map", "1:a:0",
@@ -103,6 +112,12 @@ class FFmpegProcessSink:
             "-preset", "veryfast",
             "-tune", "zerolatency",
             "-pix_fmt", "yuv420p",
+            "-b:v", self.video_bitrate,
+            "-maxrate", self.maxrate,
+            "-bufsize", self.bufsize,
+            "-g", str(gop),
+            "-keyint_min", str(gop),
+            "-sc_threshold", "0",
             "-c:a", "aac",
             "-b:a", self.audio_bitrate,
             "-ar", str(self.audio_sample_rate),
@@ -124,7 +139,10 @@ class FFmpegProcessSink:
     def _build_audio_source_input_args(self, audio_source_url: str) -> list[str]:
         args = ["-thread_queue_size", "512"]
         if audio_source_url.startswith("rtsp://"):
-            args += ["-rtsp_transport", "tcp"]
+            # The video track is already consumed by PyAV for avatar rendering.
+            # Ask FFmpeg to subscribe only to RTSP audio so MediaMTX does not
+            # queue video frames for this secondary reader.
+            args += ["-rtsp_transport", "tcp", "-allowed_media_types", "audio"]
         return args + ["-i", audio_source_url]
 
     async def write_frame(self, frame: VideoFrame) -> None:
@@ -167,6 +185,10 @@ def create_frame_sink(
     audio_sample_rate: int = 44100,
     audio_channels: int = 2,
     audio_source_url: str | None = None,
+    video_bitrate: str = "2500k",
+    maxrate: str = "2500k",
+    bufsize: str = "5000k",
+    gop_seconds: int = 1,
 ) -> FrameSink:
     if output_path.startswith("/tmp/test") or output_path.startswith("dummy"):
         return DummyHlsSink(output_path=output_path)
@@ -186,4 +208,8 @@ def create_frame_sink(
         audio_sample_rate=audio_sample_rate,
         audio_channels=audio_channels,
         audio_source_url=audio_source_url,
+        video_bitrate=video_bitrate,
+        maxrate=maxrate,
+        bufsize=bufsize,
+        gop_seconds=gop_seconds,
     )
