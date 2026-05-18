@@ -62,6 +62,8 @@ class PyAVMediaSource:
         self._video_stream = None
         self._frame_iterator = None
         self._last_pts_us: int | None = None
+        self._base_pts_us: int | None = None
+        self._pts_debug_sample_count = 0
         self._closed = False
 
     async def read_frame(self) -> VideoFrame | None:
@@ -164,19 +166,47 @@ class PyAVMediaSource:
         return max(dimension, 2)
 
     def _resolve_pts_us(self, frame) -> int:
+        raw_pts_us: int
+        pts_source: str
+        time_base = None
         if frame.pts is not None:
             time_base = frame.time_base or getattr(self._video_stream, "time_base", None)
             if time_base:
-                pts_us = int(frame.pts * float(time_base) * 1_000_000)
+                raw_pts_us = int(frame.pts * float(time_base) * 1_000_000)
+                pts_source = "frame_pts_time_base"
             else:
-                pts_us = int(frame.pts * self._fallback_interval_us)
+                raw_pts_us = int(frame.pts * self._fallback_interval_us)
+                pts_source = "frame_pts_fallback_interval"
         elif frame.time is not None:
-            pts_us = int(frame.time * 1_000_000)
+            raw_pts_us = int(frame.time * 1_000_000)
+            pts_source = "frame_time"
         else:
-            pts_us = int(time.monotonic() * 1_000_000)
+            raw_pts_us = int(time.monotonic() * 1_000_000)
+            pts_source = "monotonic"
+
+        if self._base_pts_us is None:
+            self._base_pts_us = raw_pts_us
+
+        pts_us = max(0, raw_pts_us - self._base_pts_us)
 
         if self._last_pts_us is not None and pts_us <= self._last_pts_us:
             pts_us = self._last_pts_us + max(self._fallback_interval_us, 1)
+
+        if self._pts_debug_sample_count < 5:
+            logger.info(
+                "pyav_pts_sample input_url=%s source=%s frame_pts=%s frame_time=%s "
+                "time_base=%s stream_time_base=%s raw_us=%s base_us=%s resolved_us=%s",
+                self._input_url,
+                pts_source,
+                frame.pts,
+                frame.time,
+                time_base,
+                getattr(self._video_stream, "time_base", None),
+                raw_pts_us,
+                self._base_pts_us,
+                pts_us,
+            )
+            self._pts_debug_sample_count += 1
 
         self._last_pts_us = pts_us
         return pts_us
