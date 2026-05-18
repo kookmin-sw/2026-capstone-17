@@ -31,7 +31,8 @@ jobs:
           context: .
           platforms: linux/arm64
           build-args: |
-            INSTALL_MEDIA_DEPS=false
+            INSTALL_MEDIA_DEPS=true
+            INSTALL_AVATAR_DEPS=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
