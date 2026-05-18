@@ -40,7 +40,9 @@ class StreamManager:
             metadata_store = RedisMetadataStore(
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
+                latest_key_template=self._settings.redis_metadata_latest_key_template,
                 lookup_tolerance_us=self._settings.metadata_lookup_tolerance_us,
+                latest_tolerance_us=self._settings.metadata_latest_tolerance_us,
                 fine_tolerance_us=self._settings.metadata_lookup_fine_tolerance_us,
                 coarse_step_us=self._settings.metadata_lookup_coarse_step_us,
             )

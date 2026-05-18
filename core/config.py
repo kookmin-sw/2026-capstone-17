@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     redis_url: str = "redis://localhost:6379/0"
     redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
+    redis_metadata_latest_key_template: str = "broadcast:{broadcast_id}:meta:latest"
 
     pipeline_fps: int = 20
     max_frame_lag_ms: int = 100
@@ -43,7 +44,8 @@ class Settings(BaseSettings):
     avatar_random_seed: int = 0
     metadata_poll_attempts: int = 1
     metadata_poll_interval_ms: int = 0
-    metadata_lookup_tolerance_us: int = 5000
+    metadata_lookup_tolerance_us: int = 25000
+    metadata_latest_tolerance_us: int = 250000
     metadata_lookup_fine_tolerance_us: int = 100
     metadata_lookup_coarse_step_us: int = 500
 
