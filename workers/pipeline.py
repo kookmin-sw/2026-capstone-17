@@ -4,6 +4,7 @@ import os
 import time
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from adapters.frame_sink import FrameSink, create_frame_sink
 from adapters.media_source import MediaSource, create_media_source
@@ -97,6 +98,7 @@ class StreamPipeline:
         avatar_bank_dir: str | list[str] | None = None,
         avatar_asset_resolver: AvatarAssetResolver | None = None,
         avatar_random_seed: int = 0,
+        avatar_max_faces_per_frame: int = 1,
         metadata_poll_attempts: int = 3,
         metadata_poll_interval_ms: int = 10,
         ffmpeg_log_level: str = "warning",
@@ -133,6 +135,7 @@ class StreamPipeline:
         self._avatar_bank_dir = avatar_bank_dir
         self._avatar_asset_resolver = avatar_asset_resolver
         self._avatar_random_seed = int(avatar_random_seed)
+        self._avatar_max_faces_per_frame = max(int(avatar_max_faces_per_frame), 0)
         self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
         self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
         self._ffmpeg_log_level = ffmpeg_log_level
@@ -323,6 +326,7 @@ class StreamPipeline:
                     self._stats.metadata_misses += 1
                 else:
                     self._stats.metadata_hits += 1
+                    face_metadata = self._prepare_metadata_for_live_render(face_metadata)
                     asset_started_at = time.perf_counter()
                     await self._prepare_face_avatar_assets(face_metadata)
                     self._timings.asset_prepare.record(asset_started_at)
@@ -468,6 +472,103 @@ class StreamPipeline:
                 return face_metadata
             if attempt + 1 < self._metadata_poll_attempts and not self._stop_event.is_set():
                 await asyncio.sleep(self._metadata_poll_interval_s)
+        return None
+
+    def _prepare_metadata_for_live_render(self, face_metadata: dict) -> dict:
+        if self._avatar_max_faces_per_frame <= 0:
+            return face_metadata
+
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, list) or not raw_faces:
+            return face_metadata
+
+        ranked_faces = [
+            (index, self._bbox_area(face))
+            for index, face in enumerate(raw_faces)
+            if isinstance(face, dict) and self._has_renderable_face_metadata(face)
+        ]
+        if not ranked_faces:
+            return face_metadata
+
+        selected_indexes = {
+            index
+            for index, _ in sorted(ranked_faces, key=lambda item: item[1], reverse=True)[
+                : self._avatar_max_faces_per_frame
+            ]
+        }
+        normalized_faces: list[Any] = []
+        for index, raw_face in enumerate(raw_faces):
+            if not isinstance(raw_face, dict):
+                continue
+            face = dict(raw_face)
+            if index in selected_indexes:
+                if self.avatar_id:
+                    # A selected broadcast avatar is already materialized before the
+                    # pipeline starts. Strip per-tracking random assignments so live
+                    # rendering never blocks on S3 downloads for background faces.
+                    face.pop("avatar_id", None)
+                    face.pop("avatarId", None)
+                    face.pop("avatar_asset_key", None)
+                    face.pop("avatarAssetKey", None)
+                normalized_faces.append(face)
+                continue
+
+            bbox = face.get("bbox")
+            if bbox is None:
+                bbox = face.get("bounding_box", face.get("boundingBox"))
+            if bbox is not None:
+                normalized_faces.append(
+                    {
+                        "tracking_id": face.get("tracking_id", face.get("trackingId")),
+                        "bbox": bbox,
+                        "render_mode": "MOSAIC",
+                    }
+                )
+
+        normalized = dict(face_metadata)
+        normalized["faces"] = normalized_faces
+        return normalized
+
+    def _has_renderable_face_metadata(self, face: dict) -> bool:
+        return self._extract_coeffs(face) is not None and self._normalize_bbox(face) is not None
+
+    def _extract_coeffs(self, face: dict) -> list | None:
+        tdmm = face.get("tdmm_raw")
+        if not isinstance(tdmm, dict):
+            tdmm = face.get("tdmmRaw")
+        if isinstance(tdmm, dict):
+            coeffs = tdmm.get("coeffs")
+            if isinstance(coeffs, list) and coeffs:
+                return coeffs
+        coeffs = face.get("coeffs")
+        if isinstance(coeffs, list) and coeffs:
+            return coeffs
+        return None
+
+    def _bbox_area(self, face: dict) -> float:
+        bbox = self._normalize_bbox(face)
+        if bbox is None:
+            return 0.0
+        return max(float(bbox["width"]), 0.0) * max(float(bbox["height"]), 0.0)
+
+    def _normalize_bbox(self, face: dict) -> dict[str, float] | None:
+        raw_bbox = face.get("bbox")
+        if raw_bbox is None:
+            raw_bbox = face.get("bounding_box", face.get("boundingBox"))
+        if isinstance(raw_bbox, dict) and {"x", "y", "width", "height"}.issubset(raw_bbox.keys()):
+            return {
+                "x": float(raw_bbox["x"]),
+                "y": float(raw_bbox["y"]),
+                "width": float(raw_bbox["width"]),
+                "height": float(raw_bbox["height"]),
+            }
+        if isinstance(raw_bbox, list) and len(raw_bbox) >= 4:
+            return {
+                "x": float(raw_bbox[0]),
+                "y": float(raw_bbox[1]),
+                "width": float(raw_bbox[2]),
+                "height": float(raw_bbox[3]),
+            }
         return None
 
     async def _prepare_face_avatar_assets(self, face_metadata: dict) -> None:
