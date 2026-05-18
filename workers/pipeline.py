@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import os
+import time
 from dataclasses import dataclass
 from enum import Enum
 
@@ -101,6 +102,9 @@ class StreamPipeline:
         self._output_audio_bitrate = output_audio_bitrate
         self._output_audio_sample_rate = output_audio_sample_rate
         self._output_audio_channels = output_audio_channels
+        self._target_frame_interval_us = int(1_000_000 / max(self._fps, 1))
+        self._next_render_pts_us: int | None = None
+        self._last_render_progress_log_at = 0.0
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -200,6 +204,8 @@ class StreamPipeline:
 
     async def _run_render_loop(self) -> None:
         logger.info("pipeline_render_started broadcast_id=%s avatar_id=%s", self.broadcast_id, self.avatar_id)
+        self._next_render_pts_us = None
+        self._last_render_progress_log_at = 0.0
         renderer = AvatarRenderer(
             avatar_project_dir=self._avatar_project_dir,
             avatar_bank_dir=self._avatar_bank_dir,
@@ -229,6 +235,10 @@ class StreamPipeline:
                 if frame is None:
                     break
 
+                if self._should_drop_frame(frame.pts_us):
+                    self._stats.dropped_frames += 1
+                    self._log_render_progress()
+                    continue
                 face_metadata = await self._read_face_metadata(frame.pts_us)
                 if face_metadata is None:
                     self._stats.metadata_misses += 1
@@ -245,6 +255,7 @@ class StreamPipeline:
                 await self._frame_sink.write_frame(rendered_frame)
                 self._stats.processed_frames += 1
                 self._stats.last_pts_us = frame.pts_us
+                self._log_render_progress()
         finally:
             if self._media_source is not None:
                 await self._media_source.close()
@@ -252,6 +263,32 @@ class StreamPipeline:
             if self._frame_sink is not None:
                 await self._frame_sink.close()
                 self._frame_sink = None
+
+    def _should_drop_frame(self, pts_us: int) -> bool:
+        if self._next_render_pts_us is None:
+            self._next_render_pts_us = pts_us + self._target_frame_interval_us
+            return False
+        if pts_us < self._next_render_pts_us:
+            return True
+        while self._next_render_pts_us <= pts_us:
+            self._next_render_pts_us += self._target_frame_interval_us
+        return False
+
+    def _log_render_progress(self) -> None:
+        now = time.monotonic()
+        if now - self._last_render_progress_log_at < 5.0:
+            return
+        self._last_render_progress_log_at = now
+        logger.info(
+            "pipeline_render_progress broadcast_id=%s processed=%s dropped=%s hits=%s misses=%s avatar=%s last_pts_us=%s",
+            self.broadcast_id,
+            self._stats.processed_frames,
+            self._stats.dropped_frames,
+            self._stats.metadata_hits,
+            self._stats.metadata_misses,
+            self._stats.avatar_rendered_frames,
+            self._stats.last_pts_us,
+        )
 
     async def _read_face_metadata(self, pts_us: int) -> dict | None:
         for attempt in range(self._metadata_poll_attempts):

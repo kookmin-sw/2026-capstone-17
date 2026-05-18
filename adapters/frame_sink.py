@@ -68,6 +68,7 @@ class FFmpegProcessSink:
         self.bufsize = bufsize
         self.gop_seconds = max(int(gop_seconds), 1)
         self._process: Optional[asyncio.subprocess.Process] = None
+        self._stderr_task: asyncio.Task[None] | None = None
         self._initialized = False
 
     async def _start_ffmpeg(self, width: int, height: int) -> None:
@@ -89,6 +90,7 @@ class FFmpegProcessSink:
         command = [
             "ffmpeg",
             "-y",
+            "-loglevel", "warning",
             "-f", "rawvideo",
             "-vcodec", "rawvideo",
             "-pix_fmt", "rgb24",
@@ -130,8 +132,9 @@ class FFmpegProcessSink:
             *command,
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
         )
+        self._stderr_task = asyncio.create_task(self._drain_stderr())
         self._initialized = True
         self.width = width
         self.height = height
@@ -171,8 +174,24 @@ class FFmpegProcessSink:
             except asyncio.TimeoutError:
                 self._process.kill()
                 await self._process.wait()
+            if self._stderr_task:
+                await self._stderr_task
+                self._stderr_task = None
             logger.info("ffmpeg_sink_closed url=%s", self.output_url)
             self._process = None
+
+    async def _drain_stderr(self) -> None:
+        if self._process is None or self._process.stderr is None:
+            return
+        while True:
+            line = await self._process.stderr.readline()
+            if not line:
+                return
+            logger.warning(
+                "ffmpeg_sink_stderr url=%s detail=%s",
+                self.output_url,
+                line.decode(errors="replace").strip(),
+            )
 
 
 def create_frame_sink(

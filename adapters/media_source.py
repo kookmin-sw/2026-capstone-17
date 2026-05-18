@@ -97,7 +97,11 @@ class PyAVMediaSource:
         if self._container is not None and self._frame_iterator is not None:
             return
 
-        self._container = av.open(self._input_url, mode="r")
+        self._container = av.open(
+            self._input_url,
+            mode="r",
+            options=self._build_open_options(),
+        )
         self._video_stream = next(
             (stream for stream in self._container.streams if stream.type == "video"),
             None,
@@ -106,8 +110,24 @@ class PyAVMediaSource:
             self._close_blocking()
             raise RuntimeError(f"no video stream found: {self._input_url}")
 
+        try:
+            self._video_stream.thread_type = "AUTO"
+        except Exception:
+            logger.debug("pyav_source_thread_type_unsupported input_url=%s", self._input_url)
         self._frame_iterator = self._container.decode(video=0)
         logger.info("pyav_source_opened input_url=%s", self._input_url)
+
+    def _build_open_options(self) -> dict[str, str]:
+        if not self._input_url.startswith("rtsp://"):
+            return {}
+        return {
+            "rtsp_transport": "tcp",
+            "fflags": "nobuffer",
+            "flags": "low_delay",
+            "analyzeduration": "0",
+            "probesize": "32768",
+            "max_delay": "0",
+        }
 
     def _resolve_pts_us(self, frame) -> int:
         if frame.pts is not None:

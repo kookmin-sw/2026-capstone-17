@@ -15,20 +15,20 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
 
-    pipeline_fps: int = 30
-    max_frame_lag_ms: int = 250
+    pipeline_fps: int = 24
+    max_frame_lag_ms: int = 150
     ffmpeg_log_level: str = "warning"
     pipeline_gop_seconds: int = 1
-    pipeline_video_bitrate: str = "2500k"
-    pipeline_maxrate: str = "2500k"
-    pipeline_bufsize: str = "5000k"
+    pipeline_video_bitrate: str = "1500k"
+    pipeline_maxrate: str = "1500k"
+    pipeline_bufsize: str = "3000k"
     hls_time: float = 1.0
     hls_list_size: int = 6
     hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist"
     default_output_mode: str = "HLS"
     input_open_retry_count: int = 5
     input_open_retry_backoff_ms: int = 1000
-    output_audio_bitrate: str = "128k"
+    output_audio_bitrate: str = "96k"
     output_audio_sample_rate: int = 44100
     output_audio_channels: int = 2
     avatar_rendering_enabled: bool = True
