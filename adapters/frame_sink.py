@@ -39,6 +39,7 @@ class FFmpegProcessSink:
         width: int = 1280,
         height: int = 720,
         is_hls: bool = True,
+        is_mp4: bool = False,
         hls_time: float = 2.0,
         hls_list_size: int = 10,
         hls_flags: str = "delete_segments",
@@ -57,6 +58,7 @@ class FFmpegProcessSink:
         self.width = width
         self.height = height
         self.is_hls = is_hls
+        self.is_mp4 = is_mp4
         self.hls_time = max(float(hls_time), 0.5)
         self.hls_list_size = max(int(hls_list_size), 3)
         self.hls_flags = hls_flags
@@ -74,11 +76,14 @@ class FFmpegProcessSink:
         self._initialized = False
 
     async def _start_ffmpeg(self, width: int, height: int) -> None:
-        if self.is_hls:
+        if self.is_hls or self.is_mp4:
             output_dir = os.path.dirname(self.output_url)
             if output_dir:
                 os.makedirs(output_dir, exist_ok=True)
 
+        if self.is_mp4:
+            output_args = ["-movflags", "+faststart", self.output_url]
+        elif self.is_hls:
             output_args = [
                 "-f", "hls",
                 "-hls_time", str(self.hls_time),
@@ -215,7 +220,10 @@ def create_frame_sink(
     if output_path.startswith("/tmp/test") or output_path.startswith("dummy"):
         return DummyHlsSink(output_path=output_path)
 
-    is_hls = output_path.endswith(".m3u8") or not output_path.startswith(("rtmp://", "srt://"))
+    is_mp4 = output_path.endswith(".mp4")
+    is_hls = not is_mp4 and (
+        output_path.endswith(".m3u8") or not output_path.startswith(("rtmp://", "srt://"))
+    )
     if is_hls and not output_path.endswith(".m3u8"):
         output_path = os.path.join(output_path, "index.m3u8")
 
@@ -223,6 +231,7 @@ def create_frame_sink(
         output_url=output_path,
         fps=fps,
         is_hls=is_hls,
+        is_mp4=is_mp4,
         hls_time=hls_time,
         hls_list_size=hls_list_size,
         hls_flags=hls_flags,

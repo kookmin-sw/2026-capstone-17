@@ -170,6 +170,7 @@ class StreamPipeline:
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
         self._media_source: MediaSource | None = None
         self._frame_sink: FrameSink | None = None
+        self._analysis_frame_sink: FrameSink | None = None
         self._stop_event = asyncio.Event()
         self._state = PipelineState.STOPPED
         self._detail: str | None = None
@@ -179,6 +180,11 @@ class StreamPipeline:
     @property
     def state(self) -> PipelineState:
         return self._state
+
+    @property
+    def output_path(self) -> str:
+        """Backward-compatible alias for older analysis code."""
+        return self.output_url
 
     async def start(self) -> None:
         if self._task and not self._task.done():
@@ -303,6 +309,20 @@ class StreamPipeline:
             gop_seconds=self._gop_seconds,
             x264_preset=self._x264_preset,
         )
+        if self.analysis_output_path:
+            self._analysis_frame_sink = create_frame_sink(
+                self.analysis_output_path,
+                fps=self._fps,
+                audio_bitrate=self._output_audio_bitrate,
+                audio_sample_rate=self._output_audio_sample_rate,
+                audio_channels=self._output_audio_channels,
+                audio_source_url=self.input_url if use_input_audio else None,
+                video_bitrate=self._video_bitrate,
+                maxrate=self._maxrate,
+                bufsize=self._bufsize,
+                gop_seconds=self._gop_seconds,
+                x264_preset=self._x264_preset,
+            )
         reader_task = asyncio.create_task(
             self._read_latest_frames(),
             name=f"pipeline-reader:{self.broadcast_id}",
@@ -341,6 +361,8 @@ class StreamPipeline:
                     self._stats.avatar_rendered_frames += 1
                 write_started_at = time.perf_counter()
                 await self._frame_sink.write_frame(rendered_frame)
+                if self._analysis_frame_sink is not None:
+                    await self._analysis_frame_sink.write_frame(rendered_frame)
                 self._timings.output_write.record(write_started_at)
                 self._stats.processed_frames += 1
                 self._stats.last_pts_us = frame.pts_us
@@ -358,6 +380,9 @@ class StreamPipeline:
             if self._frame_sink is not None:
                 await self._frame_sink.close()
                 self._frame_sink = None
+            if self._analysis_frame_sink is not None:
+                await self._analysis_frame_sink.close()
+                self._analysis_frame_sink = None
 
     async def _read_latest_frames(self) -> None:
         if self._media_source is None:

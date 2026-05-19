@@ -1,9 +1,11 @@
 import asyncio
 import logging
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 
 from core.config import Settings
 from schemas.analysis import GeminiAnalysisResult, SpringAnalysisCompletePayload, SpringAnalysisContext
+from schemas.stream import OutputMode
 from services.analysis_archive import AnalysisArchiveService
 from services.gemini_analyzer import GeminiVideoAnalyzer
 from services.s3_storage import S3StorageClient
@@ -11,6 +13,12 @@ from services.spring_analysis_client import SpringAnalysisClient
 from workers.pipeline import StreamPipeline
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class AnalysisPaths:
+    analysis_path: str
+    hls_path: str | None
 
 
 class AnalysisWorkflow:
@@ -29,12 +37,13 @@ class AnalysisWorkflow:
         broadcast_id = pipeline.broadcast_id
         logger.info("analysis_workflow_started broadcast_id=%s", broadcast_id)
         try:
+            analysis_paths = self._resolve_analysis_paths(pipeline)
             analysis_path = await self._with_retries(
                 "analysis_mp4",
                 lambda: self._archive.ensure_analysis_mp4(
                     broadcast_id=broadcast_id,
-                    hls_path=pipeline.output_path,
-                    analysis_path=pipeline.analysis_output_path,
+                    hls_path=analysis_paths.hls_path,
+                    analysis_path=analysis_paths.analysis_path,
                 ),
             )
             duration_sec = await self._with_retries(
@@ -99,6 +108,24 @@ class AnalysisWorkflow:
                     exc_info=True,
                 )
                 await asyncio.sleep(delay)
+
+    def _resolve_analysis_paths(self, pipeline: StreamPipeline) -> AnalysisPaths:
+        analysis_path = getattr(pipeline, "analysis_output_path", None)
+        if not analysis_path:
+            analysis_path = self._archive.build_analysis_path(pipeline.broadcast_id)
+
+        output_mode = getattr(pipeline, "output_mode", None)
+        output_url = getattr(pipeline, "output_url", None)
+        hls_path = output_url if output_mode == OutputMode.HLS else None
+        logger.info(
+            "analysis_paths_resolved broadcast_id=%s output_mode=%s output_url=%s analysis_path=%s hls_path=%s",
+            pipeline.broadcast_id,
+            getattr(output_mode, "value", output_mode),
+            output_url,
+            analysis_path,
+            hls_path,
+        )
+        return AnalysisPaths(analysis_path=analysis_path, hls_path=hls_path)
 
     def _build_complete_payload(
         self,

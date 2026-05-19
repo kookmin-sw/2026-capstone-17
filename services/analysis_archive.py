@@ -21,10 +21,16 @@ class AnalysisArchiveService:
             / self._settings.analysis_output_filename
         )
 
-    async def ensure_analysis_mp4(self, broadcast_id: str, hls_path: str, analysis_path: str) -> str:
+    async def ensure_analysis_mp4(self, broadcast_id: str, hls_path: str | None, analysis_path: str) -> str:
         if self._has_non_empty_file(analysis_path):
             logger.info("analysis_mp4_found broadcast_id=%s path=%s", broadcast_id, analysis_path)
             return analysis_path
+
+        if not hls_path:
+            raise RuntimeError(
+                "analysis.mp4 not found and no HLS playlist is available for fallback remux. "
+                f"broadcast_id={broadcast_id} analysis_path={analysis_path}"
+            )
 
         if not self._has_non_empty_file(hls_path):
             raise RuntimeError(f"HLS playlist not found for analysis. path={hls_path}")
