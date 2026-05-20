@@ -30,7 +30,9 @@ ANALYSIS_PROMPT = """
 Spring 컨텍스트가 함께 제공되면 peakViewerCount, occurredAt, contentRatios는
 Spring 서버가 치지직 API polling으로 계산한 값입니다.
 수치 데이터와 카테고리 비율은 임의로 변경하지 말고 전달된 값을 유지하세요.
-Gemini는 특히 viewerPeakInsight.sceneDescription 생성에 집중하세요.
+viewerPeakInsight가 null이면 peak 데이터가 없는 정상 케이스입니다.
+이 경우 peakViewerCount와 occurredAt을 추정하지 말고, 일반 장면 요약 수준으로 sceneDescription을 작성하거나 null로 두세요.
+viewerPeakInsight가 객체로 제공된 경우 Gemini는 특히 viewerPeakInsight.sceneDescription 생성에 집중하세요.
 
 반드시 아래 JSON 형태만 반환하세요. Markdown 코드블록, 설명 문장, 주석은 금지합니다.
 모르는 값은 합리적으로 추정하되, 숫자는 음수가 되면 안 됩니다.
@@ -120,9 +122,15 @@ class GeminiVideoAnalyzer:
             prompt += (
                 "\n\n아래 Spring 분석 컨텍스트를 우선 신뢰하세요."
                 "\npeakViewerCount, occurredAt, contentRatios는 변경하지 마세요."
-                "\noccurredAt 주변 장면을 찾아 sceneDescription을 작성하세요."
-                f"\n\nSpring analysis context:\n{context_json}"
             )
+            if analysis_context.viewerPeakInsight is None:
+                prompt += (
+                    "\nviewerPeakInsight가 null이므로 peak 시각대 설명을 억지로 만들지 마세요."
+                    "\n가능하면 전체 방송 기준의 일반 장면 설명을 sceneDescription에 작성하거나 null로 두세요."
+                )
+            else:
+                prompt += "\noccurredAt 주변 장면을 찾아 sceneDescription을 작성하세요."
+            prompt += f"\n\nSpring analysis context:\n{context_json}"
         return prompt
 
     def _wait_until_active(self, client, uploaded_file):

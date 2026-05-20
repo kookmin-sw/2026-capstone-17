@@ -34,11 +34,13 @@ class SpringAnalysisClient:
         )
         data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
         context = SpringAnalysisContext.model_validate(data)
+        peak = context.viewerPeakInsight
         logger.info(
-            "spring_analysis_context_fetched broadcast_id=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s sampled_snapshot_count=%s last_sampled_at=%s",
+            "spring_analysis_context_fetched broadcast_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s sampled_snapshot_count=%s last_sampled_at=%s",
             broadcast_id,
-            context.viewerPeakInsight.peakViewerCount,
-            context.viewerPeakInsight.occurredAt,
+            peak is not None,
+            peak.peakViewerCount if peak else None,
+            peak.occurredAt if peak else None,
             len(context.contentRatios),
             context.sampledSnapshotCount,
             context.lastSampledAt,
@@ -51,18 +53,20 @@ class SpringAnalysisClient:
         analysis_job_id: str,
         payload: SpringAnalysisCompletePayload,
     ) -> None:
+        peak = payload.viewerPeakInsight
         logger.info(
-            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
+            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
             broadcast_id,
             analysis_job_id,
-            payload.viewerPeakInsight.peakViewerCount,
-            payload.viewerPeakInsight.occurredAt,
+            peak is not None,
+            peak.peakViewerCount if peak else None,
+            peak.occurredAt if peak else None,
             len(payload.contentRatios),
         )
         await self._request(
             "POST",
             f"/internal/broadcasts/{broadcast_id}/analysis-jobs/{analysis_job_id}/complete",
-            json=payload.model_dump(),
+            json=payload.model_dump(exclude_none=True),
         )
         logger.info(
             "spring_analysis_complete_sent broadcast_id=%s analysis_job_id=%s",

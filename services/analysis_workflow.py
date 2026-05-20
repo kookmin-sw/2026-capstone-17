@@ -73,11 +73,12 @@ class AnalysisWorkflow:
                 duration_sec=duration_sec,
             )
             logger.info(
-                "analysis_complete_payload_prepared broadcast_id=%s peak_viewer_count=%s occurred_at=%s scene_description_present=%s content_ratio_count=%s",
+                "analysis_complete_payload_prepared broadcast_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s scene_description_present=%s content_ratio_count=%s",
                 broadcast_id,
-                complete_payload.viewerPeakInsight.peakViewerCount,
-                complete_payload.viewerPeakInsight.occurredAt,
-                bool(complete_payload.viewerPeakInsight.sceneDescription),
+                complete_payload.viewerPeakInsight is not None,
+                complete_payload.viewerPeakInsight.peakViewerCount if complete_payload.viewerPeakInsight else None,
+                complete_payload.viewerPeakInsight.occurredAt if complete_payload.viewerPeakInsight else None,
+                bool(complete_payload.viewerPeakInsight.sceneDescription) if complete_payload.viewerPeakInsight else False,
                 len(complete_payload.contentRatios),
             )
             await self._with_retries(
@@ -138,15 +139,22 @@ class AnalysisWorkflow:
 
         context_peak = analysis_context.viewerPeakInsight
         gemini_peak = payload_data.get("viewerPeakInsight") or {}
-        merged_peak = {
-            **gemini_peak,
-            "sceneDescription": gemini_peak.get("sceneDescription") or context_peak.sceneDescription,
-        }
-        if context_peak.peakViewerCount is not None:
-            merged_peak["peakViewerCount"] = context_peak.peakViewerCount
-        if context_peak.occurredAt is not None:
-            merged_peak["occurredAt"] = context_peak.occurredAt
-        payload_data["viewerPeakInsight"] = merged_peak
+        if context_peak is None:
+            scene_description = gemini_peak.get("sceneDescription") if isinstance(gemini_peak, dict) else None
+            payload_data["viewerPeakInsight"] = (
+                {"sceneDescription": scene_description} if scene_description else None
+            )
+            logger.info("analysis_context_peak_absent_continuing_with_nullable_peak")
+        else:
+            merged_peak = {
+                **gemini_peak,
+                "sceneDescription": gemini_peak.get("sceneDescription") or context_peak.sceneDescription,
+            }
+            if context_peak.peakViewerCount is not None:
+                merged_peak["peakViewerCount"] = context_peak.peakViewerCount
+            if context_peak.occurredAt is not None:
+                merged_peak["occurredAt"] = context_peak.occurredAt
+            payload_data["viewerPeakInsight"] = merged_peak
 
         if analysis_context.contentRatios:
             payload_data["contentRatios"] = [
