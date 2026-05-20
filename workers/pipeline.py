@@ -99,7 +99,8 @@ class StreamPipeline:
         avatar_asset_resolver: AvatarAssetResolver | None = None,
         avatar_random_seed: int = 0,
         avatar_max_faces_per_frame: int = 1,
-        avatar_metadata_grace_ms: int = 2000,
+        avatar_metadata_grace_ms: int = 500,
+        avatar_primary_reselect_grace_ms: int = 250,
         avatar_mosaic_non_selected_faces: bool = False,
         metadata_poll_attempts: int = 3,
         metadata_poll_interval_ms: int = 10,
@@ -139,6 +140,7 @@ class StreamPipeline:
         self._avatar_random_seed = int(avatar_random_seed)
         self._avatar_max_faces_per_frame = max(int(avatar_max_faces_per_frame), 0)
         self._avatar_metadata_grace_us = max(int(avatar_metadata_grace_ms), 0) * 1000
+        self._avatar_primary_reselect_grace_us = max(int(avatar_primary_reselect_grace_ms), 0) * 1000
         self._avatar_mosaic_non_selected_faces = bool(avatar_mosaic_non_selected_faces)
         self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
         self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
@@ -518,13 +520,6 @@ class StreamPipeline:
         return None
 
     def _resolve_live_face_metadata(self, face_metadata: dict | None, pts_us: int) -> dict | None:
-        if (
-            self._primary_tracking_id
-            and self._has_renderable_metadata(face_metadata)
-            and not self._metadata_contains_tracking_id(face_metadata, self._primary_tracking_id)
-            and self._can_reuse_last_renderable_metadata(pts_us)
-        ):
-            return self._reuse_last_renderable_metadata(pts_us)
         if self._has_renderable_metadata(face_metadata):
             self._last_renderable_face_metadata = face_metadata
             self._last_renderable_face_pts_us = pts_us
@@ -685,7 +680,7 @@ class StreamPipeline:
             return False
         if metadata_pts_us is None or self._primary_tracking_last_seen_pts_us is None:
             return False
-        return abs(metadata_pts_us - self._primary_tracking_last_seen_pts_us) <= self._avatar_metadata_grace_us
+        return abs(metadata_pts_us - self._primary_tracking_last_seen_pts_us) <= self._avatar_primary_reselect_grace_us
 
     def _extract_metadata_pts_us(self, face_metadata: dict) -> int | None:
         raw_pts_us = face_metadata.get("pts_us", face_metadata.get("ptsUs"))
