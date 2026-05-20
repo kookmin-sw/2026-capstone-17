@@ -526,29 +526,17 @@ class StreamPipeline:
             if not isinstance(raw_face, dict):
                 continue
             face = dict(raw_face)
-            if index in selected_indexes:
-                if self.avatar_id:
-                    # A selected broadcast avatar is already materialized before the
-                    # pipeline starts. Strip per-tracking random assignments so live
-                    # rendering never blocks on S3 downloads for background faces.
-                    face.pop("avatar_id", None)
-                    face.pop("avatarId", None)
-                    face.pop("avatar_asset_key", None)
-                    face.pop("avatarAssetKey", None)
-                normalized_faces.append(face)
+            if index not in selected_indexes:
                 continue
-
-            bbox = face.get("bbox")
-            if bbox is None:
-                bbox = face.get("bounding_box", face.get("boundingBox"))
-            if bbox is not None:
-                normalized_faces.append(
-                    {
-                        "tracking_id": face.get("tracking_id", face.get("trackingId")),
-                        "bbox": bbox,
-                        "render_mode": "MOSAIC",
-                    }
-                )
+            if self.avatar_id:
+                # A selected broadcast avatar is already materialized before the
+                # pipeline starts. Strip per-tracking random assignments so live
+                # rendering never blocks on S3 downloads for background faces.
+                face.pop("avatar_id", None)
+                face.pop("avatarId", None)
+                face.pop("avatar_asset_key", None)
+                face.pop("avatarAssetKey", None)
+            normalized_faces.append(face)
 
         normalized = dict(face_metadata)
         normalized["faces"] = normalized_faces

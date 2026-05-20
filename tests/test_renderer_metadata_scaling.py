@@ -66,6 +66,19 @@ class AvatarRendererMetadataScalingTest(unittest.TestCase):
 
         self.assertIs(renderer._prepare_metadata_for_frame(frame, metadata), metadata)
 
+    def test_bbox_without_coefficients_does_not_trigger_implicit_mosaic(self) -> None:
+        renderer = AvatarRenderer()
+
+        self.assertFalse(renderer._should_mosaic_face({"bbox": {"x": 1, "y": 2, "width": 3, "height": 4}}))
+        self.assertTrue(
+            renderer._should_mosaic_face(
+                {
+                    "bbox": {"x": 1, "y": 2, "width": 3, "height": 4},
+                    "render_mode": "MOSAIC",
+                }
+            )
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -116,6 +116,8 @@ Spring이 넘겨야 하는 최소 정보:
 
 `bbox`는 클라이언트가 분석한 원본 영상 좌표계 기준으로 보내면 됩니다. FastAPI가 `PIPELINE_MAX_FRAME_WIDTH`/`PIPELINE_MAX_FRAME_HEIGHT`로 프레임을 다운스케일해도, PyAV 디코딩 시점의 원본 크기 또는 Redis metadata의 `frame_width`/`frame_height`를 기준으로 현재 합성 프레임 크기에 맞게 자동 리매핑합니다.
 
+라이브 경로에서는 아바타 합성 대상으로 선택되지 않은 얼굴을 서버가 자동 모자이크하지 않습니다. 해당 얼굴은 원본 프레임 그대로 지나갑니다.
+
 fallback 정책:
 
 - Redis 데이터 없음/손상: `face_metadata=None`

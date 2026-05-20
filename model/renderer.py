@@ -281,9 +281,7 @@ class AvatarRenderer:
 
     def _should_mosaic_face(self, face: dict[str, Any]) -> bool:
         render_mode = str(face.get("render_mode", face.get("renderMode", ""))).upper()
-        if render_mode in {"MOSAIC", "PIXELATE", "BLUR"}:
-            return True
-        return self._normalize_bbox(face.get("bbox")) is not None and not self._extract_coeffs(face)
+        return render_mode in {"MOSAIC", "PIXELATE", "BLUR"}
 
     def _iter_faces(self, face_metadata: dict[str, Any]) -> list[dict[str, Any]]:
         raw_faces = face_metadata.get("faces")
