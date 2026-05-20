@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     avatar_s3_region: str | None = None
     avatar_random_seed: int = 0
     avatar_max_faces_per_frame: int = 1
+    avatar_metadata_grace_ms: int = 2000
+    avatar_mosaic_non_selected_faces: bool = False
     metadata_poll_attempts: int = 1
     metadata_poll_interval_ms: int = 0
     metadata_lookup_tolerance_us: int = 25000

@@ -99,6 +99,8 @@ class StreamPipeline:
         avatar_asset_resolver: AvatarAssetResolver | None = None,
         avatar_random_seed: int = 0,
         avatar_max_faces_per_frame: int = 1,
+        avatar_metadata_grace_ms: int = 2000,
+        avatar_mosaic_non_selected_faces: bool = False,
         metadata_poll_attempts: int = 3,
         metadata_poll_interval_ms: int = 10,
         ffmpeg_log_level: str = "warning",
@@ -136,6 +138,8 @@ class StreamPipeline:
         self._avatar_asset_resolver = avatar_asset_resolver
         self._avatar_random_seed = int(avatar_random_seed)
         self._avatar_max_faces_per_frame = max(int(avatar_max_faces_per_frame), 0)
+        self._avatar_metadata_grace_us = max(int(avatar_metadata_grace_ms), 0) * 1000
+        self._avatar_mosaic_non_selected_faces = bool(avatar_mosaic_non_selected_faces)
         self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
         self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
         self._ffmpeg_log_level = ffmpeg_log_level
@@ -165,6 +169,12 @@ class StreamPipeline:
         self._rendered_frame_seq = 0
         self._latest_frame_event = asyncio.Event()
         self._reader_error: Exception | None = None
+        self._last_renderable_face_metadata: dict | None = None
+        self._last_renderable_face_pts_us: int | None = None
+        self._last_ready_avatar_id: str | None = avatar_id
+        self._primary_tracking_id: str | None = None
+        self._primary_tracking_last_seen_pts_us: int | None = None
+        self._avatar_asset_prepare_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
 
         self._task: asyncio.Task[None] | None = None
         self._ffmpeg_proc: asyncio.subprocess.Process | None = None
@@ -280,6 +290,11 @@ class StreamPipeline:
         self._latest_frame_seq = 0
         self._rendered_frame_seq = 0
         self._reader_error = None
+        self._last_renderable_face_metadata = None
+        self._last_renderable_face_pts_us = None
+        self._last_ready_avatar_id = self.avatar_id
+        self._primary_tracking_id = None
+        self._primary_tracking_last_seen_pts_us = None
         self._latest_frame_event.clear()
         renderer = AvatarRenderer(
             avatar_project_dir=self._avatar_project_dir,
@@ -346,6 +361,8 @@ class StreamPipeline:
                     self._stats.metadata_misses += 1
                 else:
                     self._stats.metadata_hits += 1
+                face_metadata = self._resolve_live_face_metadata(face_metadata, frame.pts_us)
+                if face_metadata is not None:
                     face_metadata = self._prepare_metadata_for_live_render(face_metadata)
                     asset_started_at = time.perf_counter()
                     await self._prepare_face_avatar_assets(face_metadata)
@@ -383,6 +400,7 @@ class StreamPipeline:
             if self._analysis_frame_sink is not None:
                 await self._analysis_frame_sink.close()
                 self._analysis_frame_sink = None
+            self._cancel_avatar_asset_prepare_tasks()
 
     async def _read_latest_frames(self) -> None:
         if self._media_source is None:
@@ -499,6 +517,79 @@ class StreamPipeline:
                 await asyncio.sleep(self._metadata_poll_interval_s)
         return None
 
+    def _resolve_live_face_metadata(self, face_metadata: dict | None, pts_us: int) -> dict | None:
+        if (
+            self._primary_tracking_id
+            and self._has_renderable_metadata(face_metadata)
+            and not self._metadata_contains_tracking_id(face_metadata, self._primary_tracking_id)
+            and self._can_reuse_last_renderable_metadata(pts_us)
+        ):
+            return self._reuse_last_renderable_metadata(pts_us)
+        if self._has_renderable_metadata(face_metadata):
+            self._last_renderable_face_metadata = face_metadata
+            self._last_renderable_face_pts_us = pts_us
+            return face_metadata
+        if self._has_explicit_mosaic_face(face_metadata):
+            return face_metadata
+        if self._can_reuse_last_renderable_metadata(pts_us):
+            return self._reuse_last_renderable_metadata(pts_us)
+        return face_metadata
+
+    def _reuse_last_renderable_metadata(self, pts_us: int) -> dict:
+        reused_metadata = dict(self._last_renderable_face_metadata or {})
+        reused_metadata["pts_us"] = pts_us
+        reused_metadata["ptsUs"] = pts_us
+        logger.info(
+            "avatar_metadata_reused broadcast_id=%s pts_us=%s last_pts_us=%s tracking_id=%s",
+            self.broadcast_id,
+            pts_us,
+            self._last_renderable_face_pts_us,
+            self._primary_tracking_id,
+        )
+        return reused_metadata
+
+    def _has_renderable_metadata(self, face_metadata: dict | None) -> bool:
+        if not isinstance(face_metadata, dict):
+            return False
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, list):
+            return self._has_renderable_face_metadata(face_metadata)
+        return any(isinstance(face, dict) and self._has_renderable_face_metadata(face) for face in raw_faces)
+
+    def _has_explicit_mosaic_face(self, face_metadata: dict | None) -> bool:
+        if not isinstance(face_metadata, dict):
+            return False
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, list):
+            raw_faces = [face_metadata]
+        for raw_face in raw_faces:
+            if not isinstance(raw_face, dict):
+                continue
+            render_mode = str(raw_face.get("render_mode", raw_face.get("renderMode", ""))).upper()
+            if render_mode in {"MOSAIC", "PIXELATE", "BLUR"}:
+                return True
+        return False
+
+    def _metadata_contains_tracking_id(self, face_metadata: dict | None, tracking_id: str) -> bool:
+        if not isinstance(face_metadata, dict):
+            return False
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, list):
+            raw_faces = [face_metadata]
+        return any(
+            isinstance(face, dict)
+            and self._extract_tracking_id(face) == tracking_id
+            and self._has_renderable_face_metadata(face)
+            for face in raw_faces
+        )
+
+    def _can_reuse_last_renderable_metadata(self, pts_us: int) -> bool:
+        if self._avatar_metadata_grace_us <= 0:
+            return False
+        if self._last_renderable_face_metadata is None or self._last_renderable_face_pts_us is None:
+            return False
+        return abs(int(pts_us) - self._last_renderable_face_pts_us) <= self._avatar_metadata_grace_us
+
     def _prepare_metadata_for_live_render(self, face_metadata: dict) -> dict:
         if self._avatar_max_faces_per_frame <= 0:
             return face_metadata
@@ -508,25 +599,39 @@ class StreamPipeline:
             return face_metadata
 
         ranked_faces = [
-            (index, self._bbox_area(face))
+            (index, self._bbox_area(face), self._extract_tracking_id(face))
             for index, face in enumerate(raw_faces)
             if isinstance(face, dict) and self._has_renderable_face_metadata(face)
         ]
         if not ranked_faces:
-            return face_metadata
-
-        selected_indexes = {
-            index
-            for index, _ in sorted(ranked_faces, key=lambda item: item[1], reverse=True)[
-                : self._avatar_max_faces_per_frame
+            mosaic_faces = [
+                mosaic_face
+                for raw_face in raw_faces
+                if isinstance(raw_face, dict)
+                for mosaic_face in [
+                    self._build_mosaic_face(
+                        raw_face,
+                        require_explicit=not self._avatar_mosaic_non_selected_faces,
+                    )
+                ]
+                if mosaic_face is not None
             ]
-        }
+            if not mosaic_faces:
+                return face_metadata
+            normalized = dict(face_metadata)
+            normalized["faces"] = mosaic_faces
+            return normalized
+
+        selected_indexes = self._select_live_avatar_indexes(ranked_faces, face_metadata)
         normalized_faces: list[Any] = []
         for index, raw_face in enumerate(raw_faces):
             if not isinstance(raw_face, dict):
                 continue
             face = dict(raw_face)
             if index not in selected_indexes:
+                mosaic_face = self._build_mosaic_face(face, require_explicit=not self._avatar_mosaic_non_selected_faces)
+                if mosaic_face is not None:
+                    normalized_faces.append(mosaic_face)
                 continue
             if self.avatar_id:
                 # A selected broadcast avatar is already materialized before the
@@ -536,11 +641,115 @@ class StreamPipeline:
                 face.pop("avatarId", None)
                 face.pop("avatar_asset_key", None)
                 face.pop("avatarAssetKey", None)
+            else:
+                face = self._prepare_tracking_avatar_face(face)
             normalized_faces.append(face)
 
         normalized = dict(face_metadata)
         normalized["faces"] = normalized_faces
         return normalized
+
+    def _select_live_avatar_indexes(
+        self,
+        ranked_faces: list[tuple[int, float, str | None]],
+        face_metadata: dict,
+    ) -> set[int]:
+        metadata_pts_us = self._extract_metadata_pts_us(face_metadata)
+        indexed_by_tracking_id = {
+            tracking_id: index
+            for index, _, tracking_id in ranked_faces
+            if tracking_id is not None
+        }
+        if self._primary_tracking_id in indexed_by_tracking_id:
+            self._primary_tracking_last_seen_pts_us = metadata_pts_us
+            return {indexed_by_tracking_id[str(self._primary_tracking_id)]}
+
+        if self._can_wait_for_primary_tracking(metadata_pts_us):
+            return set()
+
+        sorted_faces = sorted(ranked_faces, key=lambda item: item[1], reverse=True)
+        selected_faces = sorted_faces[: self._avatar_max_faces_per_frame]
+        selected_tracking_id = next((tracking_id for _, _, tracking_id in selected_faces if tracking_id), None)
+        if selected_tracking_id:
+            self._primary_tracking_id = selected_tracking_id
+            self._primary_tracking_last_seen_pts_us = metadata_pts_us
+            logger.info(
+                "avatar_primary_tracking_selected broadcast_id=%s tracking_id=%s",
+                self.broadcast_id,
+                selected_tracking_id,
+            )
+        return {index for index, _, _ in selected_faces}
+
+    def _can_wait_for_primary_tracking(self, metadata_pts_us: int | None) -> bool:
+        if self._primary_tracking_id is None:
+            return False
+        if metadata_pts_us is None or self._primary_tracking_last_seen_pts_us is None:
+            return False
+        return abs(metadata_pts_us - self._primary_tracking_last_seen_pts_us) <= self._avatar_metadata_grace_us
+
+    def _extract_metadata_pts_us(self, face_metadata: dict) -> int | None:
+        raw_pts_us = face_metadata.get("pts_us", face_metadata.get("ptsUs"))
+        try:
+            if raw_pts_us is not None:
+                return int(raw_pts_us)
+        except (TypeError, ValueError):
+            return None
+        return None
+
+    def _extract_tracking_id(self, face: dict) -> str | None:
+        raw_tracking_id = face.get("tracking_id", face.get("trackingId"))
+        if raw_tracking_id is None:
+            return None
+        tracking_id = str(raw_tracking_id).strip()
+        return tracking_id or None
+
+    def _build_mosaic_face(self, face: dict, require_explicit: bool = False) -> dict[str, Any] | None:
+        render_mode = str(face.get("render_mode", face.get("renderMode", ""))).upper()
+        if require_explicit and render_mode not in {"MOSAIC", "PIXELATE", "BLUR"}:
+            return None
+        bbox = face.get("bbox")
+        if bbox is None:
+            bbox = face.get("bounding_box", face.get("boundingBox"))
+        if bbox is None:
+            return None
+        return {
+            "tracking_id": face.get("tracking_id", face.get("trackingId")),
+            "bbox": bbox,
+            "render_mode": "MOSAIC",
+        }
+
+    def _prepare_tracking_avatar_face(self, face: dict) -> dict:
+        avatar_id = self._extract_face_avatar_id(face)
+        avatar_asset_key = self._extract_face_avatar_asset_key(face)
+        if not avatar_id or not avatar_asset_key or self._avatar_asset_resolver is None:
+            return face
+        if self._avatar_asset_resolver.is_avatar_cached(avatar_id):
+            self._last_ready_avatar_id = avatar_id
+            return face
+        self._schedule_avatar_asset_prepare(avatar_id, avatar_asset_key)
+        fallback_avatar_id = self._last_ready_avatar_id
+        if fallback_avatar_id:
+            face["avatar_id"] = fallback_avatar_id
+            face.pop("avatarId", None)
+            face.pop("avatar_asset_key", None)
+            face.pop("avatarAssetKey", None)
+            return face
+        mosaic_face = self._build_mosaic_face(face)
+        return mosaic_face if mosaic_face is not None else face
+
+    def _extract_face_avatar_id(self, face: dict) -> str | None:
+        raw_avatar_id = face.get("avatar_id", face.get("avatarId"))
+        if raw_avatar_id is None:
+            return None
+        avatar_id = str(raw_avatar_id).strip()
+        return avatar_id or None
+
+    def _extract_face_avatar_asset_key(self, face: dict) -> str | None:
+        raw_avatar_asset_key = face.get("avatar_asset_key", face.get("avatarAssetKey"))
+        if raw_avatar_asset_key is None:
+            return None
+        avatar_asset_key = str(raw_avatar_asset_key).strip()
+        return avatar_asset_key or None
 
     def _has_renderable_face_metadata(self, face: dict) -> bool:
         return self._extract_coeffs(face) is not None and self._normalize_bbox(face) is not None
@@ -587,14 +796,67 @@ class StreamPipeline:
     async def _prepare_face_avatar_assets(self, face_metadata: dict) -> None:
         if self._avatar_asset_resolver is None:
             return
+        raw_faces = face_metadata.get("faces")
+        if not isinstance(raw_faces, list):
+            return
+        for raw_face in raw_faces:
+            if not isinstance(raw_face, dict):
+                continue
+            avatar_id = self._extract_face_avatar_id(raw_face)
+            avatar_asset_key = self._extract_face_avatar_asset_key(raw_face)
+            if not avatar_id or not avatar_asset_key:
+                continue
+            if self._avatar_asset_resolver.is_avatar_cached(avatar_id):
+                self._last_ready_avatar_id = avatar_id
+                continue
+            self._schedule_avatar_asset_prepare(avatar_id, avatar_asset_key)
+
+    def _schedule_avatar_asset_prepare(self, avatar_id: str, avatar_asset_key: str) -> None:
+        if self._avatar_asset_resolver is None:
+            return
+        task_key = (avatar_id, avatar_asset_key)
+        existing_task = self._avatar_asset_prepare_tasks.get(task_key)
+        if existing_task is not None and not existing_task.done():
+            return
+        task = asyncio.create_task(
+            self._prepare_avatar_asset_in_background(avatar_id, avatar_asset_key),
+            name=f"avatar-asset:{self.broadcast_id}:{avatar_id}",
+        )
+        self._avatar_asset_prepare_tasks[task_key] = task
+        task.add_done_callback(lambda completed_task: self._on_avatar_asset_prepare_done(task_key, completed_task))
+
+    async def _prepare_avatar_asset_in_background(self, avatar_id: str, avatar_asset_key: str) -> None:
+        if self._avatar_asset_resolver is None:
+            return
+        await self._avatar_asset_resolver.prepare_avatar_bank(avatar_id, avatar_asset_key)
+
+    def _on_avatar_asset_prepare_done(
+        self,
+        task_key: tuple[str, str],
+        completed_task: asyncio.Task[None],
+    ) -> None:
+        self._avatar_asset_prepare_tasks.pop(task_key, None)
+        avatar_id, _ = task_key
+        if completed_task.cancelled():
+            return
         try:
-            await self._avatar_asset_resolver.prepare_face_avatar_assets(face_metadata)
+            completed_task.result()
         except Exception as exc:
             logger.warning(
-                "avatar_asset_prepare_failed broadcast_id=%s detail=%s",
+                "avatar_asset_prepare_failed broadcast_id=%s avatar_id=%s detail=%s",
                 self.broadcast_id,
+                avatar_id,
                 exc,
             )
+            return
+        self._last_ready_avatar_id = avatar_id
+        logger.info("avatar_asset_prepare_ready broadcast_id=%s avatar_id=%s", self.broadcast_id, avatar_id)
+
+    def _cancel_avatar_asset_prepare_tasks(self) -> None:
+        for task in self._avatar_asset_prepare_tasks.values():
+            if not task.done():
+                task.cancel()
+        self._avatar_asset_prepare_tasks.clear()
 
     def _prepare_output_dirs(self) -> None:
         if self.output_mode == OutputMode.HLS:

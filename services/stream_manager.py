@@ -80,6 +80,8 @@ class StreamManager:
                     avatar_asset_resolver=self._avatar_assets,
                     avatar_random_seed=self._settings.avatar_random_seed,
                     avatar_max_faces_per_frame=self._settings.avatar_max_faces_per_frame,
+                    avatar_metadata_grace_ms=self._settings.avatar_metadata_grace_ms,
+                    avatar_mosaic_non_selected_faces=self._settings.avatar_mosaic_non_selected_faces,
                     metadata_poll_attempts=self._settings.metadata_poll_attempts,
                     metadata_poll_interval_ms=self._settings.metadata_poll_interval_ms,
                     ffmpeg_log_level=self._settings.ffmpeg_log_level,

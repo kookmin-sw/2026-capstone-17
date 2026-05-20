@@ -37,6 +37,12 @@ class AvatarAssetResolver:
         await asyncio.to_thread(self._materialize_avatar, avatar_id, avatar_asset_key, target_dir)
         return str(target_dir)
 
+    def is_avatar_cached(self, avatar_id: str | None) -> bool:
+        if not avatar_id:
+            return False
+        target_dir = Path(self._settings.avatar_cache_dir) / self._safe_path_part(avatar_id)
+        return (target_dir / "profile.json").exists()
+
     async def prepare_face_avatar_assets(self, face_metadata: Mapping[str, Any] | None) -> None:
         if not isinstance(face_metadata, Mapping):
             return
