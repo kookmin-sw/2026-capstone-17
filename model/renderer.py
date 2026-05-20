@@ -84,6 +84,7 @@ class AvatarRenderer:
             raise RuntimeError(
                 f"Unexpected rgb24 payload size: got={len(frame.payload)} expected={expected_size}"
             )
+        face_metadata = self._prepare_metadata_for_frame(frame, face_metadata)
 
         rgb_frame = np.frombuffer(frame.payload, dtype=np.uint8).reshape(
             int(frame.height),
@@ -103,6 +104,8 @@ class AvatarRenderer:
             width=frame.width,
             height=frame.height,
             pixel_format="rgb24",
+            source_width=frame.source_width,
+            source_height=frame.source_height,
         )
 
     async def _mosaic_only(self, frame: VideoFrame, face_metadata: dict[str, Any]) -> VideoFrame:
@@ -121,6 +124,7 @@ class AvatarRenderer:
             raise RuntimeError(
                 f"Unexpected rgb24 payload size: got={len(frame.payload)} expected={expected_size}"
             )
+        face_metadata = self._prepare_metadata_for_frame(frame, face_metadata)
         rgb_frame = np.frombuffer(frame.payload, dtype=np.uint8).reshape(
             int(frame.height),
             int(frame.width),
@@ -135,7 +139,116 @@ class AvatarRenderer:
             width=frame.width,
             height=frame.height,
             pixel_format="rgb24",
+            source_width=frame.source_width,
+            source_height=frame.source_height,
         )
+
+    def _prepare_metadata_for_frame(
+        self,
+        frame: VideoFrame,
+        face_metadata: dict[str, Any],
+    ) -> dict[str, Any]:
+        target_width = int(frame.width or 0)
+        target_height = int(frame.height or 0)
+        if target_width <= 0 or target_height <= 0:
+            return face_metadata
+
+        source_size = self._resolve_metadata_source_size(face_metadata, frame)
+        if source_size is None:
+            return face_metadata
+
+        source_width, source_height = source_size
+        if source_width <= 0 or source_height <= 0:
+            return face_metadata
+        if source_width == target_width and source_height == target_height:
+            return face_metadata
+
+        scale_x = target_width / source_width
+        scale_y = target_height / source_height
+        return self._remap_metadata_bboxes(face_metadata, scale_x=scale_x, scale_y=scale_y)
+
+    def _resolve_metadata_source_size(
+        self,
+        face_metadata: dict[str, Any],
+        frame: VideoFrame,
+    ) -> tuple[int, int] | None:
+        metadata_width = self._extract_int(
+            face_metadata,
+            (
+                "frame_width",
+                "frameWidth",
+                "source_width",
+                "sourceWidth",
+                "video_width",
+                "videoWidth",
+            ),
+        )
+        metadata_height = self._extract_int(
+            face_metadata,
+            (
+                "frame_height",
+                "frameHeight",
+                "source_height",
+                "sourceHeight",
+                "video_height",
+                "videoHeight",
+            ),
+        )
+        if metadata_width is not None and metadata_height is not None:
+            return metadata_width, metadata_height
+        if frame.source_width is not None and frame.source_height is not None:
+            return int(frame.source_width), int(frame.source_height)
+        return None
+
+    def _extract_int(self, payload: Mapping[str, Any], keys: Sequence[str]) -> int | None:
+        for key in keys:
+            value = payload.get(key)
+            try:
+                if value is not None:
+                    return int(value)
+            except (TypeError, ValueError):
+                continue
+        return None
+
+    def _remap_metadata_bboxes(
+        self,
+        face_metadata: dict[str, Any],
+        *,
+        scale_x: float,
+        scale_y: float,
+    ) -> dict[str, Any]:
+        remapped = dict(face_metadata)
+        if remapped.get("bbox") is not None:
+            remapped["bbox"] = self._scale_bbox(remapped["bbox"], scale_x=scale_x, scale_y=scale_y)
+
+        raw_faces = face_metadata.get("faces")
+        if isinstance(raw_faces, Sequence) and not isinstance(raw_faces, (str, bytes)):
+            faces: list[Any] = []
+            for raw_face in raw_faces:
+                if not isinstance(raw_face, Mapping):
+                    faces.append(raw_face)
+                    continue
+
+                face = dict(raw_face)
+                raw_bbox = face.get("bbox")
+                if raw_bbox is None:
+                    raw_bbox = face.get("bounding_box", face.get("boundingBox"))
+                if raw_bbox is not None:
+                    face["bbox"] = self._scale_bbox(raw_bbox, scale_x=scale_x, scale_y=scale_y)
+                faces.append(face)
+            remapped["faces"] = faces
+        return remapped
+
+    def _scale_bbox(self, raw_bbox: Any, *, scale_x: float, scale_y: float) -> Any:
+        bbox = self._normalize_bbox(raw_bbox)
+        if bbox is None:
+            return raw_bbox
+        return {
+            "x": bbox["x"] * scale_x,
+            "y": bbox["y"] * scale_y,
+            "width": bbox["width"] * scale_x,
+            "height": bbox["height"] * scale_y,
+        }
 
     def _has_avatar_faces(self, face_metadata: dict[str, Any]) -> bool:
         for face in self._iter_faces(face_metadata):
@@ -187,6 +300,15 @@ class AvatarRenderer:
                 "y": float(raw_bbox["y"]),
                 "width": float(raw_bbox["width"]),
                 "height": float(raw_bbox["height"]),
+            }
+        if isinstance(raw_bbox, Mapping) and {"left", "top", "right", "bottom"}.issubset(raw_bbox.keys()):
+            left = float(raw_bbox["left"])
+            top = float(raw_bbox["top"])
+            return {
+                "x": left,
+                "y": top,
+                "width": float(raw_bbox["right"]) - left,
+                "height": float(raw_bbox["bottom"]) - top,
             }
         if isinstance(raw_bbox, Sequence) and not isinstance(raw_bbox, (str, bytes)):
             values = list(raw_bbox)

@@ -94,6 +94,8 @@ class PyAVMediaSource:
                 continue
 
             pts_us = self._resolve_pts_us(frame)
+            source_width = int(frame.width)
+            source_height = int(frame.height)
             frame = self._resize_frame_if_needed(frame)
             rgb_frame = frame.to_ndarray(format="rgb24")
             return VideoFrame(
@@ -102,6 +104,8 @@ class PyAVMediaSource:
                 width=int(rgb_frame.shape[1]),
                 height=int(rgb_frame.shape[0]),
                 pixel_format="rgb24",
+                source_width=source_width,
+                source_height=source_height,
             )
 
     def _ensure_opened(self) -> None:

@@ -100,6 +100,8 @@ Spring이 넘겨야 하는 최소 정보:
 
 ```json
 {
+  "frame_width": 1920,
+  "frame_height": 1080,
   "faces": [
     {
       "tracking_id": 0,
@@ -111,6 +113,8 @@ Spring이 넘겨야 하는 최소 정보:
 ```
 
 `trackingId`, `tdmmRaw` camelCase 입력도 렌더러에서 정규화합니다. `tdmm_raw.coeffs`는 Qualcomm FaceMap 3DMM 264차원 계수여야 합니다.
+
+`bbox`는 클라이언트가 분석한 원본 영상 좌표계 기준으로 보내면 됩니다. FastAPI가 `PIPELINE_MAX_FRAME_WIDTH`/`PIPELINE_MAX_FRAME_HEIGHT`로 프레임을 다운스케일해도, PyAV 디코딩 시점의 원본 크기 또는 Redis metadata의 `frame_width`/`frame_height`를 기준으로 현재 합성 프레임 크기에 맞게 자동 리매핑합니다.
 
 fallback 정책:
 
@@ -127,6 +131,8 @@ fallback 정책:
 - `AVATAR_S3_BUCKET` (선택, 없으면 `S3_BUCKET` 사용)
 - `AVATAR_S3_REGION` (선택, 없으면 `S3_REGION` 사용)
 - `AVATAR_RANDOM_SEED` (기본값: `0`)
+- `PIPELINE_MAX_FRAME_WIDTH` (기본값: `854`, 0이면 원본 폭 유지)
+- `PIPELINE_MAX_FRAME_HEIGHT` (기본값: `854`, 0이면 원본 높이 유지)
 - `METADATA_POLL_ATTEMPTS` (기본값: `3`)
 - `METADATA_POLL_INTERVAL_MS` (기본값: `10`)
 - `METADATA_LOOKUP_TOLERANCE_US` (기본값: `5000`)
