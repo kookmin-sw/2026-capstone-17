@@ -16,15 +16,15 @@ class Settings(BaseSettings):
     redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
     redis_metadata_latest_key_template: str = "broadcast:{broadcast_id}:meta:latest"
 
-    pipeline_fps: int = 20
+    pipeline_fps: int = 15
     max_frame_lag_ms: int = 100
     ffmpeg_log_level: str = "warning"
     pipeline_gop_seconds: int = 1
-    pipeline_video_bitrate: str = "1200k"
-    pipeline_maxrate: str = "1200k"
-    pipeline_bufsize: str = "2400k"
-    pipeline_max_frame_width: int = 854
-    pipeline_max_frame_height: int = 854
+    pipeline_video_bitrate: str = "900k"
+    pipeline_maxrate: str = "900k"
+    pipeline_bufsize: str = "1800k"
+    pipeline_max_frame_width: int = 720
+    pipeline_max_frame_height: int = 720
     pipeline_x264_preset: str = "ultrafast"
     hls_time: float = 1.0
     hls_list_size: int = 6
