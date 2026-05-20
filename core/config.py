@@ -68,7 +68,13 @@ class Settings(BaseSettings):
 
     gemini_api_key: str | None = None
     gemini_model: str = "gemini-2.5-flash"
+    gemini_fallback_model: str | None = None
     gemini_file_processing_timeout_sec: int = 600
+    gemini_file_poll_interval_sec: float = 5.0
+    gemini_file_poll_timeout_sec: int = 120
+    gemini_generate_attempts: int = 4
+    gemini_generate_backoff_initial_sec: float = 5.0
+    gemini_generate_backoff_max_sec: float = 20.0
 
     spring_internal_base_url: str | None = None
     internal_api_key: str | None = None

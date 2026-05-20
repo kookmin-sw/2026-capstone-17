@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import time
+from collections.abc import Iterable
 from typing import Any
 
 from core.config import Settings
@@ -78,7 +79,12 @@ class GeminiVideoAnalyzer:
         if not self._settings.gemini_api_key:
             raise RuntimeError("GEMINI_API_KEY is required.")
 
-        result = await asyncio.to_thread(self._analyze_blocking, video_path, duration_sec, analysis_context)
+        result = await asyncio.to_thread(
+            self._analyze_blocking,
+            video_path,
+            duration_sec,
+            analysis_context,
+        )
         logger.info("gemini_analysis_completed video=%s", video_path)
         return result
 
@@ -89,23 +95,35 @@ class GeminiVideoAnalyzer:
         analysis_context: SpringAnalysisContext | None,
     ) -> GeminiAnalysisResult:
         client = genai.Client(api_key=self._settings.gemini_api_key)
-        uploaded = client.files.upload(
-            file=video_path,
-            config=types.UploadFileConfig(mime_type="video/mp4"),
-        )
+        uploaded = self._upload_file(client, video_path)
         uploaded = self._wait_until_active(client, uploaded)
         prompt = self._build_prompt(duration_sec=duration_sec, analysis_context=analysis_context)
-        response = client.models.generate_content(
-            model=self._settings.gemini_model,
-            contents=[uploaded, prompt],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=GeminiAnalysisResult,
-            ),
+        response = self._generate_content_with_retries(
+            client=client,
+            uploaded_file=uploaded,
+            prompt=prompt,
         )
         if getattr(response, "parsed", None):
             return GeminiAnalysisResult.model_validate(response.parsed)
         return GeminiAnalysisResult.model_validate(self._parse_json_text(response.text))
+
+    def _upload_file(self, client, video_path: str):
+        try:
+            uploaded = client.files.upload(
+                file=video_path,
+                config=types.UploadFileConfig(mime_type="video/mp4"),
+            )
+        except Exception:
+            logger.exception("gemini_file_upload_failed video=%s", video_path)
+            raise
+
+        logger.info(
+            "gemini_file_uploaded file_name=%s file_state=%s video=%s",
+            getattr(uploaded, "name", None),
+            self._file_state_name(uploaded),
+            video_path,
+        )
+        return uploaded
 
     def _build_prompt(
         self,
@@ -134,17 +152,148 @@ class GeminiVideoAnalyzer:
         return prompt
 
     def _wait_until_active(self, client, uploaded_file):
-        deadline = time.monotonic() + self._settings.gemini_file_processing_timeout_sec
+        timeout_sec = self._settings.gemini_file_poll_timeout_sec or self._settings.gemini_file_processing_timeout_sec
+        deadline = time.monotonic() + timeout_sec
+        interval_sec = max(float(self._settings.gemini_file_poll_interval_sec), 1.0)
         current = uploaded_file
         while time.monotonic() < deadline:
-            state_name = getattr(getattr(current, "state", None), "name", None)
+            state_name = self._file_state_name(current)
+            logger.info(
+                "gemini_file_state_polled file_name=%s state=%s",
+                getattr(current, "name", None),
+                state_name,
+            )
             if state_name == "ACTIVE":
                 return current
             if state_name == "FAILED":
+                logger.error(
+                    "gemini_file_processing_failed file_name=%s state=%s",
+                    getattr(current, "name", None),
+                    state_name,
+                )
                 raise RuntimeError(f"Gemini file processing failed. name={current.name}")
-            time.sleep(5)
+            time.sleep(interval_sec)
             current = client.files.get(name=current.name)
+        logger.error(
+            "gemini_file_processing_timeout file_name=%s timeout_sec=%s last_state=%s",
+            getattr(uploaded_file, "name", None),
+            timeout_sec,
+            self._file_state_name(current),
+        )
         raise RuntimeError(f"Gemini file processing timed out. name={uploaded_file.name}")
+
+    def _generate_content_with_retries(self, client, uploaded_file, prompt: str):
+        last_exc: Exception | None = None
+        file_name = getattr(uploaded_file, "name", None)
+        file_state = self._file_state_name(uploaded_file)
+
+        for model in self._candidate_models():
+            model_failed_with_retryable_error = False
+            for attempt in range(1, max(self._settings.gemini_generate_attempts, 1) + 1):
+                logger.info(
+                    "gemini_generate_content_start model=%s file_name=%s file_state=%s attempt=%s/%s",
+                    model,
+                    file_name,
+                    file_state,
+                    attempt,
+                    max(self._settings.gemini_generate_attempts, 1),
+                )
+                try:
+                    return client.models.generate_content(
+                        model=model,
+                        contents=[uploaded_file, prompt],
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=GeminiAnalysisResult,
+                        ),
+                    )
+                except Exception as exc:
+                    last_exc = exc
+                    retryable = self._is_retryable_generate_error(exc)
+                    if not retryable or attempt >= max(self._settings.gemini_generate_attempts, 1):
+                        model_failed_with_retryable_error = retryable
+                        has_fallback = (
+                            retryable
+                            and self._settings.gemini_fallback_model
+                            and model != self._settings.gemini_fallback_model
+                        )
+                        if has_fallback:
+                            logger.warning(
+                                "gemini_generate_content_model_exhausted model=%s file_name=%s file_state=%s attempt=%s retryable=%s error_type=%s detail=%s",
+                                model,
+                                file_name,
+                                file_state,
+                                attempt,
+                                retryable,
+                                type(exc).__name__,
+                                exc,
+                            )
+                        else:
+                            logger.error(
+                                "gemini_generate_content_failed_final model=%s file_name=%s file_state=%s attempt=%s retryable=%s error_type=%s detail=%s",
+                                model,
+                                file_name,
+                                file_state,
+                                attempt,
+                                retryable,
+                                type(exc).__name__,
+                                exc,
+                                exc_info=True,
+                            )
+                        break
+
+                    delay = self._generate_retry_delay(attempt)
+                    logger.warning(
+                        "gemini_generate_content_retrying model=%s file_name=%s file_state=%s attempt=%s delay_sec=%s error_type=%s detail=%s",
+                        model,
+                        file_name,
+                        file_state,
+                        attempt,
+                        delay,
+                        type(exc).__name__,
+                        exc,
+                    )
+                    time.sleep(delay)
+
+            if not model_failed_with_retryable_error:
+                break
+
+            if model != self._settings.gemini_fallback_model and self._settings.gemini_fallback_model:
+                logger.warning(
+                    "gemini_generate_content_switching_fallback primary_model=%s fallback_model=%s file_name=%s file_state=%s",
+                    model,
+                    self._settings.gemini_fallback_model,
+                    file_name,
+                    file_state,
+                )
+
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Gemini generateContent failed without an exception.")
+
+    def _candidate_models(self) -> Iterable[str]:
+        yield self._settings.gemini_model
+        fallback = self._settings.gemini_fallback_model
+        if fallback and fallback != self._settings.gemini_model:
+            yield fallback
+
+    def _generate_retry_delay(self, attempt: int) -> float:
+        initial = max(float(self._settings.gemini_generate_backoff_initial_sec), 0.0)
+        max_delay = max(float(self._settings.gemini_generate_backoff_max_sec), initial)
+        return min(initial * (2 ** max(attempt - 1, 0)), max_delay)
+
+    def _is_retryable_generate_error(self, exc: Exception) -> bool:
+        code = getattr(exc, "code", None)
+        status = str(getattr(exc, "status", "") or "").upper()
+        message = str(exc).upper()
+        if code in {429, 500, 502, 503, 504}:
+            return True
+        return "UNAVAILABLE" in status or "UNAVAILABLE" in message or "HIGH DEMAND" in message
+
+    @staticmethod
+    def _file_state_name(file_obj) -> str | None:
+        state = getattr(file_obj, "state", None)
+        return getattr(state, "name", None) or (str(state) if state is not None else None)
 
     @staticmethod
     def _parse_json_text(text: str | None) -> dict[str, Any]:

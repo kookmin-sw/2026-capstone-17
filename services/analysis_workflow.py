@@ -62,9 +62,10 @@ class AnalysisWorkflow:
                 "spring_analysis_context",
                 lambda: self._spring.fetch_analysis_context(broadcast_id),
             )
-            gemini_result = await self._with_retries(
-                "gemini_analysis",
-                lambda: self._gemini.analyze(analysis_path, duration_sec, analysis_context),
+            gemini_result = await self._gemini.analyze(
+                analysis_path,
+                duration_sec,
+                analysis_context,
             )
             complete_payload = self._build_complete_payload(
                 gemini_result=gemini_result,
