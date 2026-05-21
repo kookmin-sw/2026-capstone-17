@@ -2,6 +2,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from typing import Any
 
 from core.config import Settings
 from schemas.analysis import GeminiAnalysisResult, SpringAnalysisCompletePayload, SpringAnalysisContext
@@ -35,9 +36,24 @@ class AnalysisWorkflow:
             return None
 
         broadcast_id = pipeline.broadcast_id
+        analysis_job_id: str | None = None
+        complete_sent = False
+        failure_stage = "analysis_start"
         logger.info("analysis_workflow_started broadcast_id=%s", broadcast_id)
         try:
+            failure_stage = "spring_latest_job"
+            analysis_job_id = await self._with_retries(
+                "spring_latest_job",
+                lambda: self._spring.fetch_latest_job_id(broadcast_id),
+            )
+            failure_stage = "spring_analysis_context"
+            analysis_context = await self._with_retries(
+                "spring_analysis_context",
+                lambda: self._spring.fetch_analysis_context(broadcast_id),
+            )
+            failure_stage = "analysis_paths"
             analysis_paths = self._resolve_analysis_paths(pipeline)
+            failure_stage = "analysis_mp4"
             analysis_path = await self._with_retries(
                 "analysis_mp4",
                 lambda: self._archive.ensure_analysis_mp4(
@@ -46,27 +62,23 @@ class AnalysisWorkflow:
                     analysis_path=analysis_paths.analysis_path,
                 ),
             )
+            failure_stage = "analysis_duration"
             duration_sec = await self._with_retries(
                 "analysis_duration",
                 lambda: self._archive.probe_duration_sec(analysis_path),
             )
+            failure_stage = "s3_upload"
             storage_url = await self._with_retries(
                 "s3_upload",
                 lambda: self._storage.upload_analysis_mp4(broadcast_id, analysis_path),
             )
-            analysis_job_id = await self._with_retries(
-                "spring_latest_job",
-                lambda: self._spring.fetch_latest_job_id(broadcast_id),
-            )
-            analysis_context = await self._with_retries(
-                "spring_analysis_context",
-                lambda: self._spring.fetch_analysis_context(broadcast_id),
-            )
+            failure_stage = "gemini_analysis"
             gemini_result = await self._gemini.analyze(
                 analysis_path,
                 duration_sec,
                 analysis_context,
             )
+            failure_stage = "complete_payload"
             complete_payload = self._build_complete_payload(
                 gemini_result=gemini_result,
                 analysis_context=analysis_context,
@@ -82,14 +94,27 @@ class AnalysisWorkflow:
                 bool(complete_payload.viewerPeakInsight.sceneDescription) if complete_payload.viewerPeakInsight else False,
                 len(complete_payload.contentRatios),
             )
+            failure_stage = "spring_complete_job"
             await self._with_retries(
                 "spring_complete_job",
                 lambda: self._spring.complete_job(broadcast_id, analysis_job_id, complete_payload),
             )
+            complete_sent = True
             logger.info("analysis_workflow_completed broadcast_id=%s", broadcast_id)
             return complete_payload
-        except Exception:
-            logger.exception("analysis_workflow_failed broadcast_id=%s", broadcast_id)
+        except Exception as exc:
+            logger.exception(
+                "analysis_workflow_failed broadcast_id=%s stage=%s",
+                broadcast_id,
+                failure_stage,
+            )
+            await self._notify_analysis_failed(
+                broadcast_id=broadcast_id,
+                analysis_job_id=analysis_job_id,
+                stage=failure_stage,
+                exc=exc,
+                complete_sent=complete_sent,
+            )
             return None
 
     async def _with_retries(self, label: str, fn: Callable[[], Awaitable]):
@@ -167,3 +192,80 @@ class AnalysisWorkflow:
             storageUrl=storage_url,
             durationSec=duration_sec,
         )
+
+    async def _notify_analysis_failed(
+        self,
+        broadcast_id: str,
+        analysis_job_id: str | None,
+        stage: str,
+        exc: Exception,
+        complete_sent: bool,
+    ) -> None:
+        if complete_sent:
+            logger.info(
+                "spring_analysis_fail_skipped broadcast_id=%s reason=complete_already_sent stage=%s",
+                broadcast_id,
+                stage,
+            )
+            return
+
+        error_message = self._build_failure_error_message(stage, exc)
+        if not analysis_job_id:
+            logger.warning(
+                "spring_analysis_fail_skipped broadcast_id=%s reason=missing_analysis_job_id stage=%s error_message=%s",
+                broadcast_id,
+                stage,
+                error_message,
+            )
+            return
+
+        try:
+            await self._with_retries(
+                "spring_fail_job",
+                lambda: self._spring.fail_job(broadcast_id, analysis_job_id, error_message),
+            )
+        except Exception:
+            logger.exception(
+                "spring_analysis_fail_skipped broadcast_id=%s analysis_job_id=%s reason=fail_api_failed stage=%s error_message=%s",
+                broadcast_id,
+                analysis_job_id,
+                stage,
+                error_message,
+            )
+
+    def _build_failure_error_message(self, stage: str, exc: Exception) -> str:
+        raw_message = self._first_error_line(exc)
+        lowered = raw_message.lower()
+
+        if "file processing" in lowered and "timeout" in lowered:
+            return "Gemini file processing timeout"
+        if "file processing failed" in lowered:
+            return self._truncate_error_message(raw_message)
+
+        detail = self._extract_error_code(exc) or raw_message or exc.__class__.__name__
+        if stage == "gemini_analysis":
+            return self._truncate_error_message(f"Gemini analysis failed: {detail}")
+        if stage == "complete_payload":
+            return self._truncate_error_message(f"Complete payload build failed: {detail}")
+        return self._truncate_error_message(f"Analysis workflow failed at {stage}: {detail}")
+
+    def _first_error_line(self, exc: Exception) -> str:
+        message = str(exc).replace("\r", " ").strip()
+        if not message:
+            return exc.__class__.__name__
+        return " ".join(message.splitlines()[0].split())
+
+    def _extract_error_code(self, exc: Exception) -> str | None:
+        candidates: list[Any] = [
+            getattr(exc, "code", None),
+            getattr(exc, "status", None),
+            getattr(exc, "reason", None),
+        ]
+        parts = [str(candidate) for candidate in candidates if candidate]
+        if parts:
+            return " ".join(parts)
+        return None
+
+    def _truncate_error_message(self, message: str) -> str:
+        normalized = " ".join(message.split())
+        return normalized[:500]

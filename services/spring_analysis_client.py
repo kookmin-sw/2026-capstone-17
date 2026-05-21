@@ -74,6 +74,29 @@ class SpringAnalysisClient:
             analysis_job_id,
         )
 
+    async def fail_job(
+        self,
+        broadcast_id: str,
+        analysis_job_id: str,
+        error_message: str,
+    ) -> None:
+        logger.info(
+            "spring_analysis_fail_sending broadcast_id=%s analysis_job_id=%s error_message=%s",
+            broadcast_id,
+            analysis_job_id,
+            error_message,
+        )
+        await self._request(
+            "POST",
+            f"/internal/broadcasts/{broadcast_id}/analysis-jobs/{analysis_job_id}/fail",
+            json={"errorMessage": error_message},
+        )
+        logger.info(
+            "spring_analysis_fail_sent broadcast_id=%s analysis_job_id=%s",
+            broadcast_id,
+            analysis_job_id,
+        )
+
     async def _request(self, method: str, path: str, **kwargs) -> dict[str, Any]:
         headers = {"X-Internal-Api-Key": self._settings.internal_api_key or ""}
         base_url = (self._settings.spring_internal_base_url or "").rstrip("/")
