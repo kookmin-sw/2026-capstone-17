@@ -45,6 +45,7 @@ class StreamManager:
                 latest_tolerance_us=self._settings.metadata_latest_tolerance_us,
                 fine_tolerance_us=self._settings.metadata_lookup_fine_tolerance_us,
                 coarse_step_us=self._settings.metadata_lookup_coarse_step_us,
+                auto_offset_max_us=self._settings.metadata_auto_offset_max_us,
             )
             input_stream_key = req.input_stream_key or req.stream_key
             if input_stream_key is None:

@@ -54,6 +54,7 @@ class Settings(BaseSettings):
     metadata_latest_tolerance_us: int = 3000000
     metadata_lookup_fine_tolerance_us: int = 200
     metadata_lookup_coarse_step_us: int = 500
+    metadata_auto_offset_max_us: int = 8000000
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
     mediamtx_path_prefix: str = "live"
