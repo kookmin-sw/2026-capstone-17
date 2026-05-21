@@ -55,9 +55,10 @@ class SpringAnalysisClient:
     ) -> None:
         peak = payload.viewerPeakInsight
         logger.info(
-            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
+            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s storageUrl=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
             broadcast_id,
             analysis_job_id,
+            payload.storageUrl,
             peak is not None,
             peak.peakViewerCount if peak else None,
             peak.occurredAt if peak else None,

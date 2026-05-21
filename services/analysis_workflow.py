@@ -86,8 +86,10 @@ class AnalysisWorkflow:
                 duration_sec=duration_sec,
             )
             logger.info(
-                "analysis_complete_payload_prepared broadcast_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s scene_description_present=%s content_ratio_count=%s",
+                "analysis_complete_payload_prepared broadcast_id=%s storageUrl=%s durationSec=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s scene_description_present=%s content_ratio_count=%s",
                 broadcast_id,
+                complete_payload.storageUrl,
+                complete_payload.durationSec,
                 complete_payload.viewerPeakInsight is not None,
                 complete_payload.viewerPeakInsight.peakViewerCount if complete_payload.viewerPeakInsight else None,
                 complete_payload.viewerPeakInsight.occurredAt if complete_payload.viewerPeakInsight else None,
