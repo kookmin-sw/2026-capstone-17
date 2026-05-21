@@ -72,11 +72,11 @@ class RedisMetadataStore:
         if learned_offset_us is not None:
             offset_payload = await self._lookup_payload(client, broadcast_id, int(pts_us) + learned_offset_us)
             if offset_payload is not None:
-                return offset_payload
+                return self._normalize_payload_pts_us(offset_payload, pts_us)
 
         exact_payload = await self._lookup_payload(client, broadcast_id, pts_us)
         if exact_payload is not None:
-            return exact_payload
+            return self._normalize_payload_pts_us(exact_payload, pts_us)
 
         latest_payload = await client.get(self._build_latest_key(broadcast_id))
         decoded_latest_payload = self._decode_payload(latest_payload)
@@ -122,8 +122,8 @@ class RedisMetadataStore:
         adjusted_pts_us = frame_pts_us + learned_offset_us
         offset_payload = await self._lookup_payload(client, broadcast_id, adjusted_pts_us)
         if offset_payload is not None:
-            return offset_payload
-        return latest_payload
+            return self._normalize_payload_pts_us(offset_payload, frame_pts_us)
+        return self._normalize_payload_pts_us(latest_payload, frame_pts_us)
 
     def _learn_offset(self, broadcast_id: str, offset_candidate_us: int) -> int:
         previous_offset_us = self._offset_us_by_broadcast.get(broadcast_id)
@@ -184,7 +184,7 @@ class RedisMetadataStore:
             logger.info("metadata_miss broadcast_id=%s frame_pts_us=%s redis_latest_pts_us=%s diff_us=%s miss_reason=%s", broadcast_id, pts_us, payload_pts_us, diff_us, miss_reason)
             return None
 
-        return decoded_payload
+        return self._normalize_payload_pts_us(decoded_payload, pts_us)
 
     def _decode_latest_payload(self, payload: str | None, pts_us: int) -> dict[str, Any] | None:
         return self._decode_latest_payload_and_log(payload, pts_us, "unknown")
@@ -195,6 +195,13 @@ class RedisMetadataStore:
             return int(raw_pts_us)
         except (TypeError, ValueError):
             return None
+
+    def _normalize_payload_pts_us(self, payload: dict[str, Any], pts_us: int) -> dict[str, Any]:
+        normalized = dict(payload)
+        normalized_pts_us = int(pts_us)
+        normalized["pts_us"] = normalized_pts_us
+        normalized["ptsUs"] = normalized_pts_us
+        return normalized
 
     def _candidate_pts_values(self, pts_us: int) -> list[int]:
         """Return exact PTS first, then nearby values for encoder clock drift.

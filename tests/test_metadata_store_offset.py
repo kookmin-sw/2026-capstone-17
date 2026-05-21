@@ -44,7 +44,10 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
 
         result = await store.get_face_metadata("broadcast-a", 0)
 
-        self.assertEqual(result, payload)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["pts_us"], 0)
+        self.assertEqual(result["ptsUs"], 0)
+        self.assertEqual(result["faces"], payload["faces"])
         self.assertEqual(store._offset_us_by_broadcast["broadcast-a"], 4_000_000)
 
     async def test_uses_latest_when_offset_key_is_not_exact(self) -> None:
@@ -57,7 +60,10 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
 
         result = await store.get_face_metadata("broadcast-a", 123)
 
-        self.assertEqual(result, payload)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["pts_us"], 123)
+        self.assertEqual(result["ptsUs"], 123)
+        self.assertEqual(result["faces"], payload["faces"])
         self.assertEqual(store._offset_us_by_broadcast["broadcast-a"], 4_000_000)
 
     async def test_uses_learned_offset_before_latest_fallback(self) -> None:
@@ -67,7 +73,10 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
 
         result = await store.get_face_metadata("broadcast-a", 100_000)
 
-        self.assertEqual(result, payload)
+        self.assertIsNotNone(result)
+        self.assertEqual(result["pts_us"], 100_000)
+        self.assertEqual(result["ptsUs"], 100_000)
+        self.assertEqual(result["faces"], payload["faces"])
 
 
 if __name__ == "__main__":
