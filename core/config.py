@@ -21,12 +21,12 @@ class Settings(BaseSettings):
     max_frame_lag_ms: int = 100
     ffmpeg_log_level: str = "warning"
     pipeline_gop_seconds: int = 1
-    pipeline_video_bitrate: str = "900k"
-    pipeline_maxrate: str = "900k"
-    pipeline_bufsize: str = "1800k"
+    pipeline_video_bitrate: str = "1500k"
+    pipeline_maxrate: str = "1800k"
+    pipeline_bufsize: str = "3600k"
     pipeline_max_frame_width: int = 720
     pipeline_max_frame_height: int = 720
-    pipeline_x264_preset: str = "ultrafast"
+    pipeline_x264_preset: str = "superfast"
     hls_time: float = 1.0
     hls_list_size: int = 6
     hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist"
