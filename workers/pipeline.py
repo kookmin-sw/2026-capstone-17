@@ -361,6 +361,7 @@ class StreamPipeline:
         )
         consumed_seq = 0
 
+        initial_offset_seeded = False
         try:
             while not self._stop_event.is_set():
                 frame_started_at = time.perf_counter()
@@ -371,6 +372,9 @@ class StreamPipeline:
                     break
                 consumed_seq, frame = latest
                 self._rendered_frame_seq = consumed_seq
+                if not initial_offset_seeded:
+                    self._seed_metadata_offset_from_media_source()
+                    initial_offset_seeded = True
                 metadata_started_at = time.perf_counter()
                 face_metadata = await self._read_face_metadata(frame.pts_us)
                 self._timings.metadata.record(metadata_started_at)
@@ -515,6 +519,25 @@ class StreamPipeline:
         self._last_progress_processed_frames = self._stats.processed_frames
         self._last_progress_dropped_frames = self._stats.dropped_frames
         self._timings.reset()
+
+    def _seed_metadata_offset_from_media_source(self) -> None:
+        """Seed metadata_store offset using PyAV's pts anchor when available.
+
+        PyAV rebases the first observed frame's raw pts to zero, so the gap between
+        the client's metadata pts and PyAV's rebased frame_pts equals that raw pts.
+        Seeding eliminates the bootstrap window where the metadata store would
+        otherwise either hit a stale `meta:0` or refine from a biased latest-diff.
+        """
+        media_source = self._media_source
+        if media_source is None:
+            return
+        base_pts_us = getattr(media_source, "base_pts_us", None)
+        if not isinstance(base_pts_us, int) or base_pts_us <= 0:
+            return
+        seeder = getattr(self._metadata_store, "set_initial_offset", None)
+        if not callable(seeder):
+            return
+        seeder(self.broadcast_id, base_pts_us)
 
     async def _read_face_metadata(self, pts_us: int) -> dict | None:
         for attempt in range(self._metadata_poll_attempts):

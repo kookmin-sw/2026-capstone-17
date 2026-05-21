@@ -47,7 +47,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "deploy/docker-compose.ec2.yaml"
+          source: "deploy/docker-compose.ec2.yaml,deploy/mediamtx/mediamtx.yml"
           target: "~/focus-fast-api"
           strip_components: 1
 

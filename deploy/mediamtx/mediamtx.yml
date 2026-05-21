@@ -1,0 +1,39 @@
+###############################################
+# MediaMTX configuration for the FastAPI worker
+#
+# Goal: keep cold-start RTSP buffering small so that PyAV sees the live frame
+# soon after RTMP/SRT publish begins, instead of replaying a backlog. Tuned for
+# low latency at the cost of dropping a reader that cannot keep up.
+###############################################
+
+logLevel: info
+logDestinations: [stdout]
+
+# Per-connection outgoing queue. Smaller value bounds the cold-start backlog a
+# reader (PyAV) is fed when it connects after publish has already started. Hit
+# the limit and MediaMTX drops the reader — the FastAPI side will reconnect.
+writeQueueSize: 64
+
+# Read/write timeouts. Tight enough to clear hung readers without churning.
+readTimeout: 10s
+writeTimeout: 10s
+
+# Pure ingest-and-relay; no HLS/WebRTC packaging on this hop.
+hls: no
+webrtc: no
+
+# Keep the protocols the streamer client may publish through.
+rtsp: yes
+rtmp: yes
+srt: yes
+
+# Force TCP for RTSP read by PyAV — matches `_build_open_options` in adapters/media_source.py.
+rtspTransports: [tcp]
+
+paths:
+  # Every broadcast publishes under `live/<stream_key>`.
+  '~^live/.+$':
+    source: publisher
+    # Keep the path warm between publisher disconnects so reconnects don't pay
+    # full path-setup cost.
+    sourceOnDemand: no

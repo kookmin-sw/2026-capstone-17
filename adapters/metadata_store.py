@@ -77,6 +77,26 @@ class RedisMetadataStore:
         self._client = redis.from_url(self._redis_url, decode_responses=True)
         return self._client
 
+    def set_initial_offset(self, broadcast_id: str, offset_us: int) -> None:
+        """Seed the metadata offset before the first lookup.
+
+        Used by the pipeline to pass the PyAV `_base_pts_us` (the raw pts of
+        the first observed frame). When MediaMTX preserves RTMP timestamps,
+        this is the true delta between PyAV-rebased pts and client metadata pts,
+        so we can hit the right Redis keys from frame zero without bootstrapping
+        from a stale `meta:0` or from a biased latest-diff sample.
+        """
+        if broadcast_id in self._offset_us_by_broadcast:
+            return
+        seeded_offset_us = int(offset_us)
+        self._offset_us_by_broadcast[broadcast_id] = seeded_offset_us
+        self._last_logged_offset_us_by_broadcast[broadcast_id] = seeded_offset_us
+        logger.info(
+            "metadata_initial_offset_seeded broadcast_id=%s offset_us=%s",
+            broadcast_id,
+            seeded_offset_us,
+        )
+
     async def get_face_metadata(self, broadcast_id: str, pts_us: int) -> dict[str, Any] | None:
         client = await self._ensure_client()
         if client is None:
@@ -85,9 +105,10 @@ class RedisMetadataStore:
         frame_pts_us = int(pts_us)
         learned_offset_us = self._offset_us_by_broadcast.get(broadcast_id)
 
-        # Exact lookup wastes an mget when we already know there is a non-zero offset.
-        # Only probe it when offset is unknown, or known to be near zero.
-        if learned_offset_us is None or abs(learned_offset_us) <= self._index_lookup_window_us:
+        # Exact lookup is only safe once we know the offset is near zero — otherwise it can
+        # accidentally hit an old `meta:0` from a previous frame and learn the wrong offset.
+        # When no offset has been learned yet, skip exact and let the ZSET index drive learning.
+        if learned_offset_us is not None and abs(learned_offset_us) <= self._index_lookup_window_us:
             exact_payload = await self._lookup_exact_payload(client, broadcast_id, frame_pts_us)
             if exact_payload is not None:
                 self._refine_offset(broadcast_id, 0)

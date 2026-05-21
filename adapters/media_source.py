@@ -75,6 +75,16 @@ class PyAVMediaSource:
         self._closed = True
         await asyncio.to_thread(self._close_blocking)
 
+    @property
+    def base_pts_us(self) -> int | None:
+        """Raw pts of the first observed frame, before PyAV rebasing.
+
+        When MediaMTX preserves RTMP timestamps (no RTP randomization), this value
+        equals the client publish-relative pts of PyAV's first observed frame and
+        therefore the true delta between PyAV-rebased pts and client metadata pts.
+        """
+        return self._base_pts_us
+
     def _read_frame_blocking(self) -> VideoFrame:
         self._ensure_opened()
 

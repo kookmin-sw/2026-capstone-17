@@ -223,6 +223,40 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["pts_us"], 0)
         self.assertEqual(result["faces"][0]["tracking_id"], 7)
 
+    async def test_seeded_offset_prevents_stale_meta_zero_hit(self) -> None:
+        # PyAV rebased its first observed frame from raw_pts=1.25s to 0.
+        # Client wrote meta:0 8s ago (still alive under TTL); meta:1250000 is the
+        # actual record for this frame. Without seeding, an exact lookup at frame_pts=0
+        # would match the stale meta:0 and lock in offset=0, causing every subsequent
+        # avatar to render with metadata from 1.25s before the displayed frame.
+        keys: dict[str, str] = {
+            "broadcast:bc:meta:0": json.dumps({"pts_us": 0, "faces": [{"tracking_id": 99}]}),
+        }
+        zindex: list[tuple[str, float]] = [("0", 0.0)]
+        for index in range(16):
+            pts = 1_250_000 + index * 33_333
+            payload = {"pts_us": pts, "faces": [{"tracking_id": index}]}
+            keys[f"broadcast:bc:meta:{pts}"] = json.dumps(payload)
+            zindex.append((str(pts), float(pts)))
+        latest_payload = {"pts_us": 1_750_000, "faces": [{"tracking_id": 15}]}
+        keys["broadcast:bc:meta:latest"] = json.dumps(latest_payload)
+        store = self._store(
+            values=keys,
+            zsets={"broadcast:bc:meta:index": zindex},
+            lookup_tolerance_us=150_000,
+        )
+
+        store.set_initial_offset("bc", 1_250_000)
+
+        first = await store.get_face_metadata("bc", 0)
+        self.assertIsNotNone(first)
+        self.assertEqual(first["faces"][0]["tracking_id"], 0)
+        self.assertEqual(store._offset_us_by_broadcast["bc"], 1_250_000)
+
+        second = await store.get_face_metadata("bc", 33_333)
+        self.assertIsNotNone(second)
+        self.assertEqual(second["faces"][0]["tracking_id"], 1)
+
     async def test_legacy_exact_lookup_still_supported_when_no_index(self) -> None:
         payload = {"pts_us": 4_000_000, "faces": [{"tracking_id": 1}]}
         encoded = json.dumps(payload)

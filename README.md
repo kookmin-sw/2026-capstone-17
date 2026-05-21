@@ -270,4 +270,5 @@ uvicorn main:app --reload
 
 - [배포 시크릿 정리](docs/배포-시크릿-정리.md)
 - [클라이언트 연동 문서](docs/클라이언트-연동.md)
+- [MediaMTX 지연 튜닝](docs/MediaMTX-지연-튜닝.md)
 - [작업 현황](작업현황.md)
