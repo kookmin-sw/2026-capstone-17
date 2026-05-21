@@ -78,6 +78,15 @@ class PipelineTimingStats:
         self.frame_total.reset()
 
 
+@dataclass(slots=True)
+class AvatarPersonSlot:
+    tracking_id: str
+    avatar_id: str | None
+    avatar_asset_key: str | None
+    bbox: dict[str, float]
+    last_seen_pts_us: int
+
+
 class StreamPipeline:
     """RTSP relay by default, or frame-level avatar rendering when requested."""
 
@@ -101,6 +110,8 @@ class StreamPipeline:
         avatar_max_faces_per_frame: int = 1,
         avatar_metadata_grace_ms: int = 500,
         avatar_primary_reselect_grace_ms: int = 250,
+        avatar_person_slot_grace_ms: int = 3000,
+        avatar_person_slot_match_iou: float = 0.10,
         avatar_mosaic_non_selected_faces: bool = False,
         metadata_poll_attempts: int = 3,
         metadata_poll_interval_ms: int = 10,
@@ -141,6 +152,8 @@ class StreamPipeline:
         self._avatar_max_faces_per_frame = max(int(avatar_max_faces_per_frame), 0)
         self._avatar_metadata_grace_us = max(int(avatar_metadata_grace_ms), 0) * 1000
         self._avatar_primary_reselect_grace_us = max(int(avatar_primary_reselect_grace_ms), 0) * 1000
+        self._avatar_person_slot_grace_us = max(int(avatar_person_slot_grace_ms), 0) * 1000
+        self._avatar_person_slot_match_iou = max(float(avatar_person_slot_match_iou), 0.0)
         self._avatar_mosaic_non_selected_faces = bool(avatar_mosaic_non_selected_faces)
         self._metadata_poll_attempts = max(int(metadata_poll_attempts), 1)
         self._metadata_poll_interval_s = max(int(metadata_poll_interval_ms), 0) / 1000
@@ -176,6 +189,7 @@ class StreamPipeline:
         self._last_ready_avatar_id: str | None = avatar_id
         self._primary_tracking_id: str | None = None
         self._primary_tracking_last_seen_pts_us: int | None = None
+        self._avatar_person_slots_by_tracking_id: dict[str, AvatarPersonSlot] = {}
         self._avatar_asset_prepare_tasks: dict[tuple[str, str], asyncio.Task[None]] = {}
 
         self._task: asyncio.Task[None] | None = None
@@ -297,6 +311,7 @@ class StreamPipeline:
         self._last_ready_avatar_id = self.avatar_id
         self._primary_tracking_id = None
         self._primary_tracking_last_seen_pts_us = None
+        self._avatar_person_slots_by_tracking_id.clear()
         self._latest_frame_event.clear()
         renderer = AvatarRenderer(
             avatar_project_dir=self._avatar_project_dir,
@@ -373,7 +388,7 @@ class StreamPipeline:
                 rendered_frame = await renderer.render(
                     frame,
                     face_metadata=face_metadata,
-                    avatar_id=self.avatar_id,
+                    avatar_id=self._resolve_renderer_avatar_id(face_metadata),
                 )
                 self._timings.avatar_render.record(render_started_at)
                 if face_metadata is not None and rendered_frame is not frame:
@@ -618,6 +633,14 @@ class StreamPipeline:
             return normalized
 
         selected_indexes = self._select_live_avatar_indexes(ranked_faces, face_metadata)
+        metadata_pts_us = self._extract_metadata_pts_us(face_metadata)
+        current_tracking_ids = {
+            tracking_id
+            for raw_face in raw_faces
+            if isinstance(raw_face, dict)
+            for tracking_id in [self._extract_tracking_id(raw_face)]
+            if tracking_id is not None
+        }
         normalized_faces: list[Any] = []
         for index, raw_face in enumerate(raw_faces):
             if not isinstance(raw_face, dict):
@@ -628,10 +651,12 @@ class StreamPipeline:
                 if mosaic_face is not None:
                     normalized_faces.append(mosaic_face)
                 continue
-            if self.avatar_id:
+            face = self._stabilize_face_avatar_assignment(face, metadata_pts_us, current_tracking_ids)
+            if self.avatar_id and not self._should_use_face_avatar_assignments([face]):
                 # A selected broadcast avatar is already materialized before the
-                # pipeline starts. Strip per-tracking random assignments so live
-                # rendering never blocks on S3 downloads for background faces.
+                # pipeline starts. Strip per-tracking assignments only in the
+                # single-avatar mode. In multi-person mode, Spring/Redis
+                # face-level assignments are the source of truth.
                 face.pop("avatar_id", None)
                 face.pop("avatarId", None)
                 face.pop("avatar_asset_key", None)
@@ -657,13 +682,17 @@ class StreamPipeline:
         }
         if self._primary_tracking_id in indexed_by_tracking_id:
             self._primary_tracking_last_seen_pts_us = metadata_pts_us
-            return {indexed_by_tracking_id[str(self._primary_tracking_id)]}
+            if self._avatar_max_faces_per_frame <= 1:
+                return {indexed_by_tracking_id[str(self._primary_tracking_id)]}
 
-        if self._can_wait_for_primary_tracking(metadata_pts_us):
+        if self._avatar_max_faces_per_frame <= 1 and self._can_wait_for_primary_tracking(metadata_pts_us):
             return set()
 
         sorted_faces = sorted(ranked_faces, key=lambda item: item[1], reverse=True)
-        selected_faces = sorted_faces[: self._avatar_max_faces_per_frame]
+        if self._avatar_max_faces_per_frame <= 1:
+            selected_faces = sorted_faces[: self._avatar_max_faces_per_frame]
+        else:
+            selected_faces = self._select_multi_person_faces(sorted_faces)
         selected_tracking_id = next((tracking_id for _, _, tracking_id in selected_faces if tracking_id), None)
         if selected_tracking_id:
             self._primary_tracking_id = selected_tracking_id
@@ -674,6 +703,32 @@ class StreamPipeline:
                 selected_tracking_id,
             )
         return {index for index, _, _ in selected_faces}
+
+    def _select_multi_person_faces(
+        self,
+        sorted_faces: list[tuple[int, float, str | None]],
+    ) -> list[tuple[int, float, str | None]]:
+        selected: list[tuple[int, float, str | None]] = []
+        active_tracking_ids = set(self._avatar_person_slots_by_tracking_id.keys())
+        if self._primary_tracking_id:
+            active_tracking_ids.add(str(self._primary_tracking_id))
+
+        for item in sorted_faces:
+            _, _, tracking_id = item
+            if tracking_id is not None and tracking_id in active_tracking_ids:
+                selected.append(item)
+                if len(selected) >= self._avatar_max_faces_per_frame:
+                    return selected
+
+        selected_indexes = {index for index, _, _ in selected}
+        for item in sorted_faces:
+            index, _, _ = item
+            if index in selected_indexes:
+                continue
+            selected.append(item)
+            if len(selected) >= self._avatar_max_faces_per_frame:
+                return selected
+        return selected
 
     def _can_wait_for_primary_tracking(self, metadata_pts_us: int | None) -> bool:
         if self._primary_tracking_id is None:
@@ -713,6 +768,124 @@ class StreamPipeline:
             "render_mode": "MOSAIC",
         }
 
+    def _stabilize_face_avatar_assignment(
+        self,
+        face: dict,
+        metadata_pts_us: int | None,
+        current_tracking_ids: set[str],
+    ) -> dict:
+        tracking_id = self._extract_tracking_id(face)
+        bbox = self._normalize_bbox(face)
+        if tracking_id is None or bbox is None:
+            return face
+
+        pts_us = int(metadata_pts_us or self._last_renderable_face_pts_us or 0)
+        self._prune_stale_avatar_person_slots(pts_us)
+        slot = self._avatar_person_slots_by_tracking_id.get(tracking_id)
+        if slot is None:
+            slot = self._find_matching_avatar_person_slot(tracking_id, bbox, pts_us, current_tracking_ids)
+
+        if slot is None:
+            slot = AvatarPersonSlot(
+                tracking_id=tracking_id,
+                avatar_id=self._extract_face_avatar_id(face),
+                avatar_asset_key=self._extract_face_avatar_asset_key(face),
+                bbox=bbox,
+                last_seen_pts_us=pts_us,
+            )
+            self._avatar_person_slots_by_tracking_id[tracking_id] = slot
+        else:
+            if slot.tracking_id != tracking_id:
+                logger.info(
+                    "avatar_person_slot_relinked broadcast_id=%s old_tracking_id=%s new_tracking_id=%s avatar_id=%s",
+                    self.broadcast_id,
+                    slot.tracking_id,
+                    tracking_id,
+                    slot.avatar_id,
+                )
+                self._avatar_person_slots_by_tracking_id.pop(slot.tracking_id, None)
+                slot.tracking_id = tracking_id
+                self._avatar_person_slots_by_tracking_id[tracking_id] = slot
+            if slot.avatar_id is None:
+                slot.avatar_id = self._extract_face_avatar_id(face)
+            if slot.avatar_asset_key is None:
+                slot.avatar_asset_key = self._extract_face_avatar_asset_key(face)
+            slot.bbox = bbox
+            slot.last_seen_pts_us = pts_us
+
+        if slot.avatar_id:
+            face["avatar_id"] = slot.avatar_id
+            face.pop("avatarId", None)
+        if slot.avatar_asset_key:
+            face["avatar_asset_key"] = slot.avatar_asset_key
+            face.pop("avatarAssetKey", None)
+        return face
+
+    def _find_matching_avatar_person_slot(
+        self,
+        tracking_id: str,
+        bbox: dict[str, float],
+        pts_us: int,
+        current_tracking_ids: set[str],
+    ) -> AvatarPersonSlot | None:
+        if self._avatar_person_slot_grace_us <= 0:
+            return None
+        best_slot: AvatarPersonSlot | None = None
+        best_score = 0.0
+        for slot in self._avatar_person_slots_by_tracking_id.values():
+            if slot.tracking_id == tracking_id:
+                continue
+            if slot.tracking_id in current_tracking_ids:
+                continue
+            age_us = abs(pts_us - slot.last_seen_pts_us)
+            if age_us > self._avatar_person_slot_grace_us:
+                continue
+            iou = self._bbox_iou(slot.bbox, bbox)
+            center_score = self._bbox_center_similarity(slot.bbox, bbox)
+            score = max(iou, center_score)
+            if score > best_score:
+                best_score = score
+                best_slot = slot
+        if best_slot is None or best_score < self._avatar_person_slot_match_iou:
+            return None
+        return best_slot
+
+    def _prune_stale_avatar_person_slots(self, pts_us: int) -> None:
+        if self._avatar_person_slot_grace_us <= 0:
+            return
+        stale_after_us = self._avatar_person_slot_grace_us * 3
+        for tracking_id, slot in list(self._avatar_person_slots_by_tracking_id.items()):
+            if abs(pts_us - slot.last_seen_pts_us) > stale_after_us:
+                self._avatar_person_slots_by_tracking_id.pop(tracking_id, None)
+
+    def _bbox_iou(self, left: dict[str, float], right: dict[str, float]) -> float:
+        left_x1 = left["x"]
+        left_y1 = left["y"]
+        left_x2 = left_x1 + max(left["width"], 0.0)
+        left_y2 = left_y1 + max(left["height"], 0.0)
+        right_x1 = right["x"]
+        right_y1 = right["y"]
+        right_x2 = right_x1 + max(right["width"], 0.0)
+        right_y2 = right_y1 + max(right["height"], 0.0)
+        inter_w = max(min(left_x2, right_x2) - max(left_x1, right_x1), 0.0)
+        inter_h = max(min(left_y2, right_y2) - max(left_y1, right_y1), 0.0)
+        inter_area = inter_w * inter_h
+        left_area = max(left["width"], 0.0) * max(left["height"], 0.0)
+        right_area = max(right["width"], 0.0) * max(right["height"], 0.0)
+        union_area = left_area + right_area - inter_area
+        if union_area <= 0:
+            return 0.0
+        return inter_area / union_area
+
+    def _bbox_center_similarity(self, left: dict[str, float], right: dict[str, float]) -> float:
+        left_cx = left["x"] + left["width"] / 2
+        left_cy = left["y"] + left["height"] / 2
+        right_cx = right["x"] + right["width"] / 2
+        right_cy = right["y"] + right["height"] / 2
+        distance = ((left_cx - right_cx) ** 2 + (left_cy - right_cy) ** 2) ** 0.5
+        scale = max(left["width"], left["height"], right["width"], right["height"], 1.0)
+        return max(1.0 - distance / scale, 0.0)
+
     def _prepare_tracking_avatar_face(self, face: dict) -> dict:
         avatar_id = self._extract_face_avatar_id(face)
         avatar_asset_key = self._extract_face_avatar_asset_key(face)
@@ -731,6 +904,24 @@ class StreamPipeline:
             return face
         mosaic_face = self._build_mosaic_face(face)
         return mosaic_face if mosaic_face is not None else face
+
+    def _resolve_renderer_avatar_id(self, face_metadata: dict | None) -> str | None:
+        if self._should_use_face_avatar_assignments(self._extract_faces(face_metadata)):
+            return None
+        return self.avatar_id
+
+    def _should_use_face_avatar_assignments(self, faces: list[dict]) -> bool:
+        if self._avatar_max_faces_per_frame <= 1:
+            return False
+        return any(self._extract_face_avatar_id(face) for face in faces if isinstance(face, dict))
+
+    def _extract_faces(self, face_metadata: dict | None) -> list[dict]:
+        if not isinstance(face_metadata, dict):
+            return []
+        raw_faces = face_metadata.get("faces")
+        if isinstance(raw_faces, list):
+            return [face for face in raw_faces if isinstance(face, dict)]
+        return [face_metadata]
 
     def _extract_face_avatar_id(self, face: dict) -> str | None:
         raw_avatar_id = face.get("avatar_id", face.get("avatarId"))

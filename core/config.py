@@ -42,9 +42,11 @@ class Settings(BaseSettings):
     avatar_s3_bucket: str | None = None
     avatar_s3_region: str | None = None
     avatar_random_seed: int = 0
-    avatar_max_faces_per_frame: int = 1
+    avatar_max_faces_per_frame: int = 2
     avatar_metadata_grace_ms: int = 500
     avatar_primary_reselect_grace_ms: int = 250
+    avatar_person_slot_grace_ms: int = 3000
+    avatar_person_slot_match_iou: float = 0.10
     avatar_mosaic_non_selected_faces: bool = False
     metadata_poll_attempts: int = 1
     metadata_poll_interval_ms: int = 0

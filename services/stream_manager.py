@@ -82,6 +82,8 @@ class StreamManager:
                     avatar_max_faces_per_frame=self._settings.avatar_max_faces_per_frame,
                     avatar_metadata_grace_ms=self._settings.avatar_metadata_grace_ms,
                     avatar_primary_reselect_grace_ms=self._settings.avatar_primary_reselect_grace_ms,
+                    avatar_person_slot_grace_ms=self._settings.avatar_person_slot_grace_ms,
+                    avatar_person_slot_match_iou=self._settings.avatar_person_slot_match_iou,
                     avatar_mosaic_non_selected_faces=self._settings.avatar_mosaic_non_selected_faces,
                     metadata_poll_attempts=self._settings.metadata_poll_attempts,
                     metadata_poll_interval_ms=self._settings.metadata_poll_interval_ms,
