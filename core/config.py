@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     redis_metadata_key_template: str = "broadcast:{broadcast_id}:meta:{pts_us}"
     redis_metadata_latest_key_template: str = "broadcast:{broadcast_id}:meta:latest"
+    redis_metadata_index_key_template: str = "broadcast:{broadcast_id}:meta:index"
 
     pipeline_fps: int = 15
     max_frame_lag_ms: int = 100
@@ -55,6 +56,8 @@ class Settings(BaseSettings):
     metadata_lookup_fine_tolerance_us: int = 200
     metadata_lookup_coarse_step_us: int = 500
     metadata_auto_offset_max_us: int = 8000000
+    metadata_index_lookup_window_us: int = 200000
+    metadata_latest_fallback_window_us: int = 200000
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"
     mediamtx_path_prefix: str = "live"

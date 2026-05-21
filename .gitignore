@@ -35,3 +35,4 @@ db/init.sql
 
 # Runtime avatar assets are fetched from S3 by avatar.object_key.
 focus-avatar/project/avatar_bank/
+.venv

@@ -41,11 +41,14 @@ class StreamManager:
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
                 latest_key_template=self._settings.redis_metadata_latest_key_template,
+                index_key_template=self._settings.redis_metadata_index_key_template,
                 lookup_tolerance_us=self._settings.metadata_lookup_tolerance_us,
                 latest_tolerance_us=self._settings.metadata_latest_tolerance_us,
                 fine_tolerance_us=self._settings.metadata_lookup_fine_tolerance_us,
                 coarse_step_us=self._settings.metadata_lookup_coarse_step_us,
                 auto_offset_max_us=self._settings.metadata_auto_offset_max_us,
+                index_lookup_window_us=self._settings.metadata_index_lookup_window_us,
+                latest_fallback_window_us=self._settings.metadata_latest_fallback_window_us,
             )
             input_stream_key = req.input_stream_key or req.stream_key
             if input_stream_key is None:
