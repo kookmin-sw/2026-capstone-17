@@ -43,16 +43,16 @@ class Settings(BaseSettings):
     avatar_s3_region: str | None = None
     avatar_random_seed: int = 0
     avatar_max_faces_per_frame: int = 2
-    avatar_metadata_grace_ms: int = 500
+    avatar_metadata_grace_ms: int = 3000
     avatar_primary_reselect_grace_ms: int = 250
     avatar_person_slot_grace_ms: int = 3000
     avatar_person_slot_match_iou: float = 0.10
     avatar_mosaic_non_selected_faces: bool = False
-    metadata_poll_attempts: int = 1
-    metadata_poll_interval_ms: int = 0
-    metadata_lookup_tolerance_us: int = 25000
-    metadata_latest_tolerance_us: int = 250000
-    metadata_lookup_fine_tolerance_us: int = 100
+    metadata_poll_attempts: int = 2
+    metadata_poll_interval_ms: int = 10
+    metadata_lookup_tolerance_us: int = 150000
+    metadata_latest_tolerance_us: int = 3000000
+    metadata_lookup_fine_tolerance_us: int = 200
     metadata_lookup_coarse_step_us: int = 500
 
     mediamtx_rtsp_read_base_url: str = "rtsp://localhost:8554"

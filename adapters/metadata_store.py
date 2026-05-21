@@ -1,5 +1,8 @@
 import json
+import logging
 from typing import Any, Protocol
+
+logger = logging.getLogger(__name__)
 
 try:
     import redis.asyncio as redis
@@ -68,11 +71,10 @@ class RedisMetadataStore:
         payloads = await client.mget(candidate_keys)
         matched_key, payload = self._first_matched_payload(candidate_keys, payloads)
         if payload and matched_key:
-            await client.delete(matched_key)
             return self._decode_payload(payload)
 
         latest_payload = await client.get(self._build_latest_key(broadcast_id))
-        return self._decode_latest_payload(latest_payload, pts_us)
+        return self._decode_latest_payload_and_log(latest_payload, pts_us, broadcast_id)
 
     def _first_matched_payload(
         self,
@@ -92,16 +94,31 @@ class RedisMetadataStore:
         except json.JSONDecodeError:
             return None
 
-    def _decode_latest_payload(self, payload: str | None, pts_us: int) -> dict[str, Any] | None:
+    def _decode_latest_payload_and_log(self, payload: str | None, pts_us: int, broadcast_id: str) -> dict[str, Any] | None:
         decoded_payload = self._decode_payload(payload)
-        if decoded_payload is None or self._latest_tolerance_us <= 0:
+        if decoded_payload is None:
+            logger.info("metadata_miss broadcast_id=%s frame_pts_us=%s redis_latest_pts_us=None diff_us=None miss_reason=no_latest", broadcast_id, pts_us)
             return None
+
         payload_pts_us = self._extract_payload_pts_us(decoded_payload)
         if payload_pts_us is None:
+            logger.info("metadata_miss broadcast_id=%s frame_pts_us=%s redis_latest_pts_us=None diff_us=None miss_reason=invalid_latest", broadcast_id, pts_us)
             return None
-        if abs(payload_pts_us - int(pts_us)) > self._latest_tolerance_us:
+
+        diff_us = int(pts_us) - payload_pts_us
+        if self._latest_tolerance_us <= 0:
+            logger.info("metadata_miss broadcast_id=%s frame_pts_us=%s redis_latest_pts_us=%s diff_us=%s miss_reason=tolerance_zero", broadcast_id, pts_us, payload_pts_us, diff_us)
             return None
+
+        if abs(diff_us) > self._latest_tolerance_us:
+            miss_reason = "latest_too_old" if diff_us > 0 else "latest_too_new"
+            logger.info("metadata_miss broadcast_id=%s frame_pts_us=%s redis_latest_pts_us=%s diff_us=%s miss_reason=%s", broadcast_id, pts_us, payload_pts_us, diff_us, miss_reason)
+            return None
+
         return decoded_payload
+
+    def _decode_latest_payload(self, payload: str | None, pts_us: int) -> dict[str, Any] | None:
+        return self._decode_latest_payload_and_log(payload, pts_us, "unknown")
 
     def _extract_payload_pts_us(self, payload: dict[str, Any]) -> int | None:
         raw_pts_us = payload.get("pts_us", payload.get("ptsUs"))
