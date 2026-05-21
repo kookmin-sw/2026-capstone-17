@@ -718,16 +718,13 @@ class StreamPipeline:
             selected_faces = self._select_multi_person_faces(sorted_faces)
         selected_tracking_id = next((tracking_id for _, _, tracking_id in selected_faces if tracking_id), None)
         if selected_tracking_id:
-            previous_primary_tracking_id = self._primary_tracking_id
             self._primary_tracking_id = selected_tracking_id
             self._primary_tracking_last_seen_pts_us = metadata_pts_us
-            if previous_primary_tracking_id != selected_tracking_id:
-                logger.info(
-                    "avatar_primary_tracking_selected broadcast_id=%s tracking_id=%s previous_tracking_id=%s",
-                    self.broadcast_id,
-                    selected_tracking_id,
-                    previous_primary_tracking_id,
-                )
+            logger.info(
+                "avatar_primary_tracking_selected broadcast_id=%s tracking_id=%s",
+                self.broadcast_id,
+                selected_tracking_id,
+            )
         return {index for index, _, _ in selected_faces}
 
     def _select_multi_person_faces(

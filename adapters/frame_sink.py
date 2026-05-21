@@ -92,14 +92,7 @@ class FFmpegProcessSink:
                 self.output_url,
             ]
         else:
-            # `no_duration_filesize` silences the two FLV header-rewrite warnings
-            # that always print on close for a live RTMP push and would otherwise
-            # clutter the logs without indicating a real problem.
-            output_args = [
-                "-f", "flv",
-                "-flvflags", "no_duration_filesize",
-                self.output_url,
-            ]
+            output_args = ["-f", "flv", self.output_url]
 
         command = [
             "ffmpeg",
@@ -162,8 +155,6 @@ class FFmpegProcessSink:
             args += ["-rtsp_transport", "tcp", "-allowed_media_types", "audio"]
         return args + ["-i", audio_source_url]
 
-    DRAIN_TIMEOUT_S = 3.0
-
     async def write_frame(self, frame: VideoFrame) -> None:
         if not self._initialized or self._process is None:
             w = frame.width or self.width
@@ -173,17 +164,7 @@ class FFmpegProcessSink:
         if self._process and self._process.stdin:
             try:
                 self._process.stdin.write(frame.payload)
-                await asyncio.wait_for(self._process.stdin.drain(), timeout=self.DRAIN_TIMEOUT_S)
-            except asyncio.TimeoutError:
-                # Sustained downstream slowness (e.g. RTMP push stall) would otherwise
-                # freeze the render loop. Continue without draining; the next write
-                # may succeed once FFmpeg catches up, and the OS pipe buffer keeps
-                # absorbing data in the meantime.
-                logger.warning(
-                    "ffmpeg_sink_drain_timeout url=%s timeout_s=%s",
-                    self.output_url,
-                    self.DRAIN_TIMEOUT_S,
-                )
+                await self._process.stdin.drain()
             except ConnectionResetError:
                 logger.error("ffmpeg_sink_broken_pipe url=%s", self.output_url)
 
