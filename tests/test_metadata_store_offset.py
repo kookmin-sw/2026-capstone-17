@@ -47,6 +47,19 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result, payload)
         self.assertEqual(store._offset_us_by_broadcast["broadcast-a"], 4_000_000)
 
+    async def test_uses_latest_when_offset_key_is_not_exact(self) -> None:
+        payload = {"pts_us": 4_000_123, "faces": [{"tracking_id": 1}]}
+        store = self._store(
+            {
+                "broadcast:broadcast-a:meta:latest": json.dumps(payload),
+            }
+        )
+
+        result = await store.get_face_metadata("broadcast-a", 123)
+
+        self.assertEqual(result, payload)
+        self.assertEqual(store._offset_us_by_broadcast["broadcast-a"], 4_000_000)
+
     async def test_uses_learned_offset_before_latest_fallback(self) -> None:
         payload = {"pts_us": 4_100_000, "faces": [{"tracking_id": 1}]}
         store = self._store({"broadcast:broadcast-a:meta:4100000": json.dumps(payload)})

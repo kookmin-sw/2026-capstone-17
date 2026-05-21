@@ -87,6 +87,7 @@ class RedisMetadataStore:
                 broadcast_id=broadcast_id,
                 frame_pts_us=int(pts_us),
                 latest_pts_us=latest_pts_us,
+                latest_payload=decoded_latest_payload,
             )
             if offset_payload is not None:
                 return offset_payload
@@ -109,6 +110,7 @@ class RedisMetadataStore:
         broadcast_id: str,
         frame_pts_us: int,
         latest_pts_us: int,
+        latest_payload: dict[str, Any],
     ) -> dict[str, Any] | None:
         if self._auto_offset_max_us <= 0:
             return None
@@ -121,7 +123,7 @@ class RedisMetadataStore:
         offset_payload = await self._lookup_payload(client, broadcast_id, adjusted_pts_us)
         if offset_payload is not None:
             return offset_payload
-        return None
+        return latest_payload
 
     def _learn_offset(self, broadcast_id: str, offset_candidate_us: int) -> int:
         previous_offset_us = self._offset_us_by_broadcast.get(broadcast_id)
