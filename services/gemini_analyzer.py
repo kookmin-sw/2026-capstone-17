@@ -64,6 +64,58 @@ Spring 컨텍스트가 없을 때만 peakViewerCount, occurredAt, contentRatios�
 """
 
 
+KOREAN_ANALYSIS_PROMPT = """
+당신은 IRL 라이브 방송 분석가입니다. 첨부된 video/mp4 방송 아카이브를 보고
+방송 종료 리포트에 사용할 JSON만 생성하세요.
+
+모든 자연어 결과는 반드시 한국어로 작성하세요.
+summary, strengths, weaknesses, actionItems, viewerPeakInsight.sceneDescription,
+contentRatios.contentType 등 사용자가 읽는 모든 문자열은 한국어여야 합니다.
+
+분석 목표:
+- 오늘 방송 요약
+- strengths / weaknesses / actionItems
+- Spring context의 occurredAt 시각대에 해당하는 장면 설명(sceneDescription)
+- 타인 얼굴, 군중, 아바타 치환으로 보이는 장면의 통계 추정
+
+Spring context가 함께 제공되면 peakViewerCount, occurredAt, contentRatios는
+Spring 서버가 치지직 API polling으로 계산한 값입니다.
+수치 데이터와 카테고리 비율은 임의로 변경하지 말고 전달된 값을 유지하세요.
+viewerPeakInsight가 null이면 peak 데이터가 없는 정상 케이스입니다.
+이 경우 peakViewerCount와 occurredAt을 추정하지 말고, 일반 장면 요약 수준으로
+sceneDescription을 작성하거나 null로 두세요.
+viewerPeakInsight가 객체로 제공된 경우에는 occurredAt 주변 장면을 찾아
+viewerPeakInsight.sceneDescription 작성에 집중하세요.
+
+반드시 아래 JSON 형태만 반환하세요. Markdown 코드블록, 설명 문장, 주석은 금지입니다.
+모르는 값은 합리적으로 추정하되, 숫자에 확신이 없으면 0 또는 null을 사용하세요.
+Spring context가 없을 때만 peakViewerCount, occurredAt, contentRatios를 영상 기반으로 추정하세요.
+
+{
+  "summary": "string",
+  "strengths": ["string"],
+  "weaknesses": ["string"],
+  "actionItems": ["string"],
+  "viewerPeakInsight": {
+    "peakViewerCount": 0,
+    "occurredAt": null,
+    "sceneDescription": "string"
+  },
+  "faceStatistics": {
+    "totalReplacedFaceCount": 0,
+    "maxSimultaneousCrowdCount": 0
+  },
+  "contentRatios": [
+    {
+      "contentType": "string",
+      "percentage": 0.0,
+      "durationSec": 0
+    }
+  ]
+}
+"""
+
+
 class GeminiVideoAnalyzer:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
@@ -97,7 +149,7 @@ class GeminiVideoAnalyzer:
         client = genai.Client(api_key=self._settings.gemini_api_key)
         uploaded = self._upload_file(client, video_path)
         uploaded = self._wait_until_active(client, uploaded)
-        prompt = self._build_prompt(duration_sec=duration_sec, analysis_context=analysis_context)
+        prompt = self._build_korean_prompt(duration_sec=duration_sec, analysis_context=analysis_context)
         response = self._generate_content_with_retries(
             client=client,
             uploaded_file=uploaded,
@@ -108,22 +160,61 @@ class GeminiVideoAnalyzer:
         return GeminiAnalysisResult.model_validate(self._parse_json_text(response.text))
 
     def _upload_file(self, client, video_path: str):
-        try:
-            uploaded = client.files.upload(
-                file=video_path,
-                config=types.UploadFileConfig(mime_type="video/mp4"),
-            )
-        except Exception:
-            logger.exception("gemini_file_upload_failed video=%s", video_path)
-            raise
+        attempts = max(self._settings.gemini_upload_attempts, 1)
+        last_exc: Exception | None = None
 
-        logger.info(
-            "gemini_file_uploaded file_name=%s file_state=%s video=%s",
-            getattr(uploaded, "name", None),
-            self._file_state_name(uploaded),
-            video_path,
-        )
-        return uploaded
+        for attempt in range(1, attempts + 1):
+            logger.info(
+                "gemini_file_upload_start video=%s attempt=%s/%s",
+                video_path,
+                attempt,
+                attempts,
+            )
+            try:
+                uploaded = client.files.upload(
+                    file=video_path,
+                    config=types.UploadFileConfig(mime_type="video/mp4"),
+                )
+                logger.info(
+                    "gemini_file_uploaded file_name=%s state=%s video=%s attempt=%s/%s",
+                    getattr(uploaded, "name", None),
+                    self._file_state_name(uploaded),
+                    video_path,
+                    attempt,
+                    attempts,
+                )
+                return uploaded
+            except Exception as exc:
+                last_exc = exc
+                retryable = self._is_retryable_upload_error(exc)
+                if not retryable or attempt >= attempts:
+                    logger.error(
+                        "gemini_file_upload_failed_final video=%s attempt=%s/%s retryable=%s error_type=%s detail=%s",
+                        video_path,
+                        attempt,
+                        attempts,
+                        retryable,
+                        type(exc).__name__,
+                        self._error_detail(exc),
+                        exc_info=True,
+                    )
+                    break
+
+                delay = self._upload_retry_delay(attempt)
+                logger.warning(
+                    "gemini_file_upload_retrying video=%s attempt=%s/%s delay_sec=%s error_type=%s detail=%s",
+                    video_path,
+                    attempt,
+                    attempts,
+                    delay,
+                    type(exc).__name__,
+                    self._error_detail(exc),
+                )
+                time.sleep(delay)
+
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError("Gemini file upload failed without an exception.")
 
     def _build_prompt(
         self,
@@ -148,6 +239,32 @@ class GeminiVideoAnalyzer:
                 )
             else:
                 prompt += "\noccurredAt 주변 장면을 찾아 sceneDescription을 작성하세요."
+            prompt += f"\n\nSpring analysis context:\n{context_json}"
+        return prompt
+
+    def _build_korean_prompt(
+        self,
+        duration_sec: int,
+        analysis_context: SpringAnalysisContext | None,
+    ) -> str:
+        prompt = f"{KOREAN_ANALYSIS_PROMPT}\n\n방송 전체 길이(durationSec): {duration_sec}"
+        if analysis_context is not None:
+            context_json = json.dumps(
+                analysis_context.model_dump(exclude_none=True),
+                ensure_ascii=False,
+                indent=2,
+            )
+            prompt += (
+                "\n\n아래 Spring 분석 context를 우선 신뢰하세요."
+                "\npeakViewerCount, occurredAt, contentRatios는 변경하지 마세요."
+            )
+            if analysis_context.viewerPeakInsight is None:
+                prompt += (
+                    "\nviewerPeakInsight가 null이므로 peak 시각과 설명을 억지로 만들지 마세요."
+                    "\n가능하면 전체 방송 기준의 일반 장면 설명을 sceneDescription에 작성하거나 null로 두세요."
+                )
+            else:
+                prompt += "\noccurredAt 주변 장면을 찾아 sceneDescription을 한국어로 작성하세요."
             prompt += f"\n\nSpring analysis context:\n{context_json}"
         return prompt
 
@@ -282,6 +399,30 @@ class GeminiVideoAnalyzer:
         max_delay = max(float(self._settings.gemini_generate_backoff_max_sec), initial)
         return min(initial * (2 ** max(attempt - 1, 0)), max_delay)
 
+    def _upload_retry_delay(self, attempt: int) -> float:
+        initial = max(float(self._settings.gemini_upload_backoff_initial_sec), 0.0)
+        max_delay = max(float(self._settings.gemini_upload_backoff_max_sec), initial)
+        return min(initial * (2.5 ** max(attempt - 1, 0)), max_delay)
+
+    def _is_retryable_upload_error(self, exc: Exception) -> bool:
+        code = getattr(exc, "code", None)
+        status = str(getattr(exc, "status", "") or "").upper()
+        message = str(exc).upper()
+        if code in {408, 429, 500, 502, 503, 504}:
+            return True
+        retryable_markers = (
+            "UNAVAILABLE",
+            "INTERNAL",
+            "SERVICE UNAVAILABLE",
+            "UPLOAD HAS ALREADY BEEN TERMINATED",
+            "TERMINATED",
+            "RESUMABLE",
+            "TIMEOUT",
+            "TIMED OUT",
+            "CONNECTION",
+        )
+        return any(marker in status or marker in message for marker in retryable_markers)
+
     def _is_retryable_generate_error(self, exc: Exception) -> bool:
         code = getattr(exc, "code", None)
         status = str(getattr(exc, "status", "") or "").upper()
@@ -289,6 +430,12 @@ class GeminiVideoAnalyzer:
         if code in {429, 500, 502, 503, 504}:
             return True
         return "UNAVAILABLE" in status or "UNAVAILABLE" in message or "HIGH DEMAND" in message
+
+    def _error_detail(self, exc: Exception) -> str:
+        detail = str(exc).replace("\r", " ").strip()
+        if not detail:
+            detail = exc.__class__.__name__
+        return " ".join(detail.splitlines()[0].split())[:500]
 
     @staticmethod
     def _file_state_name(file_obj) -> str | None:

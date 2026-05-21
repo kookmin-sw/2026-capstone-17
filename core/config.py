@@ -79,6 +79,9 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-2.5-flash"
     gemini_fallback_model: str | None = None
     gemini_file_processing_timeout_sec: int = 600
+    gemini_upload_attempts: int = 3
+    gemini_upload_backoff_initial_sec: float = 2.0
+    gemini_upload_backoff_max_sec: float = 10.0
     gemini_file_poll_interval_sec: float = 5.0
     gemini_file_poll_timeout_sec: int = 120
     gemini_generate_attempts: int = 4
