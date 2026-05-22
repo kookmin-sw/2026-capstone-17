@@ -45,7 +45,7 @@ class Settings(BaseSettings):
     avatar_s3_region: str | None = None
     avatar_random_seed: int = 0
     avatar_max_faces_per_frame: int = 3
-    avatar_metadata_grace_ms: int = 3000
+    avatar_metadata_grace_ms: int = 100
     avatar_primary_reselect_grace_ms: int = 250
     avatar_person_slot_grace_ms: int = 3000
     avatar_person_slot_match_iou: float = 0.10

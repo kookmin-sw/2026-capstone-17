@@ -71,7 +71,14 @@ class RedisMetadataStore:
         self._offset_us_by_broadcast: dict[str, int] = {}
         self._last_logged_offset_us_by_broadcast: dict[str, int] = {}
         self._index_initialized_broadcasts: set[str] = set()
+        # Diagnostic counters per broadcast for discriminating lag origin
+        # (constant delay vs detection dropout). Emitted every LOOKUP_STATS_LOG_INTERVAL
+        # lookups via metadata_lookup_path_stats log.
+        self._lookup_path_counts_by_broadcast: dict[str, dict[str, int]] = {}
+        self._latest_fallback_diff_sum_by_broadcast: dict[str, int] = {}
         self._client = None
+
+    LOOKUP_STATS_LOG_INTERVAL = 100
 
     async def _ensure_client(self):
         if self._client is not None:
@@ -116,6 +123,7 @@ class RedisMetadataStore:
             exact_payload = await self._lookup_exact_payload(client, broadcast_id, frame_pts_us)
             if exact_payload is not None:
                 self._refine_offset(broadcast_id, 0)
+                self._record_lookup_path(broadcast_id, "exact")
                 return self._normalize_payload_pts_us(exact_payload, frame_pts_us)
 
         if self._index_key_template:
@@ -123,7 +131,10 @@ class RedisMetadataStore:
             if index_payload is not None:
                 return index_payload
 
-        return await self._lookup_via_latest_fallback(client, broadcast_id, frame_pts_us)
+        fallback_result = await self._lookup_via_latest_fallback(client, broadcast_id, frame_pts_us)
+        if fallback_result is None:
+            self._record_lookup_path(broadcast_id, "miss")
+        return fallback_result
 
     async def _lookup_exact_payload(
         self,
@@ -170,6 +181,7 @@ class RedisMetadataStore:
             # offset is still unknown so the first sample lands somewhere sane.
             self._refine_offset(broadcast_id, matched_pts_us - frame_pts_us)
         await client.zremrangebyscore(index_key, "-inf", matched_pts_us)
+        self._record_lookup_path(broadcast_id, "narrow" if from_narrow_window else "wide")
         return self._normalize_payload_pts_us(decoded, frame_pts_us)
 
     async def _select_index_pts(
@@ -264,6 +276,9 @@ class RedisMetadataStore:
                 auto_payload = await self._lookup_exact_payload(client, broadcast_id, latest_pts_us)
                 if auto_payload is not None:
                     self._refine_offset(broadcast_id, offset_candidate_us)
+                    self._record_lookup_path(
+                        broadcast_id, "latest_fallback", diff_us=frame_pts_us - latest_pts_us
+                    )
                     return self._normalize_payload_pts_us(auto_payload, frame_pts_us)
 
         diff_us = frame_pts_us - latest_pts_us
@@ -293,6 +308,7 @@ class RedisMetadataStore:
             offset_candidate_us = latest_pts_us - frame_pts_us
             if 0 < offset_candidate_us <= max(self._auto_offset_max_us, 1):
                 self._refine_offset(broadcast_id, offset_candidate_us)
+            self._record_lookup_path(broadcast_id, "latest_fallback", diff_us=diff_us)
             return self._normalize_payload_pts_us(decoded_latest, frame_pts_us)
 
         target_pts_us = frame_pts_us + offset_us
@@ -307,7 +323,46 @@ class RedisMetadataStore:
             )
             return None
 
+        self._record_lookup_path(broadcast_id, "latest_fallback", diff_us=diff_us)
         return self._normalize_payload_pts_us(decoded_latest, frame_pts_us)
+
+    def _record_lookup_path(
+        self,
+        broadcast_id: str,
+        path: str,
+        diff_us: int | None = None,
+    ) -> None:
+        """Track which lookup path served the request. Emits stats every
+        LOOKUP_STATS_LOG_INTERVAL lookups so we can distinguish constant
+        delay (latest_fallback dominant) vs detection dropout (narrow/exact
+        dominant + avatar_metadata_reused bursts)."""
+        counts = self._lookup_path_counts_by_broadcast.setdefault(broadcast_id, {})
+        counts[path] = counts.get(path, 0) + 1
+        if path == "latest_fallback" and diff_us is not None:
+            self._latest_fallback_diff_sum_by_broadcast[broadcast_id] = (
+                self._latest_fallback_diff_sum_by_broadcast.get(broadcast_id, 0) + int(diff_us)
+            )
+        total = sum(counts.values())
+        if total % self.LOOKUP_STATS_LOG_INTERVAL != 0:
+            return
+        fallback_count = counts.get("latest_fallback", 0)
+        fallback_avg_diff_us = 0
+        if fallback_count > 0:
+            fallback_avg_diff_us = (
+                self._latest_fallback_diff_sum_by_broadcast.get(broadcast_id, 0) // fallback_count
+            )
+        logger.info(
+            "metadata_lookup_path_stats broadcast_id=%s total=%s exact=%s narrow=%s wide=%s "
+            "latest_fallback=%s miss=%s latest_fallback_avg_diff_us=%s",
+            broadcast_id,
+            total,
+            counts.get("exact", 0),
+            counts.get("narrow", 0),
+            counts.get("wide", 0),
+            fallback_count,
+            counts.get("miss", 0),
+            fallback_avg_diff_us,
+        )
 
     def _refine_offset(self, broadcast_id: str, offset_candidate_us: int) -> None:
         previous_offset_us = self._offset_us_by_broadcast.get(broadcast_id)
