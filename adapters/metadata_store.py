@@ -38,7 +38,10 @@ class RedisMetadataStore:
     OFFSET_EWMA_PREV_WEIGHT = 0.7
     OFFSET_EWMA_NEW_WEIGHT = 0.3
     OFFSET_LOG_DELTA_THRESHOLD_US = 250_000
-    OFFSET_REFINE_DELTA_CAP_US = 300_000
+    # Freeze offset learning. Client reports metadata.ptsUs == source frame pts,
+    # so seeded base_pts_us is already the correct offset; further refinement
+    # was drifting target away from truth and creating the visible avatar lag.
+    OFFSET_REFINE_DELTA_CAP_US = 0
 
     def __init__(
         self,
