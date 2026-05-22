@@ -21,9 +21,9 @@ class Settings(BaseSettings):
     max_frame_lag_ms: int = 100
     ffmpeg_log_level: str = "warning"
     pipeline_gop_seconds: int = 1
-    pipeline_video_bitrate: str = "1200k"
-    pipeline_maxrate: str = "1200k"
-    pipeline_bufsize: str = "2400k"
+    pipeline_video_bitrate: str = "1000k"
+    pipeline_maxrate: str = "1000k"
+    pipeline_bufsize: str = "2000k"
     pipeline_max_frame_width: int = 720
     pipeline_max_frame_height: int = 720
     pipeline_x264_preset: str = "ultrafast"
