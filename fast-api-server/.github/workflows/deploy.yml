@@ -31,7 +31,8 @@ jobs:
           context: .
           platforms: linux/arm64
           build-args: |
-            INSTALL_MEDIA_DEPS=false
+            INSTALL_MEDIA_DEPS=true
+            INSTALL_AVATAR_DEPS=true
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: false
@@ -46,7 +47,7 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
-          source: "deploy/docker-compose.ec2.yaml"
+          source: "deploy/docker-compose.ec2.yaml,deploy/mediamtx/mediamtx.yml"
           target: "~/focus-fast-api"
           strip_components: 1
 
@@ -74,6 +75,15 @@ jobs:
             AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
             GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}
             GEMINI_MODEL=${{ secrets.GEMINI_MODEL }}
+            GEMINI_FALLBACK_MODEL=${{ secrets.GEMINI_FALLBACK_MODEL }}
+            GEMINI_UPLOAD_ATTEMPTS=${{ secrets.GEMINI_UPLOAD_ATTEMPTS }}
+            GEMINI_UPLOAD_BACKOFF_INITIAL_SEC=${{ secrets.GEMINI_UPLOAD_BACKOFF_INITIAL_SEC }}
+            GEMINI_UPLOAD_BACKOFF_MAX_SEC=${{ secrets.GEMINI_UPLOAD_BACKOFF_MAX_SEC }}
+            GEMINI_FILE_POLL_INTERVAL_SEC=${{ secrets.GEMINI_FILE_POLL_INTERVAL_SEC }}
+            GEMINI_FILE_POLL_TIMEOUT_SEC=${{ secrets.GEMINI_FILE_POLL_TIMEOUT_SEC }}
+            GEMINI_GENERATE_ATTEMPTS=${{ secrets.GEMINI_GENERATE_ATTEMPTS }}
+            GEMINI_GENERATE_BACKOFF_INITIAL_SEC=${{ secrets.GEMINI_GENERATE_BACKOFF_INITIAL_SEC }}
+            GEMINI_GENERATE_BACKOFF_MAX_SEC=${{ secrets.GEMINI_GENERATE_BACKOFF_MAX_SEC }}
             SPRING_INTERNAL_BASE_URL=${{ secrets.SPRING_INTERNAL_BASE_URL }}
             INTERNAL_API_KEY=${{ secrets.INTERNAL_API_KEY }}
             EOF

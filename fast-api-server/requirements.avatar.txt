@@ -1,0 +1,4 @@
+# Optional avatar compositing runtime dependencies.
+numpy>=1.26,<3.0
+opencv-python-headless>=4.9,<5.0
+scipy>=1.13,<2.0

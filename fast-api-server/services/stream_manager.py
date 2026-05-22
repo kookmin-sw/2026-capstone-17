@@ -8,6 +8,7 @@ from core.exceptions import ApiException, ErrorTitle
 from schemas.stream import OutputMode, StreamStartRequest, StreamStatusResponse
 from services.analysis_archive import AnalysisArchiveService
 from services.analysis_workflow import AnalysisWorkflow
+from services.avatar_assets import AvatarAssetResolver
 from workers.pipeline import PipelineState, StreamPipeline
 
 logger = logging.getLogger(__name__)
@@ -20,6 +21,7 @@ class StreamManager:
         self._analysis_tasks: dict[str, asyncio.Task[None]] = {}
         self._analysis_archive = AnalysisArchiveService(settings)
         self._analysis_workflow = AnalysisWorkflow(settings)
+        self._avatar_assets = AvatarAssetResolver(settings)
         self._lock = asyncio.Lock()
 
     async def start_stream(self, req: StreamStartRequest) -> StreamStatusResponse:
@@ -38,6 +40,15 @@ class StreamManager:
             metadata_store = RedisMetadataStore(
                 redis_url=self._settings.redis_url,
                 key_template=self._settings.redis_metadata_key_template,
+                latest_key_template=self._settings.redis_metadata_latest_key_template,
+                index_key_template=self._settings.redis_metadata_index_key_template,
+                lookup_tolerance_us=self._settings.metadata_lookup_tolerance_us,
+                latest_tolerance_us=self._settings.metadata_latest_tolerance_us,
+                fine_tolerance_us=self._settings.metadata_lookup_fine_tolerance_us,
+                coarse_step_us=self._settings.metadata_lookup_coarse_step_us,
+                auto_offset_max_us=self._settings.metadata_auto_offset_max_us,
+                index_lookup_window_us=self._settings.metadata_index_lookup_window_us,
+                latest_fallback_window_us=self._settings.metadata_latest_fallback_window_us,
             )
             input_stream_key = req.input_stream_key or req.stream_key
             if input_stream_key is None:
@@ -53,6 +64,7 @@ class StreamManager:
                 self._build_hls_url(req.broadcast_id) if output_mode == OutputMode.HLS else None
             )
             analysis_output_path = self._analysis_archive.build_analysis_path(req.broadcast_id)
+            avatar_bank_dirs = await self._prepare_avatar_bank_dirs(req)
 
             try:
                 pipeline = StreamPipeline(
@@ -66,11 +78,28 @@ class StreamManager:
                     fps=self._settings.pipeline_fps,
                     max_frame_lag_ms=self._settings.max_frame_lag_ms,
                     metadata_store=metadata_store,
+                    avatar_rendering_enabled=self._settings.avatar_rendering_enabled,
+                    avatar_project_dir=self._settings.avatar_project_dir,
+                    avatar_bank_dir=avatar_bank_dirs,
+                    avatar_asset_resolver=self._avatar_assets,
+                    avatar_random_seed=self._settings.avatar_random_seed,
+                    avatar_max_faces_per_frame=self._settings.avatar_max_faces_per_frame,
+                    avatar_metadata_grace_ms=self._settings.avatar_metadata_grace_ms,
+                    avatar_primary_reselect_grace_ms=self._settings.avatar_primary_reselect_grace_ms,
+                    avatar_person_slot_grace_ms=self._settings.avatar_person_slot_grace_ms,
+                    avatar_person_slot_match_iou=self._settings.avatar_person_slot_match_iou,
+                    avatar_mosaic_non_selected_faces=self._settings.avatar_mosaic_non_selected_faces,
+                    metadata_poll_attempts=self._settings.metadata_poll_attempts,
+                    metadata_poll_interval_ms=self._settings.metadata_poll_interval_ms,
                     ffmpeg_log_level=self._settings.ffmpeg_log_level,
                     gop_seconds=self._settings.pipeline_gop_seconds,
                     video_bitrate=self._settings.pipeline_video_bitrate,
                     maxrate=self._settings.pipeline_maxrate,
                     bufsize=self._settings.pipeline_bufsize,
+                    max_frame_width=self._settings.pipeline_max_frame_width,
+                    max_frame_height=self._settings.pipeline_max_frame_height,
+                    x264_preset=self._settings.pipeline_x264_preset,
+                    x264_profile=self._settings.pipeline_x264_profile,
                     hls_time=self._settings.hls_time,
                     hls_list_size=self._settings.hls_list_size,
                     hls_flags=self._settings.hls_flags,
@@ -135,6 +164,23 @@ class StreamManager:
             return OutputMode(self._settings.default_output_mode)
         except ValueError:
             return OutputMode.HLS
+
+    async def _prepare_avatar_bank_dirs(self, req: StreamStartRequest) -> list[str]:
+        try:
+            prepared_bank_dir = await self._avatar_assets.prepare_avatar_bank(req.avatar_id, req.avatar_asset_key)
+        except RuntimeError as exc:
+            raise ApiException(ErrorTitle.BadRequest, str(exc)) from exc
+
+        bank_dirs = [
+            prepared_bank_dir,
+            self._settings.avatar_cache_dir,
+            self._settings.avatar_bank_dir,
+        ]
+        unique_bank_dirs: list[str] = []
+        for bank_dir in bank_dirs:
+            if bank_dir and bank_dir not in unique_bank_dirs:
+                unique_bank_dirs.append(bank_dir)
+        return unique_bank_dirs
 
     def _schedule_analysis(self, pipeline: StreamPipeline) -> None:
         if not self._settings.analysis_enabled:

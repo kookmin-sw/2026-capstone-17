@@ -19,6 +19,17 @@ START_REQUEST_EXAMPLES = {
             "watch_url": "https://chzzk.naver.com/channel-id",
         },
     },
+    "youtube_live": {
+        "summary": "유튜브 RTMP 출력 방송 시작",
+        "value": {
+            "broadcast_id": "bc_20260227_003",
+            "input_stream_key": "live_103_stream_key",
+            "avatar_id": "avatar-a",
+            "output_mode": "YOUTUBE_RTMP",
+            "output_url": "rtmp://a.rtmp.youtube.com/live2/live-key",
+            "watch_url": "https://www.youtube.com/watch?v=video-id",
+        },
+    },
     "hls_debug": {
         "summary": "로컬 HLS fallback 방송 시작",
         "value": {

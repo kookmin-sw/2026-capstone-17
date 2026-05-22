@@ -4,7 +4,7 @@ from typing import Any
 import httpx
 
 from core.config import Settings
-from schemas.analysis import SpringAnalysisCompletePayload
+from schemas.analysis import SpringAnalysisCompletePayload, SpringAnalysisContext
 
 logger = logging.getLogger(__name__)
 
@@ -25,19 +25,75 @@ class SpringAnalysisClient:
             raise RuntimeError(f"analysis job id not found in Spring response. payload={payload}")
         return job_id
 
+    async def fetch_analysis_context(self, broadcast_id: str) -> SpringAnalysisContext:
+        if not self._settings.spring_internal_base_url:
+            raise RuntimeError("SPRING_INTERNAL_BASE_URL is required.")
+        payload = await self._request(
+            "GET",
+            f"/internal/broadcasts/{broadcast_id}/analysis-context",
+        )
+        data = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+        context = SpringAnalysisContext.model_validate(data)
+        peak = context.viewerPeakInsight
+        logger.info(
+            "spring_analysis_context_fetched broadcast_id=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s sampled_snapshot_count=%s last_sampled_at=%s",
+            broadcast_id,
+            peak is not None,
+            peak.peakViewerCount if peak else None,
+            peak.occurredAt if peak else None,
+            len(context.contentRatios),
+            context.sampledSnapshotCount,
+            context.lastSampledAt,
+        )
+        return context
+
     async def complete_job(
         self,
         broadcast_id: str,
         analysis_job_id: str,
         payload: SpringAnalysisCompletePayload,
     ) -> None:
+        peak = payload.viewerPeakInsight
+        logger.info(
+            "spring_analysis_complete_sending broadcast_id=%s analysis_job_id=%s storageUrl=%s viewer_peak_insight_present=%s peak_viewer_count=%s occurred_at=%s content_ratio_count=%s",
+            broadcast_id,
+            analysis_job_id,
+            payload.storageUrl,
+            peak is not None,
+            peak.peakViewerCount if peak else None,
+            peak.occurredAt if peak else None,
+            len(payload.contentRatios),
+        )
         await self._request(
             "POST",
             f"/internal/broadcasts/{broadcast_id}/analysis-jobs/{analysis_job_id}/complete",
-            json=payload.model_dump(),
+            json=payload.model_dump(exclude_none=True),
         )
         logger.info(
             "spring_analysis_complete_sent broadcast_id=%s analysis_job_id=%s",
+            broadcast_id,
+            analysis_job_id,
+        )
+
+    async def fail_job(
+        self,
+        broadcast_id: str,
+        analysis_job_id: str,
+        error_message: str,
+    ) -> None:
+        logger.info(
+            "spring_analysis_fail_sending broadcast_id=%s analysis_job_id=%s error_message=%s",
+            broadcast_id,
+            analysis_job_id,
+            error_message,
+        )
+        await self._request(
+            "POST",
+            f"/internal/broadcasts/{broadcast_id}/analysis-jobs/{analysis_job_id}/fail",
+            json={"errorMessage": error_message},
+        )
+        logger.info(
+            "spring_analysis_fail_sent broadcast_id=%s analysis_job_id=%s",
             broadcast_id,
             analysis_job_id,
         )

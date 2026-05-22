@@ -8,3 +8,5 @@ class VideoFrame:
     width: int | None = None
     height: int | None = None
     pixel_format: str | None = None
+    source_width: int | None = None
+    source_height: int | None = None
