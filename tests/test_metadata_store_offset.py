@@ -257,6 +257,35 @@ class RedisMetadataStoreOffsetTest(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(second)
         self.assertEqual(second["faces"][0]["tracking_id"], 1)
 
+    async def test_wide_search_hit_does_not_drift_seeded_offset(self) -> None:
+        # Production pathology: PyAV consumes ZSET entries slower than the client
+        # writes them, narrow window misses, wide search returns ZSET min, every
+        # refine bumps offset upward. 50s log showed offset growing 0.11s → 5.13s.
+        # Narrow-only refine + delta cap must keep offset close to the seed value
+        # so the avatar stays aligned with the underlying face position.
+        keys: dict[str, str] = {}
+        zindex: list[tuple[str, float]] = []
+        for index in range(60):
+            pts = 100_000 + index * 33_333
+            payload = {"pts_us": pts, "faces": [{"tracking_id": index}]}
+            keys[f"broadcast:bc:meta:{pts}"] = json.dumps(payload)
+            zindex.append((str(pts), float(pts)))
+        store = self._store(
+            values=keys,
+            zsets={"broadcast:bc:meta:index": list(zindex)},
+            lookup_tolerance_us=0,
+            index_lookup_window_us=50_000,
+        )
+        store.set_initial_offset("bc", 100_000)
+
+        # PyAV steps at the source rate (100ms) while the ZSET advances at 33ms —
+        # every lookup falls into the wide-search branch.
+        for frame_index in range(25):
+            await store.get_face_metadata("bc", frame_index * 100_000)
+
+        learned_offset_us = store._offset_us_by_broadcast["bc"]
+        self.assertLessEqual(learned_offset_us, 100_000 + store.OFFSET_REFINE_DELTA_CAP_US)
+
     async def test_legacy_exact_lookup_still_supported_when_no_index(self) -> None:
         payload = {"pts_us": 4_000_000, "faces": [{"tracking_id": 1}]}
         encoded = json.dumps(payload)

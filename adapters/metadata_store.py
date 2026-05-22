@@ -38,6 +38,7 @@ class RedisMetadataStore:
     OFFSET_EWMA_PREV_WEIGHT = 0.85
     OFFSET_EWMA_NEW_WEIGHT = 0.15
     OFFSET_LOG_DELTA_THRESHOLD_US = 250_000
+    OFFSET_REFINE_DELTA_CAP_US = 100_000
 
     def __init__(
         self,
@@ -146,9 +147,10 @@ class RedisMetadataStore:
         index_key = self._build_index_key(broadcast_id)
         await self._ensure_index_bootstrapped(client, broadcast_id, index_key)
 
-        matched_pts_us = await self._select_index_pts(client, broadcast_id, index_key, frame_pts_us)
-        if matched_pts_us is None:
+        selection = await self._select_index_pts(client, broadcast_id, index_key, frame_pts_us)
+        if selection is None:
             return None
+        matched_pts_us, from_narrow_window = selection
 
         payload_str = await client.get(self._build_key(broadcast_id, matched_pts_us))
         decoded = self._decode_payload(payload_str)
@@ -157,7 +159,13 @@ class RedisMetadataStore:
             await client.zremrangebyscore(index_key, "-inf", matched_pts_us)
             return None
 
-        self._refine_offset(broadcast_id, matched_pts_us - frame_pts_us)
+        if from_narrow_window or broadcast_id not in self._offset_us_by_broadcast:
+            # Only refine from narrow-window matches. Wide-search hits return the
+            # ZSET min, which races ahead of frame_pts when client metadata write
+            # rate exceeds PyAV consume rate — feeding that back into the EWMA
+            # caused runaway offset drift in production logs. Bootstrap once when
+            # offset is still unknown so the first sample lands somewhere sane.
+            self._refine_offset(broadcast_id, matched_pts_us - frame_pts_us)
         await client.zremrangebyscore(index_key, "-inf", matched_pts_us)
         return self._normalize_payload_pts_us(decoded, frame_pts_us)
 
@@ -167,7 +175,7 @@ class RedisMetadataStore:
         broadcast_id: str,
         index_key: str,
         frame_pts_us: int,
-    ) -> int | None:
+    ) -> tuple[int, bool] | None:
         offset_us = self._offset_us_by_broadcast.get(broadcast_id)
         if offset_us is not None and self._index_lookup_window_us > 0:
             target_pts_us = frame_pts_us + offset_us
@@ -178,7 +186,7 @@ class RedisMetadataStore:
             )
             chosen = self._closest_score_to(candidates, target_pts_us)
             if chosen is not None:
-                return chosen
+                return chosen, True
 
         wide_max = frame_pts_us + max(self._auto_offset_max_us, self._index_lookup_window_us, 1)
         wide_candidates = await client.zrangebyscore(
@@ -191,7 +199,7 @@ class RedisMetadataStore:
         )
         if wide_candidates:
             _, score = wide_candidates[0]
-            return int(float(score))
+            return int(float(score)), False
         return None
 
     async def _ensure_index_bootstrapped(self, client, broadcast_id: str, index_key: str) -> None:
@@ -300,12 +308,22 @@ class RedisMetadataStore:
 
     def _refine_offset(self, broadcast_id: str, offset_candidate_us: int) -> None:
         previous_offset_us = self._offset_us_by_broadcast.get(broadcast_id)
-        if previous_offset_us is None or abs(offset_candidate_us - previous_offset_us) > self.OFFSET_RESYNC_THRESHOLD_US:
+        if previous_offset_us is None:
             learned_offset_us = int(offset_candidate_us)
+        elif abs(offset_candidate_us - previous_offset_us) > self.OFFSET_RESYNC_THRESHOLD_US:
+            # Large jumps almost always come from misleading samples (ZSET pileup,
+            # late metadata bursts). Cap the movement to one delta step instead of
+            # snap-resyncing to the noisy candidate.
+            direction = 1 if offset_candidate_us > previous_offset_us else -1
+            learned_offset_us = previous_offset_us + direction * self.OFFSET_REFINE_DELTA_CAP_US
         else:
+            clipped_candidate_us = max(
+                previous_offset_us - self.OFFSET_REFINE_DELTA_CAP_US,
+                min(previous_offset_us + self.OFFSET_REFINE_DELTA_CAP_US, int(offset_candidate_us)),
+            )
             learned_offset_us = int(
                 previous_offset_us * self.OFFSET_EWMA_PREV_WEIGHT
-                + offset_candidate_us * self.OFFSET_EWMA_NEW_WEIGHT
+                + clipped_candidate_us * self.OFFSET_EWMA_NEW_WEIGHT
             )
 
         self._offset_us_by_broadcast[broadcast_id] = learned_offset_us

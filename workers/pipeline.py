@@ -123,6 +123,7 @@ class StreamPipeline:
         max_frame_width: int = 0,
         max_frame_height: int = 0,
         x264_preset: str = "veryfast",
+        x264_profile: str = "high",
         hls_time: float = 1.0,
         hls_list_size: int = 6,
         hls_flags: str = "delete_segments+independent_segments+append_list+omit_endlist",
@@ -165,6 +166,7 @@ class StreamPipeline:
         self._max_frame_width = max(int(max_frame_width), 0)
         self._max_frame_height = max(int(max_frame_height), 0)
         self._x264_preset = x264_preset
+        self._x264_profile = x264_profile
         self._hls_time = max(hls_time, 0.5)
         self._hls_list_size = max(hls_list_size, 3)
         self._hls_flags = hls_flags
@@ -340,6 +342,7 @@ class StreamPipeline:
             bufsize=self._bufsize,
             gop_seconds=self._gop_seconds,
             x264_preset=self._x264_preset,
+            x264_profile=self._x264_profile,
         )
         if self.analysis_output_path:
             self._analysis_frame_sink = create_frame_sink(
@@ -354,6 +357,7 @@ class StreamPipeline:
                 bufsize=self._bufsize,
                 gop_seconds=self._gop_seconds,
                 x264_preset=self._x264_preset,
+                x264_profile=self._x264_profile,
             )
         reader_task = asyncio.create_task(
             self._read_latest_frames(),
@@ -718,13 +722,16 @@ class StreamPipeline:
             selected_faces = self._select_multi_person_faces(sorted_faces)
         selected_tracking_id = next((tracking_id for _, _, tracking_id in selected_faces if tracking_id), None)
         if selected_tracking_id:
+            previous_primary_tracking_id = self._primary_tracking_id
             self._primary_tracking_id = selected_tracking_id
             self._primary_tracking_last_seen_pts_us = metadata_pts_us
-            logger.info(
-                "avatar_primary_tracking_selected broadcast_id=%s tracking_id=%s",
-                self.broadcast_id,
-                selected_tracking_id,
-            )
+            if previous_primary_tracking_id != selected_tracking_id:
+                logger.info(
+                    "avatar_primary_tracking_selected broadcast_id=%s tracking_id=%s previous_tracking_id=%s",
+                    self.broadcast_id,
+                    selected_tracking_id,
+                    previous_primary_tracking_id,
+                )
         return {index for index, _, _ in selected_faces}
 
     def _select_multi_person_faces(
@@ -1142,7 +1149,7 @@ class StreamPipeline:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=5)
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=1.5)
         except Exception as exc:
             if proc and proc.returncode is None:
                 proc.kill()
@@ -1215,6 +1222,8 @@ class StreamPipeline:
             "libx264",
             "-preset",
             self._x264_preset,
+            "-profile:v",
+            self._x264_profile,
             "-tune",
             "zerolatency",
             "-pix_fmt",
@@ -1229,6 +1238,8 @@ class StreamPipeline:
             "0",
             "-force_key_frames",
             f"expr:gte(t,n_forced*{self._gop_seconds})",
+            "-x264-params",
+            "nal-hrd=cbr",
             "-b:v",
             self._video_bitrate,
             "-maxrate",

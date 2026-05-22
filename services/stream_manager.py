@@ -99,6 +99,7 @@ class StreamManager:
                     max_frame_width=self._settings.pipeline_max_frame_width,
                     max_frame_height=self._settings.pipeline_max_frame_height,
                     x264_preset=self._settings.pipeline_x264_preset,
+                    x264_profile=self._settings.pipeline_x264_profile,
                     hls_time=self._settings.hls_time,
                     hls_list_size=self._settings.hls_list_size,
                     hls_flags=self._settings.hls_flags,

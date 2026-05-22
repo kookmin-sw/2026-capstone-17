@@ -52,6 +52,7 @@ class FFmpegProcessSink:
         bufsize: str = "5000k",
         gop_seconds: int = 1,
         x264_preset: str = "veryfast",
+        x264_profile: str = "high",
     ) -> None:
         self.output_url = output_url
         self.fps = fps
@@ -71,6 +72,7 @@ class FFmpegProcessSink:
         self.bufsize = bufsize
         self.gop_seconds = max(int(gop_seconds), 1)
         self.x264_preset = x264_preset
+        self.x264_profile = x264_profile
         self._process: Optional[asyncio.subprocess.Process] = None
         self._stderr_task: asyncio.Task[None] | None = None
         self._initialized = False
@@ -92,7 +94,14 @@ class FFmpegProcessSink:
                 self.output_url,
             ]
         else:
-            output_args = ["-f", "flv", self.output_url]
+            # `no_duration_filesize` silences the two FLV header-rewrite warnings
+            # that always print on close for a live RTMP push (just noise on close,
+            # not an actual error).
+            output_args = [
+                "-f", "flv",
+                "-flvflags", "no_duration_filesize",
+                self.output_url,
+            ]
 
         command = [
             "ffmpeg",
@@ -119,6 +128,7 @@ class FFmpegProcessSink:
             "-map", "1:a:0",
             "-c:v", "libx264",
             "-preset", self.x264_preset,
+            "-profile:v", self.x264_profile,
             "-tune", "zerolatency",
             "-pix_fmt", "yuv420p",
             "-b:v", self.video_bitrate,
@@ -127,6 +137,10 @@ class FFmpegProcessSink:
             "-g", str(gop),
             "-keyint_min", str(gop),
             "-sc_threshold", "0",
+            # nal-hrd=cbr signals strict CBR to CHZZK's RTMP ingest. CHZZK enforces
+            # bitrate ceilings with a 5-minute broadcast shutdown if exceeded, so
+            # we tell x264 explicitly to hold the encoded stream to maxrate.
+            "-x264-params", "nal-hrd=cbr",
             "-c:a", "aac",
             "-b:a", self.audio_bitrate,
             "-ar", str(self.audio_sample_rate),
@@ -155,6 +169,8 @@ class FFmpegProcessSink:
             args += ["-rtsp_transport", "tcp", "-allowed_media_types", "audio"]
         return args + ["-i", audio_source_url]
 
+    DRAIN_TIMEOUT_S = 3.0
+
     async def write_frame(self, frame: VideoFrame) -> None:
         if not self._initialized or self._process is None:
             w = frame.width or self.width
@@ -164,7 +180,16 @@ class FFmpegProcessSink:
         if self._process and self._process.stdin:
             try:
                 self._process.stdin.write(frame.payload)
-                await self._process.stdin.drain()
+                await asyncio.wait_for(self._process.stdin.drain(), timeout=self.DRAIN_TIMEOUT_S)
+            except asyncio.TimeoutError:
+                # Sustained downstream slowness (e.g. CHZZK ingest backpressure)
+                # would freeze the render loop here. Log and continue; the next
+                # write may succeed once FFmpeg drains the pipe.
+                logger.warning(
+                    "ffmpeg_sink_drain_timeout url=%s timeout_s=%s",
+                    self.output_url,
+                    self.DRAIN_TIMEOUT_S,
+                )
             except ConnectionResetError:
                 logger.error("ffmpeg_sink_broken_pipe url=%s", self.output_url)
 
@@ -216,6 +241,7 @@ def create_frame_sink(
     bufsize: str = "5000k",
     gop_seconds: int = 1,
     x264_preset: str = "veryfast",
+    x264_profile: str = "high",
 ) -> FrameSink:
     if output_path.startswith("/tmp/test") or output_path.startswith("dummy"):
         return DummyHlsSink(output_path=output_path)
@@ -244,4 +270,5 @@ def create_frame_sink(
         bufsize=bufsize,
         gop_seconds=gop_seconds,
         x264_preset=x264_preset,
+        x264_profile=x264_profile,
     )
